@@ -155,11 +155,11 @@
 		</select>
 
 		<section class="actions">
-			<label class="btn import-btn">
+			<label class="btn secondary import-btn">
 				<input bind:this={fileInput} type="file" accept=".scout,.json,application/json,application/octet-stream" multiple onchange={handleFiles} disabled={importing} />
 				<span>{importing ? 'Importing…' : 'Import'}</span>
 			</label>
-			<button class="btn" onclick={exportCombined} disabled={exporting || !summary || summary.totalEntries === 0}>{exporting ? 'Exporting…' : 'Export .scout'}</button>
+			<button class="btn primary" onclick={exportCombined} disabled={exporting || !summary || summary.totalEntries === 0}>{exporting ? 'Exporting…' : 'Export .scout'}</button>
 		</section>
 
 		<section class="chips">
@@ -211,44 +211,126 @@
 </main>
 
 <style>
-	main { max-width: 64rem; margin: 1.2rem auto; padding: 0 1rem 4rem; font-family: system-ui, -apple-system, sans-serif; }
-	.page-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
-	h1 { margin: 0; font-size: 2rem; }
-	.updated { color: #555; font-size: 1.2rem; }
-	.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.8rem; }
-	.stat { background: #efede8; border-radius: 0.75rem; padding: 1rem; }
-	.stat small { display: block; color: #444; font-size: 1.05rem; }
-	.stat span { font-size: 2.1rem; font-weight: 700; }
-	.filter, .sort { margin-top: 0.9rem; width: 100%; border-radius: 0.65rem; border: 1px solid #ccc; padding: 0.8rem 1rem; font-size: 1.1rem; }
-	.actions { margin-top: 0.8rem; display: flex; gap: 0.6rem; }
-	.btn { border: 1px solid #b8b8b8; border-radius: 0.65rem; background: #fff; padding: 0.65rem 1.15rem; font: inherit; cursor: pointer; }
+	main {
+		max-width: 32rem;
+		margin: 1rem auto;
+		padding: 0 1rem 5rem;
+		font-family: system-ui, -apple-system, sans-serif;
+	}
+	.page-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 0.75rem;
+		margin: 1rem 0;
+	}
+	h1 { margin: 0; font-size: 1.5rem; }
+	.updated { color: #777; font-size: 0.9rem; }
+	.muted { color: #777; font-size: 0.95rem; }
+
+	.empty {
+		background: #f7f7f7;
+		border: 1px solid #e5e5e5;
+		border-radius: 0.5rem;
+		padding: 0.9rem 1rem;
+	}
+
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.6rem;
+	}
+	.stat {
+		background: #f5f6f9;
+		border: 1px solid #d9deea;
+		border-radius: 0.5rem;
+		padding: 0.75rem;
+	}
+	.stat small { display: block; color: #555; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+	.stat span { font-size: 1.25rem; font-weight: 700; }
+
+	.filter,
+	.sort {
+		margin-top: 0.75rem;
+		width: 100%;
+		border-radius: 0.4rem;
+		border: 1px solid #ccc;
+		padding: 0.6rem 0.7rem;
+		font: inherit;
+	}
+	.actions { margin-top: 0.75rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+	.btn {
+		padding: 0.6rem 1rem;
+		border-radius: 0.4rem;
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+		border: 1px solid transparent;
+	}
+	.btn.primary {
+		background: #0b3d91;
+		color: white;
+	}
+	.btn.primary:disabled {
+		opacity: 0.6;
+		cursor: progress;
+	}
+	.btn.secondary {
+		background: white;
+		border-color: #ccc;
+		color: #222;
+	}
+	.btn.secondary:hover { background: #f8f8f8; }
 	.import-btn { position: relative; display: inline-block; }
-	.import-btn input { position: absolute; inset: 0; opacity: 0; }
-	.chips { display: flex; gap: 0.5rem; margin-top: 0.9rem; }
-	.chip { background: #eceae4; border-radius: 1rem; padding: 0.35rem 0.75rem; color: #444; }
-	.chip.active { background: #cddcf0; color: #1d4f99; }
-	.teams { list-style: none; padding: 0; margin: 1rem 0 0; display: flex; flex-direction: column; gap: 0.7rem; }
-	.team { border: 1px solid #d1d1d1; border-radius: 0.9rem; background: #fff; overflow: hidden; }
-	.team-row { width: 100%; border: none; background: transparent; padding: 0.9rem 1rem 0.55rem; display: flex; justify-content: space-between; gap: 1rem; text-align: left; cursor: pointer; font: inherit; }
-	.left { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
-	.left strong { font-size: 2rem; }
-	.bar { width: 4.4rem; height: 1.3rem; background: #ececec; border-radius: 0.3rem; overflow: hidden; display: flex; }
+	.import-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+	.chips { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+	.chip { background: #f0f0f0; border-radius: 999px; padding: 0.25rem 0.6rem; color: #555; font-size: 0.85rem; }
+	.chip.active { background: #f0f4fc; color: #0b3d91; }
+
+	.teams { list-style: none; padding: 0; margin: 1rem 0 0; display: flex; flex-direction: column; gap: 0.6rem; }
+	.team { border: 1px solid #d8d8d8; border-radius: 0.6rem; background: #fff; overflow: hidden; }
+	.team-row {
+		width: 100%;
+		border: none;
+		background: transparent;
+		padding: 0.75rem 0.8rem 0.5rem;
+		display: flex;
+		justify-content: space-between;
+		gap: 0.75rem;
+		text-align: left;
+		cursor: pointer;
+		font: inherit;
+	}
+	.left { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+	.left strong { font-size: 1.05rem; }
+	.bar { width: 3.5rem; height: 0.65rem; background: #ececec; border-radius: 999px; overflow: hidden; display: flex; }
 	.red { background: #e14c4c; }
 	.blue { background: #3c84d6; }
-	.counts { color: #444; font-size: 2rem; }
-	.right { display: flex; align-items: center; gap: 0.6rem; }
-	.badge { background: #ecebe5; border-radius: 0.7rem; padding: 0.2rem 0.65rem; color: #444; }
+	.counts { color: #666; font-size: 0.85rem; }
+	.right { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; justify-content: flex-end; }
+	.badge { background: #ecebe5; border-radius: 999px; padding: 0.15rem 0.5rem; color: #444; font-size: 0.8rem; }
 	.badge.bad { background: #f6e8e8; color: #8e2c2c; }
-	.age { color: #666; }
-	.preview { margin: 0; padding: 0 1rem 0.85rem; color: #333; font-size: 1.3rem; }
-	.team-entries { list-style: none; margin: 0; padding: 0.6rem; border-top: 1px solid #ddd; display: flex; flex-direction: column; gap: 0.5rem; }
-	.team-entry { background: #fafafa; border-radius: 0.6rem; padding: 0.7rem 0.9rem; border-left: 4px solid #999; }
+	.age { color: #666; font-size: 0.8rem; }
+	.preview { margin: 0; padding: 0 0.8rem 0.75rem; color: #333; font-size: 0.9rem; }
+
+	.team-entries {
+		list-style: none;
+		margin: 0;
+		padding: 0.55rem;
+		border-top: 1px solid #ddd;
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+	}
+	.team-entry { background: #fafafa; border-radius: 0.45rem; padding: 0.6rem 0.75rem; border-left: 4px solid #999; }
 	.team-entry[data-color='red'] { border-left-color: #e14c4c; }
 	.team-entry[data-color='blue'] { border-left-color: #3c84d6; }
-	.hdr { display: flex; gap: 0.5rem; font-size: 1.7rem; }
-	.by { margin-left: auto; }
-	.team-entry p { margin: 0.25rem 0 0; font-size: 1.1rem; }
-	.more { text-align: center; color: #666; padding-top: 0.2rem; }
+	.hdr { display: flex; gap: 0.4rem; align-items: baseline; font-size: 0.92rem; }
+	.alliance { text-transform: capitalize; color: #666; }
+	.by { margin-left: auto; font-size: 0.8rem; }
+	.team-entry p { margin: 0.25rem 0 0; font-size: 0.9rem; }
+	.more { text-align: center; color: #666; padding-top: 0.2rem; font-size: 0.85rem; }
 	.error { background: #fdecea; color: #842029; padding: 0.6rem 0.75rem; border-radius: 0.4rem; margin: 0.5rem 0; }
 	.info { background: #eaf3ff; color: #1c3a78; padding: 0.6rem 0.75rem; border-radius: 0.4rem; margin: 0.5rem 0; white-space: pre-wrap; }
 </style>

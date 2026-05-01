@@ -4,12 +4,17 @@
 	import { listEntries, deleteEntry } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
 	import { exportToFile } from '$lib/export.js';
+	import { importFile } from '$lib/import.js';
 
 	let entries = $state([]);
 	let loading = $state(true);
 	let exporting = $state(false);
+	let importing = $state(false);
 	let lastExport = $state('');
+	let lastImport = $state('');
 	let exportError = $state('');
+	let importError = $state('');
+	let fileInput = $state();
 
 	async function refresh() {
 		entries = await listEntries();
@@ -46,6 +51,30 @@
 			exporting = false;
 		}
 	}
+
+	async function doImport(e) {
+		const files = [...(e.target.files ?? [])];
+		if (files.length === 0) return;
+		importing = true;
+		importError = '';
+		lastImport = '';
+		let totalInserted = 0;
+		let totalSkipped = 0;
+		try {
+			for (const file of files) {
+				const result = await importFile(file);
+				totalInserted += result.inserted;
+				totalSkipped += result.skipped;
+			}
+			await refresh();
+			lastImport = `Imported ${totalInserted} new entr${totalInserted === 1 ? 'y' : 'ies'} (${totalSkipped} duplicate${totalSkipped === 1 ? '' : 's'} skipped).`;
+		} catch (err) {
+			importError = err.message ?? String(err);
+		} finally {
+			importing = false;
+			if (fileInput) fileInput.value = '';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -67,9 +96,19 @@
 		</div>
 	{:else}
 		<div class="export-bar">
+			<label class="import" aria-label="Import scouting files">
+				<input bind:this={fileInput} type="file" accept=".scout,.json,application/json,application/octet-stream" multiple onchange={doImport} disabled={importing} />
+				<span>{importing ? 'Importing…' : 'Import data'}</span>
+			</label>
 			<button class="export" onclick={doExport} disabled={exporting}>
 				{exporting ? 'Exporting…' : `Export ${entries.length} entries`}
 			</button>
+			{#if lastImport}
+				<small class="muted">{lastImport}</small>
+			{/if}
+			{#if importError}
+				<small class="error">{importError}</small>
+			{/if}
 			{#if lastExport}
 				<small class="muted">{lastExport}</small>
 			{/if}
@@ -156,6 +195,26 @@
 		font: inherit;
 		font-weight: 600;
 		border-radius: 0.4rem;
+		cursor: pointer;
+	}
+	.import {
+		position: relative;
+		display: inline-block;
+		align-self: flex-start;
+		padding: 0.5rem 0.9rem;
+		background: white;
+		border: 1px solid #ccc;
+		color: #333;
+		font: inherit;
+		font-weight: 600;
+		border-radius: 0.4rem;
+		cursor: pointer;
+	}
+	.import:hover { background: #f5f5f5; }
+	.import input {
+		position: absolute;
+		inset: 0;
+		opacity: 0;
 		cursor: pointer;
 	}
 	.export:hover { background: #f0f4fc; }
