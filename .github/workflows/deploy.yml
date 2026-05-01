@@ -38,9 +38,9 @@ jobs:
 
       - name: Build
         env:
-          # Must match the GitHub repo name. Read by both svelte.config.js and vite.config.js
-          # so SvelteKit's paths.base and the PWA manifest both pick up the subpath prefix.
-          BASE_PATH: /frc-scouting-app
+          # For a user/org Pages site (https://3419.github.io), deploy at the domain root.
+          # Leaving BASE_PATH empty keeps all app URLs rooted at "/".
+          BASE_PATH: ""
         run: npm run build
 
       - name: Upload Pages artifact

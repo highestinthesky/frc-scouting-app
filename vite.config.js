@@ -2,9 +2,9 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import { defineConfig } from 'vite';
 
-// Same BASE_PATH the SvelteKit config reads. Empty in local dev, "/frc-scouting-app"
-// in CI. The manifest's start_url, scope, and icon paths all need this prefix or the
-// "Add to Home Screen" install will 404 once the app is hosted under a subpath.
+// Same BASE_PATH the SvelteKit config reads. Empty means the app is served from
+// the domain root (for example https://3419.github.io). When set, manifest URLs get
+// that prefix so install links still work under a subpath deployment.
 const base = process.env.BASE_PATH ?? '';
 
 export default defineConfig({

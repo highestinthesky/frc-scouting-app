@@ -1,8 +1,8 @@
 import adapter from '@sveltejs/adapter-static';
 
-// GitHub Pages serves this app from https://<user>.github.io/<BASE_PATH>/, so every
-// asset URL needs that prefix in production. The deploy workflow sets BASE_PATH;
-// locally it's empty so `npm run dev` and `npm run preview` keep serving from "/".
+// GitHub Pages can serve this app at the domain root or from a subpath.
+// BASE_PATH controls that prefix in production; locally it's empty so
+// `npm run dev` and `npm run preview` keep serving from "/".
 const base = process.env.BASE_PATH ?? '';
 
 /** @type {import('@sveltejs/kit').Config} */
