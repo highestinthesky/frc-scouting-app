@@ -1,6 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { base } from '$app/paths';
 	import favicon from '$lib/assets/favicon.svg';
 	import { session } from '$lib/session.svelte.js';
 	import { role } from '$lib/role.svelte.js';
@@ -13,8 +14,11 @@
 	});
 
 	function isActive(path) {
-		// Active for exact match or any sub-route.
-		const p = page.url.pathname;
+		// Compare against pathname with the deploy base stripped, so a single
+		// /manager check works whether we're at "/manager" (dev) or
+		// "/frc-scouting-app/manager" (GitHub Pages).
+		const full = page.url.pathname;
+		const p = base && full.startsWith(base) ? full.slice(base.length) || '/' : full;
 		if (path === '/') return p === '/' || p === '';
 		return p === path || p.startsWith(path + '/') || p === path.replace(/\/$/, '');
 	}
@@ -41,15 +45,15 @@
 	</header>
 
 	<nav class="tabs">
-		<a href="/" class:active={isActive('/')}>
+		<a href="{base}/" class:active={isActive('/')}>
 			Entries
 		</a>
 		{#if role.isManager}
-			<a href="/manager/" class:active={isActive('/manager')}>
+			<a href="{base}/manager/" class:active={isActive('/manager')}>
 				Manager
 			</a>
 		{/if}
-		<a href="/settings/" class:active={isActive('/settings')}>
+		<a href="{base}/settings/" class:active={isActive('/settings')}>
 			Settings
 		</a>
 	</nav>

@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
 	import { importFile } from '$lib/import.js';
 	import { exportToFile } from '$lib/export.js';
@@ -94,7 +95,7 @@
 	<header class="page-head">
 		<h1>Manager</h1>
 		{#if !role.isManager}
-			<a class="muted" href="/settings/">Switch to manager mode in Settings →</a>
+			<a class="muted" href="{base}/settings/">Switch to manager mode in Settings →</a>
 		{/if}
 	</header>
 

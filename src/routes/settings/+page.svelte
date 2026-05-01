@@ -1,5 +1,6 @@
 <script>
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { session } from '$lib/session.svelte.js';
 	import { role } from '$lib/role.svelte.js';
 	import { clearEntries } from '$lib/db.js';
@@ -46,7 +47,7 @@
 
 <main>
 	<header class="page-head">
-		<a class="back" href="/" aria-label="Back">←</a>
+		<a class="back" href="{base}/" aria-label="Back">←</a>
 		<h1>Settings</h1>
 	</header>
 

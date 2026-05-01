@@ -1,5 +1,6 @@
 <script>
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { addEntry } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
 	import { IDENTITY_FIELDS, OBSERVATION_FIELDS, ALL_FIELDS } from '$lib/form-config.js';
@@ -49,7 +50,7 @@
 				observations
 			});
 
-			await goto('/');
+			await goto(`${base}/`);
 		} catch (err) {
 			error = err.message ?? String(err);
 		} finally {
@@ -64,7 +65,7 @@
 
 <main>
 	<header class="page-head">
-		<a href="/" class="back" aria-label="Back to entries">←</a>
+		<a href="{base}/" class="back" aria-label="Back to entries">←</a>
 		<h1>New entry</h1>
 	</header>
 
@@ -88,7 +89,7 @@
 		{/if}
 
 		<div class="actions">
-			<a href="/" class="cancel">Cancel</a>
+			<a href="{base}/" class="cancel">Cancel</a>
 			<button type="submit" disabled={saving}>
 				{saving ? 'Saving…' : 'Save entry'}
 			</button>

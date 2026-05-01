@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
 	import { listEntries, deleteEntry } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
 	import { exportToFile } from '$lib/export.js';
@@ -54,7 +55,7 @@
 <main>
 	<div class="top">
 		<h1>Entries</h1>
-		<a class="primary" href="/new/">+ New entry</a>
+		<a class="primary" href="{base}/new/">+ New entry</a>
 	</div>
 
 	{#if loading}
