@@ -54,6 +54,14 @@ export const IDENTITY_FIELDS = [
 /** @type {Field[]} */
 export const OBSERVATION_FIELDS = [
 	{
+		key: 'autoPathing',
+		label: 'Auto pathing',
+		type: 'text',
+		required: false,
+		placeholder: 'e.g. Center start → left coral',
+		help: 'Name the autonomous route they ran this match.'
+	},
+	{
 		key: 'strengths',
 		label: 'Strengths',
 		type: 'textarea',

@@ -20,6 +20,7 @@
 	const sortOptions = [
 		{ value: 'entries', label: 'most entries' },
 		{ value: 'recent', label: 'most recent update' },
+		{ value: 'auto-paths', label: 'most auto path sightings' },
 		{ value: 'failures', label: 'most failures' },
 		{ value: 'defense', label: 'most defense notes' }
 	];
@@ -120,6 +121,9 @@
 		let list = summary.teams.filter((t) => (q ? String(t.teamNumber).includes(q) : true));
 		list = list.slice().sort((a, b) => {
 			if (sortBy === 'recent') return new Date(b.latestCreatedAt) - new Date(a.latestCreatedAt);
+			if (sortBy === 'auto-paths') {
+				return b.autoPathEntryCount - a.autoPathEntryCount || b.autoPathCount - a.autoPathCount;
+			}
 			if (sortBy === 'failures') return b.failureCount - a.failureCount || b.entryCount - a.entryCount;
 			if (sortBy === 'defense') return b.defenseCount - a.defenseCount || b.entryCount - a.entryCount;
 			return b.entryCount - a.entryCount || a.teamNumber - b.teamNumber;
@@ -157,11 +161,18 @@
 
 		<input class="filter" placeholder="Find team #" bind:value={teamQuery} />
 
-		<select class="sort" bind:value={sortBy}>
+		<section class="sort" aria-label="Sort teams">
 			{#each sortOptions as o}
-				<option value={o.value}>Sort: {o.label}</option>
+				<button
+					type="button"
+					class="sort-btn {sortBy === o.value ? 'active' : ''}"
+					onclick={() => (sortBy = o.value)}
+					aria-pressed={sortBy === o.value}
+				>
+					{o.label}
+				</button>
 			{/each}
-		</select>
+		</section>
 
 		<section class="actions">
 			<label class="btn secondary import-btn">
@@ -191,6 +202,7 @@
 							<span class="counts">{t.entryCount} entries · {t.matchesCovered} matches · {t.scoutsCovered} scouts</span>
 						</div>
 						<div class="right">
+							{#if t.autoPathEntryCount > 0}<span class="badge path">{t.autoPathEntryCount} auto path{t.autoPathEntryCount === 1 ? '' : 's'}</span>{/if}
 							{#if t.failureCount > 0}<span class="badge bad">{t.failureCount} failure{t.failureCount === 1 ? '' : 's'}</span>{/if}
 							{#if t.defenseCount > 0}<span class="badge">{t.defenseCount} defense</span>{/if}
 							<span class="age">{minutesAgo(t.latestCreatedAt)}</span>
@@ -200,6 +212,16 @@
 					<p class="preview">Strengths preview: {preview(t.strengthsPreview)}</p>
 
 					{#if isExpanded(t.teamNumber)}
+						{#if t.autoPathCount > 0}
+							<div class="paths-block">
+								<h3>Auto pathings ({t.autoPathEntryCount})</h3>
+								<ul class="path-list">
+									{#each t.autoPaths as p (p.pathName)}
+										<li><span>{p.pathName}</span><strong>{p.count}</strong></li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
 						<ul class="team-entries">
 							{#each t.entries.slice(0, 3) as e (e.id ?? `${e.matchNumber}-${e.scoutName}-${e.createdAt}`)}
 								<li class="team-entry" data-color={e.allianceColor}>
@@ -258,14 +280,40 @@
 	.stat small { display: block; color: #555; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
 	.stat span { font-size: 1.25rem; font-weight: 700; }
 
-	.filter,
-	.sort {
+	.filter {
 		margin-top: 0.75rem;
 		width: 100%;
 		border-radius: 0.4rem;
 		border: 1px solid #ccc;
 		padding: 0.6rem 0.7rem;
 		font: inherit;
+	}
+	.sort {
+		margin-top: 0.75rem;
+		display: flex;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+	.sort-btn {
+		font: inherit;
+		font-size: 0.85rem;
+		font-weight: 600;
+		border: 1px solid #cfd8ec;
+		background: #f4f7ff;
+		color: #24427a;
+		padding: 0.38rem 0.62rem;
+		border-radius: 999px;
+		cursor: pointer;
+		transition: background-color 100ms ease, color 100ms ease, border-color 100ms ease;
+	}
+	.sort-btn:hover {
+		background: #e8eefc;
+		border-color: #bccbea;
+	}
+	.sort-btn.active {
+		background: #0b3d91;
+		color: #fff;
+		border-color: #0b3d91;
 	}
 	.actions { margin-top: 0.75rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
 	.btn {
@@ -320,6 +368,12 @@
 	.right { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; justify-content: flex-end; }
 	.badge { background: #ecebe5; border-radius: 999px; padding: 0.15rem 0.5rem; color: #444; font-size: 0.8rem; }
 	.badge.bad { background: #f6e8e8; color: #8e2c2c; }
+	.badge.path { background: #f3e8ff; color: #6b21a8; }
+	.paths-block { margin: 0 0.55rem 0.4rem; padding: 0.55rem 0.6rem; border: 1px solid #dfd6ff; background: #f7f3ff; border-radius: 0.4rem; }
+	.paths-block h3 { margin: 0; font-size: 0.9rem; }
+	.path-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.35rem; }
+	.path-list li { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.88rem; }
+
 	.age { color: #666; font-size: 0.8rem; }
 	.preview { margin: 0; padding: 0 0.8rem 0.75rem; color: #333; font-size: 0.9rem; }
 
