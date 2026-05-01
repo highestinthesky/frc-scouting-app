@@ -21,13 +21,32 @@ export async function summarize() {
 	}
 
 	const teams = [...byTeam.entries()]
-		.map(([teamNumber, list]) => ({
-			teamNumber,
-			entryCount: list.length,
-			matchesCovered: new Set(list.map((e) => e.matchNumber)).size,
-			scoutsCovered: new Set(list.map((e) => e.scoutName)).size,
-			entries: list.sort((a, b) => a.matchNumber - b.matchNumber)
-		}))
+		.map(([teamNumber, list]) => {
+			const ordered = list
+				.slice()
+				.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+			const redCount = list.filter((e) => e.allianceColor === 'red').length;
+			const blueCount = list.filter((e) => e.allianceColor === 'blue').length;
+			const failureCount = list.filter((e) => Boolean(e.observations?.failures?.trim())).length;
+			const defenseCount = list.filter((e) => Boolean(e.observations?.defense?.trim())).length;
+			const strengthsPreview = ordered
+				.map((e) => e.observations?.strengths?.trim())
+				.find(Boolean) ?? '';
+			const latestCreatedAt = ordered[0]?.createdAt ?? null;
+			return {
+				teamNumber,
+				entryCount: list.length,
+				matchesCovered: new Set(list.map((e) => e.matchNumber)).size,
+				scoutsCovered: new Set(list.map((e) => e.scoutName)).size,
+				redCount,
+				blueCount,
+				failureCount,
+				defenseCount,
+				strengthsPreview,
+				latestCreatedAt,
+				entries: ordered
+			};
+		})
 		.sort((a, b) => a.teamNumber - b.teamNumber);
 
 	return {
@@ -36,6 +55,13 @@ export async function summarize() {
 		eventCount: events.size,
 		scoutCount: scouts.size,
 		matchCount: matches.size,
+		lastCreatedAt:
+			entries.length > 0
+				? entries.reduce((latest, e) => {
+						if (!latest) return e.createdAt;
+						return new Date(e.createdAt) > new Date(latest) ? e.createdAt : latest;
+					}, null)
+				: null,
 		events: [...events].sort(),
 		scouts: [...scouts].sort(),
 		teams

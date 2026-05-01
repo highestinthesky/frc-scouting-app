@@ -1,11 +1,9 @@
 <script>
 	import { onMount } from 'svelte';
-	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
 	import { importFile } from '$lib/import.js';
 	import { exportToFile } from '$lib/export.js';
 	import { session } from '$lib/session.svelte.js';
-	import { role } from '$lib/role.svelte.js';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -15,7 +13,32 @@
 	let importError = $state('');
 	let exportMessage = $state('');
 	let expanded = $state(new Set());
-	let fileInput;
+	let fileInput = $state();
+	let teamQuery = $state('');
+	let sortBy = $state('entries');
+
+	const sortOptions = [
+		{ value: 'entries', label: 'most entries' },
+		{ value: 'recent', label: 'most recent update' },
+		{ value: 'failures', label: 'most failures' },
+		{ value: 'defense', label: 'most defense notes' }
+	];
+
+	function minutesAgo(iso) {
+		if (!iso) return '—';
+		const minutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+		if (minutes < 1) return 'just now';
+		if (minutes < 60) return `${minutes}m`;
+		const hrs = Math.floor(minutes / 60);
+		if (hrs < 24) return `${hrs}h`;
+		return `${Math.floor(hrs / 24)}d`;
+	}
+
+	function preview(text) {
+		if (!text) return 'No strengths notes yet.';
+		if (text.length <= 80) return text;
+		return `${text.slice(0, 80)}…`;
+	}
 
 	async function refresh() {
 		summary = await summarize();
@@ -51,18 +74,14 @@
 			await refresh();
 		} finally {
 			importing = false;
-			// Clear the input so re-selecting the same file fires onchange.
 			if (fileInput) fileInput.value = '';
 		}
 	}
 
 	function toggle(team) {
-		if (expanded.has(team)) {
-			expanded.delete(team);
-		} else {
-			expanded.add(team);
-		}
-		expanded = new Set(expanded); // trigger reactivity
+		if (expanded.has(team)) expanded.delete(team);
+		else expanded.add(team);
+		expanded = new Set(expanded);
 	}
 
 	async function exportCombined() {
@@ -85,6 +104,19 @@
 			exporting = false;
 		}
 	}
+
+	const filteredTeams = $derived.by(() => {
+		if (!summary) return [];
+		const q = teamQuery.trim();
+		let list = summary.teams.filter((t) => (q ? String(t.teamNumber).includes(q) : true));
+		list = list.slice().sort((a, b) => {
+			if (sortBy === 'recent') return new Date(b.latestCreatedAt) - new Date(a.latestCreatedAt);
+			if (sortBy === 'failures') return b.failureCount - a.failureCount || b.entryCount - a.entryCount;
+			if (sortBy === 'defense') return b.defenseCount - a.defenseCount || b.entryCount - a.entryCount;
+			return b.entryCount - a.entryCount || a.teamNumber - b.teamNumber;
+		});
+		return list;
+	});
 </script>
 
 <svelte:head>
@@ -94,108 +126,82 @@
 <main>
 	<header class="page-head">
 		<h1>Manager</h1>
-		{#if !role.isManager}
-			<a class="muted" href="{base}/settings/">Switch to manager mode in Settings →</a>
+		{#if summary}
+			<div class="updated">{summary.totalEntries} entries · last {minutesAgo(summary.lastCreatedAt)} ago</div>
 		{/if}
 	</header>
-
-	<section class="actions">
-		<label class="import-btn">
-			<input
-				bind:this={fileInput}
-				type="file"
-				accept=".scout,.json,application/json,application/octet-stream"
-				multiple
-				onchange={handleFiles}
-				disabled={importing}
-			/>
-			<span>{importing ? 'Importing…' : 'Import scout files'}</span>
-		</label>
-
-		<button
-			class="export"
-			onclick={exportCombined}
-			disabled={exporting || !summary || summary.totalEntries === 0}
-		>
-			{exporting ? 'Exporting…' : 'Export combined file'}
-		</button>
-	</section>
-
-	{#if importMessage}
-		<pre class="info">{importMessage}</pre>
-	{/if}
-	{#if exportMessage}
-		<p class="info">{exportMessage}</p>
-	{/if}
-	{#if importError}
-		<p class="error">{importError}</p>
-	{/if}
 
 	{#if loading}
 		<p class="muted">Loading…</p>
 	{:else if summary.totalEntries === 0}
 		<div class="empty">
 			<p>No entries yet.</p>
-			<p class="muted">
-				Tap <strong>Import scout files</strong> to load <code>.scout</code> files
-				your scouts shared with you.
-			</p>
+			<p class="muted">Import <code>.scout</code> files to start analysis.</p>
 		</div>
 	{:else}
 		<section class="stats">
-			<div class="stat"><span>{summary.totalEntries}</span><small>entries</small></div>
-			<div class="stat"><span>{summary.teamCount}</span><small>teams</small></div>
-			<div class="stat"><span>{summary.matchCount}</span><small>matches</small></div>
-			<div class="stat"><span>{summary.scoutCount}</span><small>scouts</small></div>
+			<div class="stat"><small>Entries</small><span>{summary.totalEntries}</span></div>
+			<div class="stat"><small>Teams</small><span>{summary.teamCount}</span></div>
+			<div class="stat"><small>Matches</small><span>{summary.matchCount}</span></div>
+			<div class="stat"><small>Scouts</small><span>{summary.scoutCount}</span></div>
 		</section>
 
-		<section class="meta">
-			<p>
-				<strong>Events:</strong> {summary.events.join(', ') || '—'}
-			</p>
-			<p>
-				<strong>Scouts:</strong> {summary.scouts.join(', ') || '—'}
-			</p>
+		<input class="filter" placeholder="Find team #" bind:value={teamQuery} />
+
+		<select class="sort" bind:value={sortBy}>
+			{#each sortOptions as o}
+				<option value={o.value}>Sort: {o.label}</option>
+			{/each}
+		</select>
+
+		<section class="actions">
+			<label class="btn import-btn">
+				<input bind:this={fileInput} type="file" accept=".scout,.json,application/json,application/octet-stream" multiple onchange={handleFiles} disabled={importing} />
+				<span>{importing ? 'Importing…' : 'Import'}</span>
+			</label>
+			<button class="btn" onclick={exportCombined} disabled={exporting || !summary || summary.totalEntries === 0}>{exporting ? 'Exporting…' : 'Export .scout'}</button>
 		</section>
 
-		<h2>Teams</h2>
+		<section class="chips">
+			<span class="chip active">Event: {session.eventCode || summary.events[0] || 'unknown'}</span>
+			<span class="chip">All scouts</span>
+			<span class="chip">Both alliances</span>
+		</section>
+
+		{#if importMessage}<pre class="info">{importMessage}</pre>{/if}
+		{#if exportMessage}<p class="info">{exportMessage}</p>{/if}
+		{#if importError}<p class="error">{importError}</p>{/if}
+
 		<ul class="teams">
-			{#each summary.teams as t (t.teamNumber)}
-				<li class="team">
+			{#each filteredTeams as t (t.teamNumber)}
+				<li class="team {expanded.has(t.teamNumber) ? 'open' : ''}">
 					<button class="team-row" onclick={() => toggle(t.teamNumber)} aria-expanded={expanded.has(t.teamNumber)}>
-						<span class="num">Team {t.teamNumber}</span>
-						<span class="counts">
-							{t.entryCount} {t.entryCount === 1 ? 'entry' : 'entries'} ·
-							{t.matchesCovered} matches ·
-							{t.scoutsCovered} {t.scoutsCovered === 1 ? 'scout' : 'scouts'}
-						</span>
-						<span class="chev">{expanded.has(t.teamNumber) ? '▾' : '▸'}</span>
+						<div class="left">
+							<strong>Team {t.teamNumber}</strong>
+							<div class="bar"><span class="red" style={`width:${(t.redCount / t.entryCount) * 100}%`}></span><span class="blue" style={`width:${(t.blueCount / t.entryCount) * 100}%`}></span></div>
+							<span class="counts">{t.entryCount} entries · {t.matchesCovered} matches · {t.scoutsCovered} scouts</span>
+						</div>
+						<div class="right">
+							{#if t.failureCount > 0}<span class="badge bad">{t.failureCount} failure{t.failureCount === 1 ? '' : 's'}</span>{/if}
+							{#if t.defenseCount > 0}<span class="badge">{t.defenseCount} defense</span>{/if}
+							<span class="age">{minutesAgo(t.latestCreatedAt)}</span>
+							<span class="chev">{expanded.has(t.teamNumber) ? '▾' : '▸'}</span>
+						</div>
 					</button>
+					<p class="preview">Strengths preview: {preview(t.strengthsPreview)}</p>
+
 					{#if expanded.has(t.teamNumber)}
 						<ul class="team-entries">
-							{#each t.entries as e (e.id ?? `${e.matchNumber}-${e.scoutName}-${e.createdAt}`)}
+							{#each t.entries.slice(0, 3) as e (e.id ?? `${e.matchNumber}-${e.scoutName}-${e.createdAt}`)}
 								<li class="team-entry" data-color={e.allianceColor}>
-									<div class="hdr">
-										<strong>Q{e.matchNumber}</strong>
-										<span class="alliance">{e.allianceColor}</span>
-										<span class="muted by">by {e.scoutName}</span>
-									</div>
-									{#if e.observations}
-										{#if e.observations.strengths}
-											<p><strong>+</strong> {e.observations.strengths}</p>
-										{/if}
-										{#if e.observations.weaknesses}
-											<p><strong>−</strong> {e.observations.weaknesses}</p>
-										{/if}
-										{#if e.observations.defense}
-											<p><strong>D</strong> {e.observations.defense}</p>
-										{/if}
-										{#if e.observations.failures}
-											<p><strong>!</strong> {e.observations.failures}</p>
-										{/if}
-									{/if}
+									<div class="hdr"><strong>Q{e.matchNumber}</strong><span class="alliance">{e.allianceColor}</span><span class="muted by">by {e.scoutName}</span></div>
+									{#if e.observations?.strengths}<p><strong>+</strong> {e.observations.strengths}</p>{/if}
+									{#if e.observations?.weaknesses}<p><strong>−</strong> {e.observations.weaknesses}</p>{/if}
+									{#if e.observations?.defense}<p><strong>D</strong> {e.observations.defense}</p>{/if}
+									{#if e.observations?.failures}<p><strong>!</strong> {e.observations.failures}</p>{/if}
 								</li>
 							{/each}
+							{#if t.entries.length > 3}<li class="more">+ {t.entries.length - 3} more entries</li>{/if}
 						</ul>
 					{/if}
 				</li>
@@ -213,162 +219,79 @@
 	}
 	.page-head {
 		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 0.75rem;
 		margin: 1rem 0 1rem;
 	}
 	h1 { margin: 0; font-size: 1.5rem; }
-	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: #666;
-	}
-	.muted { color: #777; }
-	.error {
-		background: #fdecea;
-		color: #842029;
-		padding: 0.6rem 0.75rem;
-		border-radius: 0.4rem;
-		margin: 0.5rem 0;
-	}
-	.info {
-		background: #eaf3ff;
-		color: #1c3a78;
-		padding: 0.6rem 0.75rem;
-		border-radius: 0.4rem;
-		margin: 0.5rem 0;
-		font-family: inherit;
-		font-size: 0.9rem;
-		white-space: pre-wrap;
-	}
-	.actions {
-		display: flex;
-		gap: 0.6rem;
-		flex-wrap: wrap;
-		margin-bottom: 1rem;
-	}
-	.import-btn {
-		position: relative;
-		display: inline-block;
-	}
-	.import-btn input {
-		position: absolute;
-		opacity: 0;
-		inset: 0;
-		width: 100%;
-		height: 100%;
-		cursor: pointer;
-	}
-	.import-btn span {
-		display: inline-block;
-		padding: 0.55rem 1rem;
-		background: #0b3d91;
-		color: white;
-		border-radius: 0.4rem;
-		font-weight: 600;
-		cursor: pointer;
-	}
-	.export {
-		padding: 0.55rem 1rem;
-		background: white;
-		border: 1px solid #0b3d91;
-		color: #0b3d91;
-		font: inherit;
-		font-weight: 600;
-		border-radius: 0.4rem;
-		cursor: pointer;
-	}
-	.export:hover:not(:disabled) { background: #f0f4fc; }
-	.export:disabled { opacity: 0.6; cursor: not-allowed; }
-	.empty { margin-top: 3rem; text-align: center; }
-	code {
-		background: #f0f0f0;
-		padding: 0 0.25rem;
-		border-radius: 0.2rem;
-	}
-
-	.stats {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 0.5rem;
-		margin: 1rem 0;
-	}
+	.updated { color: #666; font-size: 0.95rem; }
+	.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
 	.stat {
-		background: white;
+		background: #f3f1ec;
 		border: 1px solid #e0e0e0;
-		border-radius: 0.4rem;
-		padding: 0.6rem;
-		text-align: center;
+		border-radius: 0.5rem;
+		padding: 0.65rem;
 	}
-	.stat span {
-		display: block;
-		font-size: 1.5rem;
-		font-weight: 700;
-		color: #0b3d91;
-	}
-	.stat small { color: #777; font-size: 0.8rem; }
-	.meta p { margin: 0.3rem 0; font-size: 0.9rem; }
-
-	.teams {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-	}
-	.team {
-		border: 1px solid #e0e0e0;
-		border-radius: 0.4rem;
-		background: white;
-		overflow: hidden;
-	}
-	.team-row {
-		display: flex;
-		align-items: center;
-		gap: 0.7rem;
+	.stat small { display: block; color: #555; font-size: 0.85rem; }
+	.stat span { font-size: 1.5rem; font-weight: 700; color: #0b3d91; }
+	.filter, .sort {
+		margin-top: 0.7rem;
 		width: 100%;
-		padding: 0.7rem 0.85rem;
-		background: transparent;
-		border: none;
+		border-radius: 0.45rem;
+		border: 1px solid #ccc;
+		padding: 0.62rem 0.72rem;
 		font: inherit;
+	}
+	.actions { margin-top: 0.7rem; display: flex; gap: 0.55rem; flex-wrap: wrap; }
+	.btn {
+		border: 1px solid #b8b8b8;
+		border-radius: 0.5rem;
+		background: #fff;
+		padding: 0.52rem 0.95rem;
+		font: inherit;
+		cursor: pointer;
+	}
+	.import-btn { position: relative; display: inline-block; }
+	.import-btn input { position: absolute; inset: 0; opacity: 0; }
+	.chips { display: flex; gap: 0.45rem; margin-top: 0.8rem; flex-wrap: wrap; }
+	.chip { background: #eceae4; border-radius: 1rem; padding: 0.28rem 0.7rem; color: #444; font-size: 0.9rem; }
+	.chip.active { background: #cddcf0; color: #1d4f99; }
+	.teams { list-style: none; padding: 0; margin: 1rem 0 0; display: flex; flex-direction: column; gap: 0.5rem; }
+	.team { border: 1px solid #dcdcdc; border-radius: 0.55rem; background: #fff; overflow: hidden; }
+	.team-row {
+		width: 100%;
+		border: none;
+		background: transparent;
+		padding: 0.72rem 0.82rem 0.45rem;
+		display: flex;
+		justify-content: space-between;
+		gap: 0.8rem;
 		text-align: left;
 		cursor: pointer;
+		font: inherit;
 	}
-	.team-row:hover { background: #f7f8fb; }
-	.num { font-weight: 700; color: #0b3d91; min-width: 5rem; }
-	.counts { color: #555; font-size: 0.9rem; flex: 1; }
-	.chev { color: #999; }
-
-	.team-entries {
-		list-style: none;
-		margin: 0;
-		padding: 0 0.5rem 0.5rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-	}
-	.team-entry {
-		padding: 0.5rem 0.7rem;
-		border-left: 3px solid #999;
-		background: #fafafa;
-		border-radius: 0.3rem;
-	}
-	.team-entry[data-color='red'] { border-left-color: #c0392b; }
-	.team-entry[data-color='blue'] { border-left-color: #2c5cb0; }
-	.hdr { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.9rem; }
-	.alliance { color: #666; text-transform: capitalize; font-size: 0.8rem; }
-	.by { font-size: 0.85rem; margin-left: auto; }
-	.team-entry p {
-		margin: 0.3rem 0 0;
-		font-size: 0.88rem;
-		line-height: 1.35;
-	}
-	.team-entry p strong {
-		display: inline-block;
-		width: 1rem;
-		color: #0b3d91;
-	}
+	.left { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+	.left strong { font-size: 1.05rem; color: #0b3d91; }
+	.bar { width: 3rem; height: 1.1rem; background: #ececec; border-radius: 0.25rem; overflow: hidden; display: flex; }
+	.red { background: #e14c4c; }
+	.blue { background: #3c84d6; }
+	.counts { color: #555; font-size: 0.95rem; }
+	.right { display: flex; align-items: center; gap: 0.6rem; }
+	.badge { background: #ecebe5; border-radius: 0.7rem; padding: 0.16rem 0.58rem; color: #444; font-size: 0.92rem; }
+	.badge.bad { background: #f6e8e8; color: #8e2c2c; }
+	.age { color: #777; font-size: 0.9rem; }
+	.preview { margin: 0; padding: 0 0.82rem 0.74rem; color: #333; font-size: 0.95rem; }
+	.team-entries { list-style: none; margin: 0; padding: 0.5rem; border-top: 1px solid #ddd; display: flex; flex-direction: column; gap: 0.42rem; }
+	.team-entry { background: #fafafa; border-radius: 0.45rem; padding: 0.58rem 0.72rem; border-left: 3px solid #999; }
+	.team-entry[data-color='red'] { border-left-color: #e14c4c; }
+	.team-entry[data-color='blue'] { border-left-color: #3c84d6; }
+	.hdr { display: flex; gap: 0.5rem; font-size: 0.95rem; align-items: baseline; }
+	.alliance { color: #666; text-transform: capitalize; font-size: 0.88rem; }
+	.by { margin-left: auto; color: #777; font-size: 0.88rem; }
+	.team-entry p { margin: 0.28rem 0 0; font-size: 0.9rem; line-height: 1.35; }
+	.team-entry p strong { display: inline-block; width: 1rem; color: #0b3d91; }
+	.more { text-align: center; color: #666; padding-top: 0.2rem; }
+	.error { background: #fdecea; color: #842029; padding: 0.6rem 0.75rem; border-radius: 0.4rem; margin: 0.5rem 0; }
+	.info { background: #eaf3ff; color: #1c3a78; padding: 0.6rem 0.75rem; border-radius: 0.4rem; margin: 0.5rem 0; white-space: pre-wrap; }
 </style>
