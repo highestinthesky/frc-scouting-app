@@ -281,6 +281,13 @@
 		color: #222;
 	}
 	.btn.secondary:hover { background: #f8f8f8; }
+		border: 1px solid #ccc;
+		border-radius: 0.4rem;
+		background: #fff;
+		padding: 0.55rem 0.9rem;
+		font: inherit;
+		cursor: pointer;
+	}
 	.import-btn { position: relative; display: inline-block; }
 	.import-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
