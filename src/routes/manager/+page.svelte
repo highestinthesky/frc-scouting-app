@@ -84,6 +84,15 @@
 		expanded = new Set(expanded);
 	}
 
+	function isExpanded(teamNumber) {
+		return expanded.has(teamNumber);
+	}
+
+	function percent(part, total) {
+		if (!total) return 0;
+		return (part / total) * 100;
+	}
+
 	async function exportCombined() {
 		if (!summary || summary.totalEntries === 0) {
 			importError = 'Nothing to export — import some scout files first.';
@@ -174,23 +183,23 @@
 
 		<ul class="teams">
 			{#each filteredTeams as t (t.teamNumber)}
-				<li class="team {expanded.has(t.teamNumber) ? 'open' : ''}">
-					<button class="team-row" onclick={() => toggle(t.teamNumber)} aria-expanded={expanded.has(t.teamNumber)}>
+				<li class="team {isExpanded(t.teamNumber) ? 'open' : ''}">
+					<button class="team-row" onclick={() => toggle(t.teamNumber)} aria-expanded={isExpanded(t.teamNumber)}>
 						<div class="left">
 							<strong>Team {t.teamNumber}</strong>
-							<div class="bar"><span class="red" style={`width:${(t.redCount / t.entryCount) * 100}%`}></span><span class="blue" style={`width:${(t.blueCount / t.entryCount) * 100}%`}></span></div>
+							<div class="bar"><span class="red" style={`width:${percent(t.redCount, t.entryCount)}%`}></span><span class="blue" style={`width:${percent(t.blueCount, t.entryCount)}%`}></span></div>
 							<span class="counts">{t.entryCount} entries · {t.matchesCovered} matches · {t.scoutsCovered} scouts</span>
 						</div>
 						<div class="right">
 							{#if t.failureCount > 0}<span class="badge bad">{t.failureCount} failure{t.failureCount === 1 ? '' : 's'}</span>{/if}
 							{#if t.defenseCount > 0}<span class="badge">{t.defenseCount} defense</span>{/if}
 							<span class="age">{minutesAgo(t.latestCreatedAt)}</span>
-							<span class="chev">{expanded.has(t.teamNumber) ? '▾' : '▸'}</span>
+							<span class="chev">{isExpanded(t.teamNumber) ? '▾' : '▸'}</span>
 						</div>
 					</button>
 					<p class="preview">Strengths preview: {preview(t.strengthsPreview)}</p>
 
-					{#if expanded.has(t.teamNumber)}
+					{#if isExpanded(t.teamNumber)}
 						<ul class="team-entries">
 							{#each t.entries.slice(0, 3) as e (e.id ?? `${e.matchNumber}-${e.scoutName}-${e.createdAt}`)}
 								<li class="team-entry" data-color={e.allianceColor}>
@@ -281,13 +290,6 @@
 		color: #222;
 	}
 	.btn.secondary:hover { background: #f8f8f8; }
-		border: 1px solid #ccc;
-		border-radius: 0.4rem;
-		background: #fff;
-		padding: 0.55rem 0.9rem;
-		font: inherit;
-		cursor: pointer;
-	}
 	.import-btn { position: relative; display: inline-block; }
 	.import-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
