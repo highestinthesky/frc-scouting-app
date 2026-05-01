@@ -155,11 +155,11 @@
 		</select>
 
 		<section class="actions">
-			<label class="btn import-btn">
+			<label class="btn secondary import-btn">
 				<input bind:this={fileInput} type="file" accept=".scout,.json,application/json,application/octet-stream" multiple onchange={handleFiles} disabled={importing} />
 				<span>{importing ? 'Importing…' : 'Import'}</span>
 			</label>
-			<button class="btn" onclick={exportCombined} disabled={exporting || !summary || summary.totalEntries === 0}>{exporting ? 'Exporting…' : 'Export .scout'}</button>
+			<button class="btn primary" onclick={exportCombined} disabled={exporting || !summary || summary.totalEntries === 0}>{exporting ? 'Exporting…' : 'Export .scout'}</button>
 		</section>
 
 		<section class="chips">
@@ -260,6 +260,27 @@
 	}
 	.actions { margin-top: 0.75rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
 	.btn {
+		padding: 0.6rem 1rem;
+		border-radius: 0.4rem;
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+		border: 1px solid transparent;
+	}
+	.btn.primary {
+		background: #0b3d91;
+		color: white;
+	}
+	.btn.primary:disabled {
+		opacity: 0.6;
+		cursor: progress;
+	}
+	.btn.secondary {
+		background: white;
+		border-color: #ccc;
+		color: #222;
+	}
+	.btn.secondary:hover { background: #f8f8f8; }
 		border: 1px solid #ccc;
 		border-radius: 0.4rem;
 		background: #fff;
