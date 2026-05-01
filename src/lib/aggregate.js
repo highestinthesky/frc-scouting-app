@@ -32,6 +32,15 @@ export async function summarize() {
 			const strengthsPreview = ordered
 				.map((e) => e.observations?.strengths?.trim())
 				.find(Boolean) ?? '';
+			const autoPathCounts = new Map();
+			for (const entry of list) {
+				const key = entry.observations?.autoPathing?.trim();
+				if (!key) continue;
+				autoPathCounts.set(key, (autoPathCounts.get(key) ?? 0) + 1);
+			}
+			const autoPaths = [...autoPathCounts.entries()]
+				.map(([pathName, count]) => ({ pathName, count }))
+				.sort((a, b) => b.count - a.count || a.pathName.localeCompare(b.pathName));
 			const latestCreatedAt = ordered[0]?.createdAt ?? null;
 			return {
 				teamNumber,
@@ -42,6 +51,9 @@ export async function summarize() {
 				blueCount,
 				failureCount,
 				defenseCount,
+				autoPathEntryCount: autoPaths.reduce((sum, p) => sum + p.count, 0),
+				autoPathCount: autoPaths.length,
+				autoPaths,
 				strengthsPreview,
 				latestCreatedAt,
 				entries: ordered
