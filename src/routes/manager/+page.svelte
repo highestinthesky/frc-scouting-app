@@ -150,6 +150,12 @@
 		<div class="empty">
 			<p>No entries yet.</p>
 			<p class="muted">Import <code>.scout</code> files to start analysis.</p>
+			<label class="btn secondary import-btn empty-import">
+				<input type="file" accept=".scout,.json,application/json,application/octet-stream" multiple onchange={handleFiles} disabled={importing} />
+				<span>{importing ? 'Importing…' : 'Import scout files'}</span>
+			</label>
+			{#if importMessage}<pre class="info">{importMessage}</pre>{/if}
+			{#if importError}<p class="error">{importError}</p>{/if}
 		</div>
 	{:else}
 		<section class="stats">
@@ -267,6 +273,7 @@
 		border-radius: 0.5rem;
 		padding: 0.9rem 1rem;
 	}
+	.empty .empty-import { margin-top: 0.75rem; display: inline-block; }
 
 	.stats {
 		display: grid;

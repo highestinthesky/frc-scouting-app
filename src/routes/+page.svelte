@@ -92,7 +92,13 @@
 	{:else if entries.length === 0}
 		<div class="empty">
 			<p>No entries yet.</p>
-			<p class="muted">Tap <strong>+ New entry</strong> to scout your first robot.</p>
+			<p class="muted">Tap <strong>+ New entry</strong> to scout your first robot, or import a file a teammate shared with you.</p>
+			<label class="import empty-import" aria-label="Import scouting files">
+				<input type="file" accept=".scout,.json,application/json,application/octet-stream" multiple onchange={doImport} disabled={importing} />
+				<span>{importing ? 'Importing…' : 'Import data'}</span>
+			</label>
+			{#if lastImport}<p class="muted small">{lastImport}</p>{/if}
+			{#if importError}<p class="error small">{importError}</p>{/if}
 		</div>
 	{:else}
 		<div class="export-bar">
@@ -285,6 +291,12 @@
 	}
 	.entry p.brokedown { color: #8e2c2c; font-weight: 600; }
 	.entry p.brokedown strong { color: #8e2c2c; }
+	.empty .empty-import {
+		display: inline-block;
+		margin-top: 1rem;
+		align-self: center;
+	}
+	.empty .small { font-size: 0.85rem; margin-top: 0.5rem; }
 	.timestamp {
 		display: block;
 		margin-top: 0.45rem;
