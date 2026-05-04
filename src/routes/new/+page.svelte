@@ -3,6 +3,7 @@
 	import { base } from '$app/paths';
 	import { addEntry } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
+	import { kick as kickSync } from '$lib/sync.svelte.js';
 	import { IDENTITY_FIELDS, OBSERVATION_FIELDS, ALL_FIELDS } from '$lib/form-config.js';
 	import Field from '$lib/components/Field.svelte';
 
@@ -54,6 +55,11 @@
 				allianceColor: values.allianceColor,
 				observations
 			});
+
+			// Push to peers immediately rather than waiting for the next poll tick.
+			// No-op if no session is joined or the network is down — the sync
+			// layer will catch up when it can.
+			kickSync();
 
 			await goto(`${base}/`);
 		} catch (err) {

@@ -4,6 +4,7 @@
 	import { importFile } from '$lib/import.js';
 	import { exportToFile } from '$lib/export.js';
 	import { session } from '$lib/session.svelte.js';
+	import { syncState } from '$lib/sync.svelte.js';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -48,6 +49,12 @@
 	onMount(async () => {
 		await refresh();
 		loading = false;
+	});
+
+	// Recompute the summary whenever the sync layer brings in new peer rows.
+	$effect(() => {
+		syncState.inboundChanges; // tracked dependency
+		if (!loading) refresh();
 	});
 
 	async function handleFiles(e) {

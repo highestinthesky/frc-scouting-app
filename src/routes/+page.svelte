@@ -5,6 +5,7 @@
 	import { session } from '$lib/session.svelte.js';
 	import { exportToFile } from '$lib/export.js';
 	import { importFile } from '$lib/import.js';
+	import { syncState } from '$lib/sync.svelte.js';
 
 	let entries = $state([]);
 	let loading = $state(true);
@@ -23,6 +24,12 @@
 	onMount(async () => {
 		await refresh();
 		loading = false;
+	});
+
+	// Re-read entries whenever the sync layer brings in new peer rows.
+	$effect(() => {
+		syncState.inboundChanges; // tracked dependency
+		if (!loading) refresh();
 	});
 
 	async function remove(id, summary) {

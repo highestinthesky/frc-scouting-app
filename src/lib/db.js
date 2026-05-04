@@ -27,14 +27,20 @@ db.version(2).stores({
 });
 
 /**
- * Add a new scouting entry.
+ * Add a new scouting entry. New rows are stamped with a stable per-device
+ * `clientId` and a null `remoteId` — the sync layer fills the `remoteId` in
+ * once the row is pushed to Supabase.
+ *
  * @param {object} entry - { eventCode, matchNumber, teamNumber, allianceColor, scoutName, observations }
  * @returns {Promise<number>} the new entry id
  */
 export async function addEntry(entry) {
+	const clientId = await getOrCreateClientId();
 	return db.entries.add({
 		...entry,
-		createdAt: new Date().toISOString()
+		createdAt: new Date().toISOString(),
+		clientId,
+		remoteId: null
 	});
 }
 
@@ -62,6 +68,89 @@ export async function getSetting(key) {
 /** Save a setting value (object, string, etc.). */
 export async function setSetting(key, value) {
 	return db.settings.put({ key, value });
+}
+
+/**
+ * The team's session UUID — the secret that scopes which scouts share data.
+ * Stored in Dexie settings so it survives PWA reloads and OS restarts.
+ */
+export async function getSessionId() {
+	return (await getSetting('syncSessionId')) ?? null;
+}
+
+export async function setSessionId(uuid) {
+	return setSetting('syncSessionId', uuid);
+}
+
+/** Erase the joined session, dropping the device out of the shared scope. */
+export async function clearSessionId() {
+	return db.settings.delete('syncSessionId');
+}
+
+/**
+ * A stable random ID for this physical device. Used as a tiebreaker when
+ * two devices submit otherwise-identical rows, and stored on every entry
+ * so the sync layer can tell its own writes apart from peer writes.
+ *
+ * Generated lazily on first call and persisted forever (or until the user
+ * clears site data).
+ */
+export async function getOrCreateClientId() {
+	const existing = await getSetting('clientId');
+	if (typeof existing === 'string' && existing.length > 0) return existing;
+	const fresh = crypto.randomUUID();
+	await setSetting('clientId', fresh);
+	return fresh;
+}
+
+/**
+ * Entries waiting to be pushed to Supabase. We don't have a Dexie index
+ * on `remoteId`, but at scouting volume (a few hundred rows tops) a full
+ * scan with a filter is plenty fast.
+ */
+export async function getUnsyncedEntries() {
+	return db.entries.filter((e) => !e.remoteId).toArray();
+}
+
+/** Mark a local entry as successfully pushed by stamping its remote UUID. */
+export async function markEntrySynced(localId, remoteId) {
+	return db.entries.update(localId, { remoteId });
+}
+
+/**
+ * Insert a row that arrived from a peer device via the sync layer. Returns
+ * `{ inserted: true }` if it was new, `{ inserted: false }` if a duplicate
+ * was already present locally (matched on remoteId or the dedupe compound).
+ */
+export async function insertRemoteEntry(remoteRow) {
+	// Same row arriving twice (via realtime echo, or two import paths) — skip.
+	if (remoteRow.remoteId) {
+		const byRemote = await db.entries
+			.filter((e) => e.remoteId === remoteRow.remoteId)
+			.first();
+		if (byRemote) return { inserted: false };
+	}
+	const byCompound = await db.entries
+		.where('[eventCode+matchNumber+teamNumber+scoutName+createdAt]')
+		.equals([
+			remoteRow.eventCode,
+			remoteRow.matchNumber,
+			remoteRow.teamNumber,
+			remoteRow.scoutName,
+			remoteRow.createdAt
+		])
+		.first();
+	if (byCompound) {
+		// Local row already exists from a file import; just stamp its remoteId
+		// so future sync ticks don't push a duplicate.
+		if (!byCompound.remoteId && remoteRow.remoteId) {
+			await db.entries.update(byCompound.id, { remoteId: remoteRow.remoteId });
+		}
+		return { inserted: false };
+	}
+	const { localId: _drop, ...rest } = remoteRow;
+	await db.entries.add(rest);
+	return { inserted: true };
 }
 
 /**
