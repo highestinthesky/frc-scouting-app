@@ -65,6 +65,27 @@ export async function setSetting(key, value) {
 }
 
 /**
+ * Distinct, non-empty values for a given observations key across every entry.
+ * Used by autocomplete fields to suggest previously-recorded values
+ * (e.g. auto pathing names) so scouts converge on consistent labels instead
+ * of typing the same path slightly differently each time.
+ *
+ * @param {string} observationKey  e.g. 'autoPathing'
+ * @returns {Promise<string[]>}    distinct trimmed values, sorted A→Z
+ */
+export async function getDistinctObservationValues(observationKey) {
+	const all = await db.entries.toArray();
+	const seen = new Set();
+	for (const row of all) {
+		const v = row.observations?.[observationKey];
+		if (typeof v !== 'string') continue;
+		const trimmed = v.trim();
+		if (trimmed) seen.add(trimmed);
+	}
+	return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Insert several entries, skipping any that already exist (matched on
  * the compound index of event+match+team+scout+createdAt).
  * Returns { inserted, skipped }.

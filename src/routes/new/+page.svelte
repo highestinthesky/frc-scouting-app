@@ -12,8 +12,13 @@
 	let error = $state('');
 
 	function blank() {
+		// Type-aware defaults: text-ish fields start empty, booleans default to false
+		// so the toggle renders in its "no" state and the saved entry stores a real
+		// boolean rather than an empty string.
 		const v = {};
-		for (const f of ALL_FIELDS) v[f.key] = '';
+		for (const f of ALL_FIELDS) {
+			v[f.key] = f.type === 'boolean' ? false : '';
+		}
 		return v;
 	}
 

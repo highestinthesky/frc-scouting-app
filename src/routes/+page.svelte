@@ -142,7 +142,13 @@
 						{#if e.observations.defense}
 							<p><strong>D</strong> {e.observations.defense}</p>
 						{/if}
-						{#if e.observations.failures}
+						{#if e.observations.brokeDown === true}
+							<p class="brokedown"><strong>!</strong> Broke down</p>
+						{/if}
+						{#if e.observations.comments}
+							<p><strong>·</strong> {e.observations.comments}</p>
+						{/if}
+						{#if e.observations.failures && e.observations.brokeDown === undefined}
 							<p><strong>!</strong> {e.observations.failures}</p>
 						{/if}
 					{/if}
@@ -277,6 +283,8 @@
 		width: 1rem;
 		color: #0b3d91;
 	}
+	.entry p.brokedown { color: #8e2c2c; font-weight: 600; }
+	.entry p.brokedown strong { color: #8e2c2c; }
 	.timestamp {
 		display: block;
 		margin-top: 0.45rem;

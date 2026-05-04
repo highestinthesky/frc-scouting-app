@@ -21,7 +21,7 @@
 		{ value: 'entries', label: 'most entries' },
 		{ value: 'recent', label: 'most recent update' },
 		{ value: 'auto-paths', label: 'most auto path sightings' },
-		{ value: 'failures', label: 'most failures' },
+		{ value: 'breakdowns', label: 'most breakdowns' },
 		{ value: 'defense', label: 'most defense notes' }
 	];
 
@@ -124,7 +124,7 @@
 			if (sortBy === 'auto-paths') {
 				return b.autoPathEntryCount - a.autoPathEntryCount || b.autoPathCount - a.autoPathCount;
 			}
-			if (sortBy === 'failures') return b.failureCount - a.failureCount || b.entryCount - a.entryCount;
+			if (sortBy === 'breakdowns') return b.breakdownCount - a.breakdownCount || b.entryCount - a.entryCount;
 			if (sortBy === 'defense') return b.defenseCount - a.defenseCount || b.entryCount - a.entryCount;
 			return b.entryCount - a.entryCount || a.teamNumber - b.teamNumber;
 		});
@@ -203,7 +203,7 @@
 						</div>
 						<div class="right">
 							{#if t.autoPathEntryCount > 0}<span class="badge path">{t.autoPathEntryCount} auto path{t.autoPathEntryCount === 1 ? '' : 's'}</span>{/if}
-							{#if t.failureCount > 0}<span class="badge bad">{t.failureCount} failure{t.failureCount === 1 ? '' : 's'}</span>{/if}
+							{#if t.breakdownCount > 0}<span class="badge bad">{t.breakdownCount} breakdown{t.breakdownCount === 1 ? '' : 's'}</span>{/if}
 							{#if t.defenseCount > 0}<span class="badge">{t.defenseCount} defense</span>{/if}
 							<span class="age">{minutesAgo(t.latestCreatedAt)}</span>
 							<span class="chev">{isExpanded(t.teamNumber) ? '▾' : '▸'}</span>
@@ -229,7 +229,9 @@
 									{#if e.observations?.strengths}<p><strong>+</strong> {e.observations.strengths}</p>{/if}
 									{#if e.observations?.weaknesses}<p><strong>−</strong> {e.observations.weaknesses}</p>{/if}
 									{#if e.observations?.defense}<p><strong>D</strong> {e.observations.defense}</p>{/if}
-									{#if e.observations?.failures}<p><strong>!</strong> {e.observations.failures}</p>{/if}
+									{#if e.observations?.brokeDown === true}<p class="brokedown"><strong>!</strong> Broke down</p>{/if}
+									{#if e.observations?.comments}<p><strong>·</strong> {e.observations.comments}</p>{/if}
+									{#if e.observations?.failures && e.observations?.brokeDown === undefined}<p><strong>!</strong> {e.observations.failures}</p>{/if}
 								</li>
 							{/each}
 							{#if t.entries.length > 3}<li class="more">+ {t.entries.length - 3} more entries</li>{/if}
@@ -393,6 +395,7 @@
 	.alliance { text-transform: capitalize; color: #666; }
 	.by { margin-left: auto; font-size: 0.8rem; }
 	.team-entry p { margin: 0.25rem 0 0; font-size: 0.9rem; }
+	.team-entry p.brokedown { color: #8e2c2c; font-weight: 600; }
 	.more { text-align: center; color: #666; padding-top: 0.2rem; font-size: 0.85rem; }
 	.error { background: #fdecea; color: #842029; padding: 0.6rem 0.75rem; border-radius: 0.4rem; margin: 0.5rem 0; }
 	.info { background: #eaf3ff; color: #1c3a78; padding: 0.6rem 0.75rem; border-radius: 0.4rem; margin: 0.5rem 0; white-space: pre-wrap; }

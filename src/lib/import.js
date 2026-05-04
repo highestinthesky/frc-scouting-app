@@ -34,9 +34,42 @@ export async function readPayload(fileOrBlob) {
 	return payload;
 }
 
+/**
+ * Schema-version shim. Older exports recorded "did the robot fail?" as a
+ * free-text `observations.failures` textarea. v2 replaced that with a
+ * boolean `brokeDown` flag plus a generic `comments` textarea.
+ *
+ * On import, if a row only carries the legacy shape, we mirror it forward:
+ *   - non-empty `failures`  →  brokeDown = true,  comments prepended with the failures text
+ *   - empty/missing failures →  brokeDown = false (so downstream code can rely on the boolean)
+ *
+ * The original `failures` field is preserved on the row so re-exports of
+ * old data don't silently lose information for anyone still on the old app.
+ */
+function normalizeLegacyObservations(rows) {
+	return rows.map((row) => {
+		const obs = row.observations ?? {};
+		if (typeof obs.brokeDown === 'boolean') return row;
+
+		const failuresText = typeof obs.failures === 'string' ? obs.failures.trim() : '';
+		const newObs = { ...obs };
+		if (failuresText) {
+			newObs.brokeDown = true;
+			const existingComments = typeof obs.comments === 'string' ? obs.comments.trim() : '';
+			newObs.comments = existingComments
+				? `${failuresText}\n\n${existingComments}`
+				: failuresText;
+		} else {
+			newObs.brokeDown = false;
+		}
+		return { ...row, observations: newObs };
+	});
+}
+
 /** Merge a parsed payload into the local DB. */
 export async function importPayload(payload) {
-	return bulkInsertEntries(payload.entries);
+	const normalized = normalizeLegacyObservations(payload.entries);
+	return bulkInsertEntries(normalized);
 }
 
 /** One-shot helper for an import button. */

@@ -2,7 +2,21 @@
 	// Generic input renderer. Picks the right HTML control based on the
 	// field's `type`. Used by every form so adding a new field type only
 	// happens here.
+	import { onMount } from 'svelte';
+	import { getDistinctObservationValues } from '$lib/db.js';
+
 	let { field, value = $bindable() } = $props();
+
+	// Autocomplete fields lazy-load suggestions from the local DB on mount.
+	// Distinct prior values for the configured observations key, alphabetised.
+	let suggestions = $state([]);
+	const listId = field.type === 'autocomplete' ? `suggest-${field.key}` : null;
+
+	onMount(async () => {
+		if (field.type === 'autocomplete' && field.suggestKey) {
+			suggestions = await getDistinctObservationValues(field.suggestKey);
+		}
+	});
 </script>
 
 <label class="field">
@@ -58,6 +72,37 @@
 					{opt}
 				</button>
 			{/each}
+		</div>
+	{:else if field.type === 'autocomplete'}
+		<input
+			type="text"
+			bind:value
+			required={field.required}
+			placeholder={field.placeholder}
+			list={listId}
+			autocomplete="off"
+		/>
+		{#if listId}
+			<datalist id={listId}>
+				{#each suggestions as s (s)}
+					<option value={s}></option>
+				{/each}
+			</datalist>
+		{/if}
+	{:else if field.type === 'boolean'}
+		<div class="bool">
+			<button
+				type="button"
+				class="toggle"
+				class:on={value === true}
+				role="switch"
+				aria-checked={value === true}
+				aria-label={field.label}
+				onclick={() => (value = !(value === true))}
+			>
+				<span class="track"><span class="thumb"></span></span>
+			</button>
+			<span class="bool-label">{value === true ? 'Yes' : 'No'}</span>
 		</div>
 	{/if}
 </label>
@@ -126,5 +171,52 @@
 		background: #0b3d91;
 		border-color: #0b3d91;
 		color: white;
+	}
+
+	/* Boolean toggle. Hidden semantic checkbox would be cleaner accessibility,
+	   but a button with role=switch is well-supported by AT and avoids the
+	   visually-hidden-input dance. */
+	.bool {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin-top: 0.1rem;
+	}
+	.toggle {
+		appearance: none;
+		background: transparent;
+		border: none;
+		padding: 0.25rem;
+		cursor: pointer;
+		font: inherit;
+	}
+	.toggle:focus-visible .track {
+		outline: 2px solid #0b3d91;
+		outline-offset: 2px;
+	}
+	.track {
+		position: relative;
+		display: inline-block;
+		width: 2.6rem;
+		height: 1.5rem;
+		background: #ccc;
+		border-radius: 999px;
+		transition: background-color 100ms ease;
+	}
+	.thumb {
+		position: absolute;
+		top: 0.15rem;
+		left: 0.15rem;
+		width: 1.2rem;
+		height: 1.2rem;
+		background: white;
+		border-radius: 50%;
+		transition: transform 120ms ease;
+	}
+	.toggle.on .track { background: #0b3d91; }
+	.toggle.on .thumb { transform: translateX(1.1rem); }
+	.bool-label {
+		font-size: 0.95rem;
+		color: #333;
 	}
 </style>

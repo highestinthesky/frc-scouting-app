@@ -3,6 +3,18 @@
 
 import { listEntries } from './db.js';
 
+/**
+ * "Did the robot break down on this entry?"
+ * Reads the new boolean `brokeDown` field; falls back to the legacy free-text
+ * `failures` field so entries collected on the v1 schema still count correctly.
+ */
+function hadBreakdown(entry) {
+	const obs = entry.observations;
+	if (!obs) return false;
+	if (typeof obs.brokeDown === 'boolean') return obs.brokeDown;
+	return typeof obs.failures === 'string' && obs.failures.trim().length > 0;
+}
+
 /** High-level counts plus a per-team breakdown. */
 export async function summarize() {
 	const entries = await listEntries();
@@ -27,8 +39,9 @@ export async function summarize() {
 				.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 			const redCount = list.filter((e) => e.allianceColor === 'red').length;
 			const blueCount = list.filter((e) => e.allianceColor === 'blue').length;
-			const failureCount = list.filter((e) => Boolean(e.observations?.failures?.trim())).length;
+			const breakdownCount = list.filter(hadBreakdown).length;
 			const defenseCount = list.filter((e) => Boolean(e.observations?.defense?.trim())).length;
+			const commentCount = list.filter((e) => Boolean(e.observations?.comments?.trim())).length;
 			const strengthsPreview = ordered
 				.map((e) => e.observations?.strengths?.trim())
 				.find(Boolean) ?? '';
@@ -49,8 +62,9 @@ export async function summarize() {
 				scoutsCovered: new Set(list.map((e) => e.scoutName)).size,
 				redCount,
 				blueCount,
-				failureCount,
+				breakdownCount,
 				defenseCount,
+				commentCount,
 				autoPathEntryCount: autoPaths.reduce((sum, p) => sum + p.count, 0),
 				autoPathCount: autoPaths.length,
 				autoPaths,

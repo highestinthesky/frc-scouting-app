@@ -5,11 +5,15 @@
 // here updates everything.
 //
 // Field types currently supported:
-//   number     — numeric input (validated)
-//   text       — single-line text
-//   textarea   — multi-line text
-//   select     — dropdown, requires `options`
-//   pills      — tap-one-of choice, requires `options` (nicer on phones than select)
+//   number       — numeric input (validated)
+//   text         — single-line text
+//   textarea     — multi-line text
+//   select       — dropdown, requires `options`
+//   pills        — tap-one-of choice, requires `options` (nicer on phones than select)
+//   autocomplete — text input that suggests previously-used values from the local DB.
+//                  Set `suggestKey` to the observations key whose distinct prior values
+//                  populate the suggestion list.
+//   boolean      — yes/no toggle (renders as a switch)
 //
 // Put `required: true` on fields that must be filled.
 
@@ -17,11 +21,12 @@
  * @typedef {object} Field
  * @property {string} key            unique key, used as the property name on the entry
  * @property {string} label          shown above the input
- * @property {'number'|'text'|'textarea'|'select'|'pills'} type
+ * @property {'number'|'text'|'textarea'|'select'|'pills'|'autocomplete'|'boolean'} type
  * @property {boolean} [required]
  * @property {string[]} [options]    for select / pills
  * @property {string} [placeholder]
  * @property {string} [help]         small grey text shown under the label
+ * @property {string} [suggestKey]   for autocomplete: which observations key to source suggestions from
  */
 
 /** Identity fields — what match / which robot. */
@@ -56,10 +61,11 @@ export const OBSERVATION_FIELDS = [
 	{
 		key: 'autoPathing',
 		label: 'Auto pathing',
-		type: 'text',
+		type: 'autocomplete',
 		required: false,
-		placeholder: 'e.g. Center start → left coral',
-		help: 'Name the autonomous route they ran this match.'
+		suggestKey: 'autoPathing',
+		placeholder: 'e.g. Center start → left scoring',
+		help: 'Pick a path you used before, or type a new one.'
 	},
 	{
 		key: 'strengths',
@@ -77,23 +83,36 @@ export const OBSERVATION_FIELDS = [
 	},
 	{
 		key: 'defense',
-		label: 'Defense',
+		label: 'Defense played',
 		type: 'textarea',
 		required: false,
-		placeholder: 'Did they play defense? How well?'
+		placeholder: 'Did they play defense? How well?',
+		help: 'Optional.'
 	},
 	{
-		key: 'failures',
-		label: 'Failures',
+		key: 'brokeDown',
+		label: 'Did it break down?',
+		type: 'boolean',
+		required: false,
+		help: 'Toggle on if anything failed mid-match.'
+	},
+	{
+		key: 'comments',
+		label: 'Additional comments',
 		type: 'textarea',
 		required: false,
-		placeholder: 'Anything break or stop working?',
-		help: 'Optional — leave blank if nothing failed.'
+		placeholder: 'Anything else worth knowing?',
+		help: 'Optional.'
 	}
 ];
 
 /** All fields in the order they appear on the form. */
 export const ALL_FIELDS = [...IDENTITY_FIELDS, ...OBSERVATION_FIELDS];
 
-/** A schema version bumped when this file changes shape — used in exports. */
-export const SCHEMA_VERSION = 1;
+/**
+ * Bumped to 2: replaced the free-text `failures` textarea with a boolean
+ * `brokeDown` toggle plus a separate `comments` textarea. Old entries with
+ * `observations.failures` still display correctly thanks to compatibility
+ * shims in import.js, aggregate.js, and the entry render paths.
+ */
+export const SCHEMA_VERSION = 2;
