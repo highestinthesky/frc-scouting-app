@@ -71,23 +71,6 @@ export async function setSetting(key, value) {
 }
 
 /**
- * The team's session UUID — the secret that scopes which scouts share data.
- * Stored in Dexie settings so it survives PWA reloads and OS restarts.
- */
-export async function getSessionId() {
-	return (await getSetting('syncSessionId')) ?? null;
-}
-
-export async function setSessionId(uuid) {
-	return setSetting('syncSessionId', uuid);
-}
-
-/** Erase the joined session, dropping the device out of the shared scope. */
-export async function clearSessionId() {
-	return db.settings.delete('syncSessionId');
-}
-
-/**
  * A stable random ID for this physical device. Used as a tiebreaker when
  * two devices submit otherwise-identical rows, and stored on every entry
  * so the sync layer can tell its own writes apart from peer writes.

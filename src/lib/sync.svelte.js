@@ -4,13 +4,18 @@
 // minting custom JWTs. 3 seconds is invisible at scouting cadence and keeps
 // the security model simple.
 //
+// Sync scope is the event code typed in Identity. There's no separate session
+// UUID. Two devices typing the same event code share data; switching events
+// is just changing the event code field. Push and pull are both keyed off
+// the current event code, hashed deterministically into the UUID-shaped
+// session_id our Postgres schema expects.
+//
 // IndexedDB stays the source of truth. This module just keeps two ledgers in
 // sync: the local Dexie `entries` table and the cloud `entries` row set
-// scoped to our session.
+// scoped to our event.
 
-import { createSupabaseClient, isUuid } from './supabase.js';
+import { createSupabaseClient, deriveSessionId } from './supabase.js';
 import {
-	getSessionId,
 	getOrCreateClientId,
 	getUnsyncedEntries,
 	markEntrySynced,
@@ -20,50 +25,68 @@ import {
 const POLL_INTERVAL_MS = 3000;
 
 /**
- * Reactive sync state. Consumers (layout indicator, settings page) read
- * fields off this object inside Svelte components and re-render when they
- * change.
+ * Reactive sync state. Consumers read fields off this inside Svelte
+ * components and re-render when they change.
  */
 export const syncState = $state({
 	status: 'idle', // 'idle' | 'connecting' | 'connected' | 'offline' | 'error'
 	pendingCount: 0,
 	lastSyncedAt: /** @type {string | null} */ (null),
 	error: /** @type {string | null} */ (null),
+	/** Lower-cased event code currently scoping pull. */
+	eventCode: /** @type {string | null} */ (null),
+	/** Derived session_id for the current event. */
 	sessionId: /** @type {string | null} */ (null),
 	/** Incremented every time a peer's row is inserted locally. Pages watch
 	 * this to know when their `entries` view is stale. */
 	inboundChanges: 0
 });
 
-let client = null;
 let timer = null;
 let polling = false;
-/** ISO of the newest row we've pulled — pull queries advance from here. */
+/** ISO of the newest row pulled — pull queries advance from here. Reset
+ * whenever the event code changes. */
 let lastSeenAt = null;
 /** Cached on first call; stable for the device. */
 let cachedClientId = null;
 
-/** Boot the sync layer based on persisted state. Called once from the layout. */
-export async function init() {
-	const sid = await getSessionId();
-	syncState.sessionId = sid;
-	cachedClientId = await getOrCreateClientId();
-	if (sid && isUuid(sid)) await start();
+/**
+ * Cache of Supabase clients keyed by session_id. Each unique event we
+ * push to gets its own client (because the x-session-id header is set
+ * at construction time). Cheap to keep around.
+ */
+const clientCache = new Map();
+function clientFor(sessionId) {
+	let c = clientCache.get(sessionId);
+	if (!c) {
+		c = createSupabaseClient(sessionId);
+		clientCache.set(sessionId, c);
+	}
+	return c;
 }
 
-/** Begin polling. Idempotent — calling twice is a no-op. */
-export async function start() {
-	await stop();
-	const sid = await getSessionId();
-	if (!isUuid(sid)) {
-		syncState.status = 'idle';
+/** Boot the sync layer. Called once from the layout. */
+export async function init() {
+	cachedClientId = await getOrCreateClientId();
+}
+
+/**
+ * Set or change the event code scoping the pull side. Called from the
+ * layout's effect on session.eventCode. Empty/null pauses sync.
+ */
+export async function setEventCode(eventCode) {
+	const next = typeof eventCode === 'string' ? eventCode.trim().toLowerCase() : '';
+	if (next === syncState.eventCode) return; // no-op on identical re-set
+	stop();
+	syncState.eventCode = next || null;
+	if (!next) {
 		syncState.sessionId = null;
+		syncState.status = 'idle';
 		return;
 	}
-	syncState.sessionId = sid;
+	syncState.sessionId = await deriveSessionId(next);
 	syncState.status = navigator.onLine ? 'connecting' : 'offline';
-	client = createSupabaseClient(sid);
-	lastSeenAt = null;
+	lastSeenAt = null; // do a full backfill whenever the scope changes
 	if (typeof window !== 'undefined') {
 		window.addEventListener('online', onOnline);
 		window.addEventListener('offline', onOffline);
@@ -72,27 +95,20 @@ export async function start() {
 }
 
 /** Tear down loops and listeners. */
-export async function stop() {
+export function stop() {
 	if (timer) {
 		clearTimeout(timer);
 		timer = null;
 	}
-	client = null;
 	if (typeof window !== 'undefined') {
 		window.removeEventListener('online', onOnline);
 		window.removeEventListener('offline', onOffline);
 	}
 }
 
-/** Switch to a different session UUID, restarting the loops. */
-export async function changeSession(newSessionId) {
-	syncState.sessionId = newSessionId;
-	await start();
-}
-
 /** Force an immediate sync tick — useful after the user adds an entry. */
 export function kick() {
-	scheduleTick(0);
+	if (syncState.eventCode) scheduleTick(0);
 }
 
 function onOnline() {
@@ -117,7 +133,7 @@ async function tick() {
 			syncState.status = 'offline';
 			return;
 		}
-		if (!client || !syncState.sessionId) return;
+		if (!syncState.eventCode || !syncState.sessionId) return;
 		await pushOutbox();
 		await pullInbox();
 		syncState.status = 'connected';
@@ -128,7 +144,7 @@ async function tick() {
 		syncState.error = e?.message ?? String(e);
 	} finally {
 		polling = false;
-		scheduleTick(POLL_INTERVAL_MS);
+		if (syncState.eventCode) scheduleTick(POLL_INTERVAL_MS);
 	}
 }
 
@@ -136,8 +152,14 @@ async function pushOutbox() {
 	const unsynced = await getUnsyncedEntries();
 	syncState.pendingCount = unsynced.length;
 	for (const local of unsynced) {
+		// An entry's eventCode field is its source of truth — we push to
+		// THAT event's scope, not the user's currently-selected one. This
+		// way switching events doesn't strand entries from a previous one.
+		const sid = await deriveSessionId(local.eventCode);
+		if (!sid) continue;
+		const client = clientFor(sid);
 		const row = {
-			session_id: syncState.sessionId,
+			session_id: sid,
 			event_code: local.eventCode,
 			match_number: local.matchNumber,
 			team_number: local.teamNumber,
@@ -150,14 +172,14 @@ async function pushOutbox() {
 		};
 		const { data, error } = await client.from('entries').insert(row).select('id').single();
 		if (error) {
-			// Postgres unique_violation — the server already has this row (a peer
-			// device pushed it via a file round-trip, or our previous tick raced
-			// the round-trip). Adopt the existing remote id and move on.
+			// Postgres unique_violation — server already has this row (peer
+			// pushed it via file round-trip, or our previous tick raced the
+			// round-trip). Adopt the existing remote id and move on.
 			if (error.code === '23505') {
 				const { data: found } = await client
 					.from('entries')
 					.select('id')
-					.eq('session_id', syncState.sessionId)
+					.eq('session_id', sid)
 					.eq('event_code', local.eventCode)
 					.eq('match_number', local.matchNumber)
 					.eq('team_number', local.teamNumber)
@@ -177,6 +199,7 @@ async function pushOutbox() {
 }
 
 async function pullInbox() {
+	const client = clientFor(syncState.sessionId);
 	let q = client
 		.from('entries')
 		.select('*')
@@ -186,8 +209,8 @@ async function pullInbox() {
 	const { data, error } = await q;
 	if (error) throw error;
 	for (const remoteRow of data ?? []) {
-		// Our own writes echo back; insertRemoteEntry's compound-dedupe will
-		// skip them, but bypassing the lookup is faster.
+		// Our own writes echo back; insertRemoteEntry's compound-dedupe
+		// would skip them, but bypassing the lookup is faster.
 		if (remoteRow.client_id !== cachedClientId) {
 			const { inserted } = await insertRemoteEntry({
 				remoteId: remoteRow.id,

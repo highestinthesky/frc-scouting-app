@@ -1,16 +1,18 @@
 // Supabase client factory for the wireless sync layer.
 //
-// We don't keep one long-lived client. Sessions are scoped by an `x-session-id`
-// header that has to be set on the client at construction time, and the active
-// session can change at runtime (a scout joins a different team mid-event,
-// rotates their session, etc.). So we recreate the client whenever the session
-// id changes.
+// Sync scope is the FRC event code. Two devices typing the same event code
+// in Settings end up sharing data. We don't issue per-team UUIDs — the event
+// code itself, hashed into a UUID-shaped string, is the session id.
 //
-// The URL and anon key below are *intentionally public*. The anon key is
-// signed with a JWT that grants only the `anon` role, which has no power
-// outside what RLS policies allow. Our RLS policies require the
-// `x-session-id` header on every request — knowing the anon key without
-// knowing a session UUID gets you nothing.
+// Trade-off: there's no secret. Anyone who knows your event code (it's
+// public on TBA) and has the app URL can read your scouting and write
+// junk to it. The user has accepted that — files are still the offline
+// fallback if a real venue ever needs locked-down data.
+//
+// The URL and anon key below are *intentionally public*. The anon key
+// is a JWT scoped to the `anon` role and can't do anything outside what
+// RLS policies allow. RLS scopes by the `x-session-id` header we set
+// per request; without that header, every read returns zero rows.
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -19,21 +21,50 @@ export const SUPABASE_ANON_KEY =
 	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhodnBrZ3dna3VpZW14eWFyc3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NzM3NjAsImV4cCI6MjA5MzQ0OTc2MH0.rDd0ZX3KxJ5SXKjNr11rn1QXS1_9t2cLEOaOnbcClKs';
 
 /**
- * Build a Supabase client scoped to a session UUID. The header is read by
- * Postgres in the RLS policy via `current_setting('request.headers')` — every
- * SELECT/INSERT/DELETE we make automatically carries the team's scope.
+ * Derive a deterministic UUID-shaped session id from an event code so the
+ * Postgres `session_id uuid` column doesn't have to change. The same event
+ * code always produces the same UUID; different codes produce different
+ * UUIDs.
  *
- * @param {string} sessionId  the team's session UUID
+ * @param {string} eventCode  e.g. "2027hvr"
+ * @returns {Promise<string|null>}  RFC 4122 v8-shaped UUID, or null if input
+ *                                  is empty/invalid.
+ */
+export async function deriveSessionId(eventCode) {
+	if (typeof eventCode !== 'string') return null;
+	const code = eventCode.trim().toLowerCase();
+	if (!code) return null;
+	// Namespace the input so the same event code can't accidentally collide
+	// with anyone else hashing event codes for some unrelated app.
+	const data = new TextEncoder().encode(`frc-scout:event:${code}`);
+	const hashBuf = await crypto.subtle.digest('SHA-256', data);
+	const bytes = new Uint8Array(hashBuf, 0, 16);
+	// Set version (high nibble of byte 6) to 8 — a "custom" UUID variant.
+	bytes[6] = (bytes[6] & 0x0f) | 0x80;
+	// Set variant (high bits of byte 8) to 10 — RFC 4122.
+	bytes[8] = (bytes[8] & 0x3f) | 0x80;
+	const hex = (start, end) =>
+		[...bytes.slice(start, end)].map((b) => b.toString(16).padStart(2, '0')).join('');
+	return `${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}`;
+}
+
+/**
+ * Build a Supabase client bound to a specific session id (an event-derived
+ * UUID). The header is read by Postgres in the RLS policy via
+ * `current_setting('request.headers')` — every SELECT/INSERT/DELETE we make
+ * automatically carries the event's scope.
+ *
+ * @param {string} sessionId
  */
 export function createSupabaseClient(sessionId) {
 	if (!isUuid(sessionId)) {
-		throw new Error('Supabase client requires a valid session UUID.');
+		throw new Error('Supabase client requires a valid session id.');
 	}
 	return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 		auth: {
-			// We don't use Supabase auth — the session UUID is our only credential.
-			// Disable auto-refresh and persistence so the SDK doesn't write spurious
-			// data into IndexedDB.
+			// We don't use Supabase auth — the derived session id is our only
+			// scoping primitive. Disable refresh and persistence so the SDK
+			// doesn't write spurious data into IndexedDB.
 			autoRefreshToken: false,
 			persistSession: false,
 			detectSessionInUrl: false
@@ -44,18 +75,10 @@ export function createSupabaseClient(sessionId) {
 	});
 }
 
-/** RFC 4122 v4 UUID, lowercase, with hyphens. */
+/** RFC 4122 / v8 UUID, lowercase, with hyphens. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Returns true when `s` is a syntactically valid UUID. */
+/** Returns true when `s` is syntactically a UUID. */
 export function isUuid(s) {
 	return typeof s === 'string' && UUID_RE.test(s);
-}
-
-/** Generate a fresh session UUID using the platform's CSPRNG. */
-export function newSessionId() {
-	// crypto.randomUUID is available in every browser we target (since 2022)
-	// and in Node 19+. Avoid manual entropy — it's the JS equivalent of
-	// rolling your own crypto.
-	return crypto.randomUUID();
 }
