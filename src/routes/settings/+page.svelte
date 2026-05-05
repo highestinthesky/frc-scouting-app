@@ -3,7 +3,7 @@
 	import { session } from '$lib/session.svelte.js';
 	import { role } from '$lib/role.svelte.js';
 	import { clearEntries } from '$lib/db.js';
-	import { syncState } from '$lib/sync.svelte.js';
+	import { syncState, resync } from '$lib/sync.svelte.js';
 
 	let eventCode = $state(session.eventCode);
 	let scoutName = $state(session.scoutName);
@@ -108,9 +108,18 @@
 		<p class="status {syncState.status}">
 			{statusLabel()}{#if syncState.pendingCount > 0} · {syncState.pendingCount} pending{/if}
 		</p>
-		{#if syncState.lastSyncedAt}
-			<small class="muted">Last sync: {new Date(syncState.lastSyncedAt).toLocaleTimeString()}</small>
-		{/if}
+		<div class="sync-actions">
+			<button
+				class="primary"
+				onclick={resync}
+				disabled={!session.eventCode || syncState.status === 'offline'}
+			>
+				Sync now
+			</button>
+			{#if syncState.lastSyncedAt}
+				<small class="muted">Last sync: {new Date(syncState.lastSyncedAt).toLocaleTimeString()}</small>
+			{/if}
+		</div>
 	</section>
 
 	<section>
@@ -247,4 +256,15 @@
 	.status.connecting { background: #fefce8; color: #854d0e; }
 	.status.offline { background: #f3f4f6; color: #555; }
 	.status.error { background: #fef2f2; color: #991b1b; }
+	.sync-actions {
+		display: flex;
+		gap: 0.6rem;
+		align-items: center;
+		flex-wrap: wrap;
+		margin-top: 0.5rem;
+	}
+	.sync-actions button.primary:disabled {
+		background: #93a3c4;
+		cursor: not-allowed;
+	}
 </style>

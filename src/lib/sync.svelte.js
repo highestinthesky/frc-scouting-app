@@ -111,6 +111,19 @@ export function kick() {
 	if (syncState.eventCode) scheduleTick(0);
 }
 
+/**
+ * Force a full re-pull of every entry for the current event code, not just
+ * the ones that landed since our last successful tick. Wired to the
+ * "Sync now" button in Settings — also useful as a manual escape hatch
+ * if the user suspects they're missing data.
+ */
+export function resync() {
+	if (!syncState.eventCode) return;
+	lastSeenAt = null;
+	syncState.status = 'connecting';
+	scheduleTick(0);
+}
+
 function onOnline() {
 	syncState.status = 'connecting';
 	scheduleTick(0);
