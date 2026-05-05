@@ -100,6 +100,27 @@ export async function markEntrySynced(localId, remoteId) {
 	return db.entries.update(localId, { remoteId });
 }
 
+/** Fetch a single entry by its local id. Returns undefined if not found. */
+export async function getEntry(id) {
+	return db.entries.get(typeof id === 'string' ? Number(id) : id);
+}
+
+/**
+ * Update fields on an existing entry in place. Only pass the fields you
+ * want to change — other fields are left untouched.
+ *
+ * Note: observations is a nested object. To update observation sub-fields,
+ * load the entry first, merge observations manually, then pass the merged
+ * object as `patch.observations`.
+ *
+ * @param {number} id - local Dexie id
+ * @param {object} patch - partial entry fields to apply
+ * @returns {Promise<number>} number of rows updated (0 = not found, 1 = ok)
+ */
+export async function updateEntry(id, patch) {
+	return db.entries.update(id, patch);
+}
+
 /**
  * Insert a row that arrived from a peer device via the sync layer. Returns
  * `{ inserted: true }` if it was new, `{ inserted: false }` if a duplicate

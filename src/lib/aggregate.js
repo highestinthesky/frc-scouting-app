@@ -42,9 +42,11 @@ export async function summarize() {
 			const breakdownCount = list.filter(hadBreakdown).length;
 			const defenseCount = list.filter((e) => Boolean(e.observations?.defense?.trim())).length;
 			const commentCount = list.filter((e) => Boolean(e.observations?.comments?.trim())).length;
-			const strengthsPreview = ordered
+			const strengthCount = list.filter((e) => Boolean(e.observations?.strengths?.trim())).length;
+			const rawStrengths = ordered
 				.map((e) => e.observations?.strengths?.trim())
 				.find(Boolean) ?? '';
+			const strengthsPreview = rawStrengths.length > 80 ? rawStrengths.slice(0, 80) + '…' : rawStrengths;
 			const autoPathCounts = new Map();
 			for (const entry of list) {
 				const key = entry.observations?.autoPathing?.trim();
@@ -65,6 +67,7 @@ export async function summarize() {
 				breakdownCount,
 				defenseCount,
 				commentCount,
+				strengthCount,
 				autoPathEntryCount: autoPaths.reduce((sum, p) => sum + p.count, 0),
 				autoPathCount: autoPaths.length,
 				autoPaths,

@@ -32,6 +32,23 @@
 		if (!loading) refresh();
 	});
 
+	// ── live entry counter ─────────────────────────────────────────────────────
+
+	/** Entries that belong to the current event code (for the pace counter). */
+	const eventEntries = $derived(
+		session.eventCode
+			? entries.filter((e) => e.eventCode === session.eventCode)
+			: entries
+	);
+
+	/** Entries recorded today (local calendar date). */
+	const todayEntries = $derived.by(() => {
+		const today = new Date().toDateString();
+		return eventEntries.filter((e) => new Date(e.createdAt).toDateString() === today);
+	});
+
+	// ── actions ────────────────────────────────────────────────────────────────
+
 	async function remove(id, summary) {
 		if (!confirm(`Delete entry: ${summary}?`)) return;
 		await deleteEntry(id);
@@ -96,6 +113,7 @@
 
 	{#if loading}
 		<p class="muted">Loading…</p>
+
 	{:else if entries.length === 0}
 		<div class="empty">
 			<p>No entries yet.</p>
@@ -107,7 +125,16 @@
 			{#if lastImport}<p class="muted small">{lastImport}</p>{/if}
 			{#if importError}<p class="error small">{importError}</p>{/if}
 		</div>
+
 	{:else}
+		<!-- ── Pace counter ──────────────────────────────────────────── -->
+		<p class="pace">
+			{eventEntries.length} {eventEntries.length === 1 ? 'entry' : 'entries'} this event
+			{#if todayEntries.length > 0}
+				· <strong>{todayEntries.length}</strong> today
+			{/if}
+		</p>
+
 		<div class="export-bar">
 			<label class="import" aria-label="Import scouting files">
 				<input bind:this={fileInput} type="file" accept=".scout,.json,application/json,application/octet-stream" multiple onchange={doImport} disabled={importing} />
@@ -116,27 +143,22 @@
 			<button class="export" onclick={doExport} disabled={exporting}>
 				{exporting ? 'Exporting…' : `Export ${entries.length} entries`}
 			</button>
-			{#if lastImport}
-				<small class="muted">{lastImport}</small>
-			{/if}
-			{#if importError}
-				<small class="error">{importError}</small>
-			{/if}
-			{#if lastExport}
-				<small class="muted">{lastExport}</small>
-			{/if}
-			{#if exportError}
-				<small class="error">{exportError}</small>
-			{/if}
+			{#if lastImport}<small class="muted">{lastImport}</small>{/if}
+			{#if importError}<small class="error">{importError}</small>{/if}
+			{#if lastExport}<small class="muted">{lastExport}</small>{/if}
+			{#if exportError}<small class="error">{exportError}</small>{/if}
 		</div>
 
 		<ul class="entries">
 			{#each entries as e (e.id)}
 				<li class="entry" data-color={e.allianceColor}>
 					<div class="row">
-						<span class="match">Q{e.matchNumber}</span>
-						<span class="team">Team {e.teamNumber}</span>
-						<span class="alliance">{e.allianceColor}</span>
+						<!-- Tapping the identity area navigates to the edit page -->
+						<a class="entry-link" href="{base}/edit/?id={e.id}" aria-label="Edit entry Q{e.matchNumber} · Team {e.teamNumber}">
+							<span class="match">Q{e.matchNumber}</span>
+							<span class="team">Team {e.teamNumber}</span>
+							<span class="alliance">{e.allianceColor}</span>
+						</a>
 						<button
 							class="delete"
 							aria-label="Delete entry"
@@ -167,6 +189,7 @@
 					{/if}
 					<small class="muted timestamp">
 						{e.scoutName} · {new Date(e.createdAt).toLocaleString()}
+						<span class="edit-hint">Tap name/match to edit</span>
 					</small>
 				</li>
 			{/each}
@@ -185,7 +208,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin: 1rem 0 1.25rem;
+		margin: 1rem 0 0.75rem;
 	}
 	h1 { margin: 0; font-size: 1.5rem; }
 	.muted { color: #777; }
@@ -199,6 +222,16 @@
 		border-radius: 0.4rem;
 		font-weight: 600;
 	}
+
+	/* ── pace counter ─────────────────────────────────────────────── */
+	.pace {
+		margin: 0 0 0.75rem;
+		font-size: 0.88rem;
+		color: #555;
+	}
+	.pace strong { color: #0b3d91; }
+
+	/* ── export bar ───────────────────────────────────────────────── */
 	.export-bar {
 		display: flex;
 		flex-direction: column;
@@ -238,10 +271,9 @@
 	}
 	.export:hover { background: #f0f4fc; }
 	.export:disabled { opacity: 0.6; cursor: progress; }
-	.empty {
-		margin-top: 3rem;
-		text-align: center;
-	}
+
+	/* ── entry list ───────────────────────────────────────────────── */
+	.empty { margin-top: 3rem; text-align: center; }
 	.entries {
 		list-style: none;
 		padding: 0;
@@ -259,16 +291,29 @@
 	}
 	.entry[data-color='red'] { border-left-color: #c0392b; }
 	.entry[data-color='blue'] { border-left-color: #2c5cb0; }
+
+	/* ── tappable entry link ──────────────────────────────────────── */
 	.row {
 		display: flex;
-		gap: 0.7rem;
+		gap: 0.5rem;
 		align-items: center;
 		font-size: 0.95rem;
 	}
-	.match {
-		font-weight: 700;
-		color: #0b3d91;
+	.entry-link {
+		display: flex;
+		gap: 0.6rem;
+		align-items: center;
+		flex: 1 1 0;
+		min-width: 0;
+		text-decoration: none;
+		color: inherit;
+		border-radius: 0.25rem;
+		padding: 0.1rem 0.2rem;
+		margin: -0.1rem -0.2rem;
 	}
+	.entry-link:hover { background: #f5f7fc; }
+	.entry-link:focus-visible { outline: 2px solid #0b3d91; }
+	.match { font-weight: 700; color: #0b3d91; }
 	.team { font-weight: 600; }
 	.alliance {
 		text-transform: capitalize;
@@ -276,7 +321,6 @@
 		font-size: 0.85rem;
 	}
 	.delete {
-		margin-left: auto;
 		background: transparent;
 		border: none;
 		font-size: 1.4rem;
@@ -284,8 +328,10 @@
 		color: #999;
 		cursor: pointer;
 		padding: 0.1rem 0.5rem;
+		flex-shrink: 0;
 	}
 	.delete:hover { color: #c0392b; }
+
 	.entry p {
 		margin: 0.4rem 0 0;
 		font-size: 0.92rem;
@@ -298,15 +344,18 @@
 	}
 	.entry p.brokedown { color: #8e2c2c; font-weight: 600; }
 	.entry p.brokedown strong { color: #8e2c2c; }
-	.empty .empty-import {
-		display: inline-block;
-		margin-top: 1rem;
-		align-self: center;
-	}
+
+	.empty .empty-import { display: inline-block; margin-top: 1rem; align-self: center; }
 	.empty .small { font-size: 0.85rem; margin-top: 0.5rem; }
+
 	.timestamp {
 		display: block;
 		margin-top: 0.45rem;
 		font-size: 0.8rem;
+	}
+	.edit-hint {
+		margin-left: 0.4rem;
+		color: #aaa;
+		font-style: italic;
 	}
 </style>

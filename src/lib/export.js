@@ -74,3 +74,62 @@ export async function exportToFile({ kind, exportedBy, eventCode }) {
 	download(payload, filename);
 	return { filename, count: payload.entries.length };
 }
+
+/**
+ * Build and download a CSV of all entries. One row per entry, RFC 4180
+ * compliant — values containing commas, double-quotes, or newlines are
+ * wrapped in double-quotes with internal quotes doubled.
+ *
+ * Columns: eventCode, matchNumber, teamNumber, allianceColor, scoutName,
+ *          createdAt, autoPathing, strengths, weaknesses, defense, brokeDown,
+ *          comments
+ *
+ * Returns { filename, count } matching exportToFile.
+ */
+export async function exportToCsv({ exportedBy: _by, eventCode }) {
+	const all = await listEntries();
+
+	// Escape a single CSV cell value per RFC 4180.
+	function esc(val) {
+		const s = String(val ?? '');
+		return /[,"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+	}
+
+	const header = [
+		'eventCode', 'matchNumber', 'teamNumber', 'allianceColor',
+		'scoutName', 'createdAt', 'autoPathing', 'strengths',
+		'weaknesses', 'defense', 'brokeDown', 'comments'
+	].join(',');
+
+	const rows = all.map((e) =>
+		[
+			esc(e.eventCode),
+			esc(e.matchNumber),
+			esc(e.teamNumber),
+			esc(e.allianceColor),
+			esc(e.scoutName),
+			esc(e.createdAt),
+			esc(e.observations?.autoPathing ?? ''),
+			esc(e.observations?.strengths ?? ''),
+			esc(e.observations?.weaknesses ?? ''),
+			esc(e.observations?.defense ?? ''),
+			esc(e.observations?.brokeDown ?? ''),
+			esc(e.observations?.comments ?? '')
+		].join(',')
+	);
+
+	const csv = [header, ...rows].join('\r\n');
+	const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	const ev = (eventCode || 'event').replace(/\s+/g, '-').toLowerCase();
+	const date = new Date().toISOString().slice(0, 10);
+	const filename = `${ev}-aggregated-${date}.csv`;
+	a.href = url;
+	a.download = filename;
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
+	setTimeout(() => URL.revokeObjectURL(url), 1000);
+	return { filename, count: all.length };
+}
