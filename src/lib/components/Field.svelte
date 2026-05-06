@@ -10,7 +10,7 @@
 	// Autocomplete fields lazy-load suggestions from the local DB on mount.
 	// Distinct prior values for the configured observations key, alphabetised.
 	let suggestions = $state([]);
-	const listId = field.type === 'autocomplete' ? `suggest-${field.key}` : null;
+	const listId = $derived(field.type === 'autocomplete' ? `suggest-${field.key}` : null);
 
 	// Tag presets — top-used phrases from prior entries shown as one-tap pills
 	// above textareas with `tagSource`. Tapping appends the phrase to the
