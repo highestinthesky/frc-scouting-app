@@ -2,91 +2,133 @@
 	// Generic input renderer. Picks the right HTML control based on the
 	// field's `type`. Used by every form so adding a new field type only
 	// happens here.
-	import { onMount } from 'svelte';
-	import { getDistinctObservationValues, getMostUsedObservationValues } from '$lib/db.js';
+	import {
+		getDistinctObservationValuesForTeam,
+		getMostUsedObservationValuesForTeam
+	} from '$lib/db.js';
 
-	let { field, value = $bindable() } = $props();
+	/**
+	 * field      — field config object from form-config.js
+	 * value      — bindable: the serialized field value (string / boolean / number)
+	 * scopeTeam  — current team number being scouted. When > 0, suggestions and
+	 *              tag pills are filtered to only that team's prior entries.
+	 *              When 0 / blank, no suggestions are shown.
+	 */
+	let { field, value = $bindable(), scopeTeam = 0 } = $props();
 
-	// Autocomplete fields lazy-load suggestions from the local DB on mount.
-	// Distinct prior values for the configured observations key, alphabetised.
+	// Autocomplete suggestions — distinct prior values for this field's key,
+	// scoped to the team being scouted. Populated reactively whenever scopeTeam
+	// or field changes.
 	let suggestions = $state([]);
 	const listId = $derived(field.type === 'autocomplete' ? `suggest-${field.key}` : null);
 
-	// Tag presets — top-used phrases from prior entries shown as one-tap pills
-	// above textareas with `tagSource`. Tapping appends the phrase to the
-	// current value (with a separator if there's existing content).
+	// Tag pills — top-used phrases for this field, scoped to the same team.
 	let tagPills = $state([]);
 
-	onMount(async () => {
-		if (field.type === 'autocomplete' && field.suggestKey) {
-			suggestions = await getDistinctObservationValues(field.suggestKey);
-		}
-		if (field.type === 'textarea' && field.tagSource) {
-			const top = await getMostUsedObservationValues(field.tagSource, 6);
-			tagPills = top.map((t) => t.value);
-		}
+	// Re-run whenever scopeTeam changes (i.e. as the scout types the team #).
+	// Uses an IIFE inside $effect so we can await DB calls while still tracking
+	// scopeTeam as a reactive dependency.
+	$effect(() => {
+		const team = Number(scopeTeam); // read here so $effect tracks it
+		const ftype = field.type;
+		const suggestKey = field.suggestKey;
+		const tagSource = field.tagSource;
+
+		(async () => {
+			if (ftype === 'autocomplete' && suggestKey) {
+				suggestions = team > 0
+					? await getDistinctObservationValuesForTeam(suggestKey, team)
+					: [];
+			}
+			if (ftype === 'textarea' && tagSource) {
+				if (team > 0) {
+					const top = await getMostUsedObservationValuesForTeam(tagSource, team, 6);
+					tagPills = top.map((t) => t.value);
+				} else {
+					tagPills = [];
+				}
+			}
+		})();
 	});
+
+	// ── tag pill logic ──────────────────────────────────────────────────────
 
 	function applyTag(phrase) {
 		const current = (value ?? '').toString();
 		if (!current.trim()) {
 			value = phrase;
 		} else if (current.includes(phrase)) {
-			// Already in the textarea — don't re-append. Tapping a second time is
-			// a no-op rather than a duplicate.
+			// Already present — tapping again is a no-op rather than a duplicate.
 			return;
 		} else {
-			// Comma-separate so multiple phrases compose into a readable run-on.
 			value = current.replace(/[\s,]+$/, '') + ', ' + phrase;
 		}
 	}
 
-	// Voice dictation — Web Speech API. Available in Chrome/Edge and iOS
-	// Safari 14.5+; gracefully hidden where the API isn't present so the
-	// button never appears as broken.
-	let speechSupported = $state(false);
-	let listening = $state(false);
-	let recognition = null;
+	// ── defense-entry helpers ───────────────────────────────────────────────
+	//
+	// The 'defense-entry' type stores a single serialized string in
+	// observations.defense. Internally we track three sub-fields and
+	// serialize on every change.
+	//
+	// Serialized format examples:
+	//   "Defended 1678: pinned near loading zone"
+	//   "Defended by 254: chased us the whole match"
+	//   "Defended: very aggressive"
+	//   "Defended by: kept bumping us"
+	//   ""  (nothing filled in)
 
-	onMount(() => {
-		if (typeof window === 'undefined') return;
-		const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-		if (!SR) return;
-		speechSupported = true;
-		recognition = new SR();
-		recognition.continuous = false;
-		recognition.interimResults = false;
-		recognition.lang = navigator.language || 'en-US';
-		recognition.onresult = (e) => {
-			const text = Array.from(e.results)
-				.map((r) => r[0]?.transcript ?? '')
-				.join(' ')
-				.trim();
-			if (!text) return;
-			const current = (value ?? '').toString();
-			value = current.trim() ? current.replace(/\s+$/, '') + ' ' + text : text;
+	/** Parse an existing serialized value back into sub-fields. */
+	function parseDefense(str) {
+		if (!str || !str.trim()) return { role: '', opponent: '', desc: '' };
+		// Match: (role) (optional team#) (optional : description)
+		const m = str.match(/^(Defended by|Defended)\s*(\d+)?\s*:?\s*([\s\S]*)$/);
+		if (!m) return { role: '', opponent: '', desc: str };
+		return {
+			role: m[1] ?? '',
+			opponent: m[2] ?? '',
+			desc: m[3]?.trim() ?? ''
 		};
-		recognition.onend = () => (listening = false);
-		recognition.onerror = () => (listening = false);
-	});
-
-	function toggleListening() {
-		if (!recognition) return;
-		if (listening) {
-			recognition.stop();
-			listening = false;
-		} else {
-			try {
-				recognition.start();
-				listening = true;
-			} catch (_e) {
-				listening = false;
-			}
-		}
 	}
+
+	/** Rebuild the serialized string from sub-fields and write to `value`. */
+	function serializeDefense() {
+		if (!defenseRole) { value = ''; return; }
+		let s = defenseRole;
+		if (defenseOpponent.trim()) s += ' ' + defenseOpponent.trim();
+		if (defenseDesc.trim()) s += ': ' + defenseDesc.trim();
+		value = s;
+	}
+
+	// Sub-fields initialized from any pre-existing value (edit page).
+	const parsed = parseDefense(typeof value === 'string' ? value : '');
+	let defenseRole     = $state(parsed.role);
+	let defenseOpponent = $state(parsed.opponent);
+	let defenseDesc     = $state(parsed.desc);
+
+	// Keep sub-fields in sync when the parent resets the value externally
+	// (e.g., after "Use this match" fills identity fields on new entry).
+	$effect(() => {
+		const v = typeof value === 'string' ? value : '';
+		const p = parseDefense(v);
+		// Only re-parse if the value differs from what we'd serialize ourselves —
+		// avoids feedback loops where serializeDefense() triggers the effect.
+		const current = (() => {
+			if (!defenseRole) return '';
+			let s = defenseRole;
+			if (defenseOpponent.trim()) s += ' ' + defenseOpponent.trim();
+			if (defenseDesc.trim()) s += ': ' + defenseDesc.trim();
+			return s;
+		})();
+		if (v !== current) {
+			defenseRole     = p.role;
+			defenseOpponent = p.opponent;
+			defenseDesc     = p.desc;
+		}
+	});
 </script>
 
-<label class="field">
+<label class="field" class:defense-field={field.type === 'defense-entry'}>
 	<span class="label">
 		{field.label}
 		{#if field.required}<span class="req">*</span>{/if}
@@ -103,6 +145,7 @@
 			required={field.required}
 			placeholder={field.placeholder}
 		/>
+
 	{:else if field.type === 'text'}
 		<input
 			type="text"
@@ -110,6 +153,7 @@
 			required={field.required}
 			placeholder={field.placeholder}
 		/>
+
 	{:else if field.type === 'textarea'}
 		{#if tagPills.length > 0}
 			<div class="tag-pills" aria-label="Quick phrases">
@@ -125,26 +169,71 @@
 				{/each}
 			</div>
 		{/if}
-		<div class="textarea-wrap">
-			<textarea
-				bind:value
-				required={field.required}
-				placeholder={field.placeholder}
-				rows="3"
-			></textarea>
-			{#if speechSupported}
-				<button
-					type="button"
-					class="mic-btn"
-					class:listening
-					onclick={toggleListening}
-					aria-label={listening ? 'Stop dictating' : 'Dictate'}
-					title={listening ? 'Stop dictating' : 'Tap to dictate'}
-				>
-					{listening ? '●' : '🎤'}
-				</button>
+		<textarea
+			bind:value
+			required={field.required}
+			placeholder={field.placeholder}
+			rows="3"
+		></textarea>
+
+	{:else if field.type === 'defense-entry'}
+		<!--
+			Structured defense entry. Three sub-fields serialize into the single
+			observations.defense string so the data model is unchanged.
+		-->
+		<div class="defense-entry">
+			<!-- Sub-field 1: role -->
+			<div class="de-row">
+				<small class="de-label">Role</small>
+				<div class="pills de-pills">
+					{#each ['Defended', 'Defended by'] as opt}
+						<button
+							type="button"
+							class="pill"
+							class:selected={defenseRole === opt}
+							onclick={() => { defenseRole = defenseRole === opt ? '' : opt; serializeDefense(); }}
+						>
+							{opt}
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			{#if defenseRole}
+				<!-- Sub-field 2: opponent team number -->
+				<div class="de-row">
+					<small class="de-label">
+						{defenseRole === 'Defended' ? 'Team we defended against' : 'Team that defended us'}
+						<span class="de-optional">(optional)</span>
+					</small>
+					<input
+						type="number"
+						inputmode="numeric"
+						class="de-team"
+						bind:value={defenseOpponent}
+						onchange={serializeDefense}
+						oninput={serializeDefense}
+						placeholder="Team #"
+					/>
+				</div>
+
+				<!-- Sub-field 3: description -->
+				<div class="de-row">
+					<small class="de-label">Description <span class="de-optional">(optional)</span></small>
+					<textarea
+						class="de-desc"
+						bind:value={defenseDesc}
+						onchange={serializeDefense}
+						oninput={serializeDefense}
+						placeholder={defenseRole === 'Defended'
+							? 'How did they defend? e.g. pinned in corner'
+							: 'What did they do to us? e.g. chased us all match'}
+						rows="2"
+					></textarea>
+				</div>
 			{/if}
 		</div>
+
 	{:else if field.type === 'select'}
 		<select bind:value required={field.required}>
 			<option value="" disabled selected>Choose…</option>
@@ -152,6 +241,7 @@
 				<option value={opt}>{opt}</option>
 			{/each}
 		</select>
+
 	{:else if field.type === 'pills'}
 		<div class="pills" role="radiogroup" aria-label={field.label}>
 			{#each field.options as opt}
@@ -168,6 +258,7 @@
 				</button>
 			{/each}
 		</div>
+
 	{:else if field.type === 'autocomplete'}
 		<input
 			type="text"
@@ -184,6 +275,7 @@
 				{/each}
 			</datalist>
 		{/if}
+
 	{:else if field.type === 'boolean'}
 		<div class="bool">
 			<button
@@ -236,6 +328,7 @@
 		min-height: 4rem;
 	}
 
+	/* ── tag pills ────────────────────────────────────────────────── */
 	.tag-pills {
 		display: flex;
 		flex-wrap: wrap;
@@ -262,35 +355,41 @@
 		border-color: var(--accent);
 	}
 
-	.textarea-wrap { position: relative; }
-	.mic-btn {
-		position: absolute;
-		right: 0.45rem;
-		bottom: 0.45rem;
-		font: inherit;
-		font-size: 0.95rem;
-		width: 2rem;
-		height: 2rem;
-		border-radius: 999px;
+	/* ── defense-entry ────────────────────────────────────────────── */
+	.defense-entry {
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		padding: 0.65rem 0.75rem;
 		border: 1px solid var(--border-strong);
+		border-radius: 0.4rem;
 		background: var(--bg-card);
-		cursor: pointer;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		opacity: 0.85;
 	}
-	.mic-btn:hover { opacity: 1; }
-	.mic-btn.listening {
-		background: #fef2f2;
-		color: #b91c1c;
-		border-color: #f87171;
-		animation: mic-pulse 1.2s ease-in-out infinite;
+	.de-row {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
 	}
-	@keyframes mic-pulse {
-		0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
-		50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+	.de-label {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		font-weight: 600;
 	}
+	.de-optional {
+		font-weight: 400;
+		color: var(--text-faint);
+	}
+	.de-pills {
+		gap: 0.4rem;
+	}
+	.de-team {
+		max-width: 8rem;
+	}
+	.de-desc {
+		min-height: 3rem;
+	}
+
+	/* ── pills ────────────────────────────────────────────────────── */
 	.pills {
 		display: flex;
 		gap: 0.5rem;
@@ -308,6 +407,11 @@
 		border-radius: 0.4rem;
 		cursor: pointer;
 	}
+	/* Defense pills don't need to grow to full width */
+	.de-pills .pill {
+		flex: 0 1 auto;
+		min-width: 7rem;
+	}
 	.pill.selected[data-color='red'] {
 		background: #c0392b;
 		border-color: #c0392b;
@@ -324,9 +428,7 @@
 		color: white;
 	}
 
-	/* Boolean toggle. Hidden semantic checkbox would be cleaner accessibility,
-	   but a button with role=switch is well-supported by AT and avoids the
-	   visually-hidden-input dance. */
+	/* ── boolean toggle ───────────────────────────────────────────── */
 	.bool {
 		display: flex;
 		align-items: center;

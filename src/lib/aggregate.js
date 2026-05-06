@@ -47,6 +47,19 @@ export async function summarize() {
 				.map((e) => e.observations?.strengths?.trim())
 				.find(Boolean) ?? '';
 			const strengthsPreview = rawStrengths.length > 80 ? rawStrengths.slice(0, 80) + '…' : rawStrengths;
+			// Unique strengths: all distinct, non-empty strength values in order of
+			// first appearance (most recent entry first), case-insensitive dedup.
+			const uniqueStrengths = [];
+			const _seenLower = new Set();
+			for (const e of ordered) {
+				const s = e.observations?.strengths?.trim();
+				if (!s) continue;
+				const lower = s.toLowerCase();
+				if (!_seenLower.has(lower)) {
+					_seenLower.add(lower);
+					uniqueStrengths.push(s);
+				}
+			}
 			const autoPathCounts = new Map();
 			for (const entry of list) {
 				const key = entry.observations?.autoPathing?.trim();
@@ -98,6 +111,7 @@ export async function summarize() {
 				autoPathCount: autoPaths.length,
 				autoPaths,
 				strengthsPreview,
+				uniqueStrengths,
 				latestCreatedAt,
 				discrepancies,
 				discrepancyCount: discrepancies.length,

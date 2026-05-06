@@ -140,7 +140,7 @@
 			<section>
 				<h2>Observations</h2>
 				{#each OBSERVATION_FIELDS as f (f.key)}
-					<Field field={f} bind:value={values[f.key]} />
+					<Field field={f} bind:value={values[f.key]} scopeTeam={Number(values.teamNumber)} />
 				{/each}
 			</section>
 

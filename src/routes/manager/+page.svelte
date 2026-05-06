@@ -77,6 +77,18 @@
 			.sort((a, b) => b.count - a.count || a.pathName.localeCompare(b.pathName));
 		const rawStrengths =
 			ordered.map((e) => e.observations?.strengths?.trim()).find(Boolean) ?? '';
+		// Unique strengths: deduplicated across entries, most recent first.
+		const uniqueStrengths = [];
+		const _seenLower = new Set();
+		for (const e of ordered) {
+			const s = e.observations?.strengths?.trim();
+			if (!s) continue;
+			const lower = s.toLowerCase();
+			if (!_seenLower.has(lower)) {
+				_seenLower.add(lower);
+				uniqueStrengths.push(s);
+			}
+		}
 		// Discrepancies — scouts in the same match+alliance disagreeing on brokeDown.
 		const matchGroups = new Map();
 		for (const e of entries) {
@@ -113,6 +125,7 @@
 			latestCreatedAt: ordered[0]?.createdAt ?? null,
 			strengthsPreview:
 				rawStrengths.length > 80 ? rawStrengths.slice(0, 80) + '…' : rawStrengths,
+			uniqueStrengths,
 			discrepancies,
 			discrepancyCount: discrepancies.length,
 			entries: ordered
@@ -534,6 +547,17 @@
 							<div class="full-view-row">
 								<a class="full-view-link" href="{base}/manager/team/{t.teamNumber}/">Full match log →</a>
 							</div>
+							{#if t.uniqueStrengths?.length > 0}
+								<div class="paths-block strengths-block">
+									<h3>Strengths</h3>
+									<ul class="strength-list">
+										{#each t.uniqueStrengths as s (s)}
+											<li>+ {s}</li>
+										{/each}
+									</ul>
+								</div>
+							{/if}
+
 							{#if t.autoPathCount > 0}
 								<div class="paths-block">
 									<h3>Auto paths ({t.autoPathEntryCount})</h3>
@@ -556,7 +580,6 @@
 											<span class="by">by {e.scoutName}</span>
 										</div>
 										{#if e.observations?.autoPathing}<p><strong>→</strong> {e.observations.autoPathing}</p>{/if}
-										{#if e.observations?.strengths}<p><strong>+</strong> {e.observations.strengths}</p>{/if}
 										{#if e.observations?.weaknesses}<p><strong>−</strong> {e.observations.weaknesses}</p>{/if}
 										{#if e.observations?.defense}<p><strong>D</strong> {e.observations.defense}</p>{/if}
 										{#if e.observations?.brokeDown === true}<p class="brokedown"><strong>!</strong> Broke down</p>{/if}
@@ -852,6 +875,22 @@
 		font-weight: 600;
 		color: #0b3d91;
 		margin-right: 0.3rem;
+	}
+
+	/* ── expanded: strengths block ───────────────────────────────── */
+	.strengths-block {
+		border-color: #d1fae5;
+		background: #f0fdf4;
+	}
+	.strength-list {
+		list-style: none;
+		margin: 0.4rem 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		font-size: 0.85rem;
+		color: #166534;
 	}
 
 	/* ── expanded: auto paths ─────────────────────────────────────── */

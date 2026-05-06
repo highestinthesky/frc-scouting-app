@@ -87,11 +87,9 @@ export const OBSERVATION_FIELDS = [
 	{
 		key: 'defense',
 		label: 'Defense played',
-		type: 'textarea',
+		type: 'defense-entry',
 		required: false,
-		placeholder: 'Did they play defense? How well?',
-		help: 'Optional.',
-		tagSource: 'defense'
+		help: 'Optional.'
 	},
 	{
 		key: 'brokeDown',
