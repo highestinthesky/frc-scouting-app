@@ -27,6 +27,7 @@
  * @property {string} [placeholder]
  * @property {string} [help]         small grey text shown under the label
  * @property {string} [suggestKey]   for autocomplete: which observations key to source suggestions from
+ * @property {string} [tagSource]    for textarea: render top-used phrases (from this observations key) as one-tap pills above the input
  */
 
 /** Identity fields — what match / which robot. */
@@ -72,14 +73,16 @@ export const OBSERVATION_FIELDS = [
 		label: 'Strengths',
 		type: 'textarea',
 		required: false,
-		placeholder: 'What did they do well?'
+		placeholder: 'What did they do well?',
+		tagSource: 'strengths'
 	},
 	{
 		key: 'weaknesses',
 		label: 'Weaknesses',
 		type: 'textarea',
 		required: false,
-		placeholder: 'What did they struggle with?'
+		placeholder: 'What did they struggle with?',
+		tagSource: 'weaknesses'
 	},
 	{
 		key: 'defense',
@@ -87,7 +90,8 @@ export const OBSERVATION_FIELDS = [
 		type: 'textarea',
 		required: false,
 		placeholder: 'Did they play defense? How well?',
-		help: 'Optional.'
+		help: 'Optional.',
+		tagSource: 'defense'
 	},
 	{
 		key: 'brokeDown',

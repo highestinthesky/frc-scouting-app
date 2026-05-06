@@ -50,7 +50,7 @@
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	h1 { margin: 0 0 0.25rem; }
-	.muted { color: #666; margin-bottom: 1.5rem; }
+	.muted { color: var(--text-muted); margin-bottom: 1.5rem; }
 	.field {
 		display: flex;
 		flex-direction: column;
@@ -58,16 +58,16 @@
 		margin-bottom: 1.25rem;
 	}
 	.label { font-weight: 600; }
-	.help { color: #777; font-size: 0.85rem; }
+	.help { color: var(--text-faint); font-size: 0.85rem; }
 	code {
-		background: #f0f0f0;
+		background: var(--bg-subtle);
 		padding: 0 0.25rem;
 		border-radius: 0.2rem;
 	}
 	input {
 		font: inherit;
 		padding: 0.6rem 0.7rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--border-strong);
 		border-radius: 0.4rem;
 	}
 	input:focus {

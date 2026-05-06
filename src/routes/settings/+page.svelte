@@ -4,6 +4,7 @@
 	import { role } from '$lib/role.svelte.js';
 	import { clearEntries } from '$lib/db.js';
 	import { syncState, resync } from '$lib/sync.svelte.js';
+	import { theme } from '$lib/theme.svelte.js';
 
 	let eventCode = $state(session.eventCode);
 	let scoutName = $state(session.scoutName);
@@ -123,6 +124,28 @@
 	</section>
 
 	<section>
+		<h2>Appearance</h2>
+		<p class="muted">Choose how the app looks. "System" follows your phone's setting.</p>
+		<div class="theme-row">
+			<button
+				class="theme-btn"
+				class:selected={theme.value === 'system'}
+				onclick={() => theme.set('system')}
+			>System</button>
+			<button
+				class="theme-btn"
+				class:selected={theme.value === 'light'}
+				onclick={() => theme.set('light')}
+			>Light</button>
+			<button
+				class="theme-btn"
+				class:selected={theme.value === 'dark'}
+				onclick={() => theme.set('dark')}
+			>Dark</button>
+		</div>
+	</section>
+
+	<section>
 		<h2>Danger zone</h2>
 		<p class="muted">
 			Wipes every entry stored on this device. Settings are kept. Use this
@@ -168,13 +191,13 @@
 		font-size: 1rem;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: #666;
+		color: var(--text-muted);
 	}
-	.muted { color: #777; font-size: 0.9rem; margin: 0 0 0.6rem; }
+	.muted { color: var(--text-faint); font-size: 0.9rem; margin: 0 0 0.6rem; }
 	.ok { color: #0b3d91; margin-left: 0.5rem; }
-	.help { color: #777; font-size: 0.82rem; }
+	.help { color: var(--text-faint); font-size: 0.82rem; }
 	code {
-		background: #f0f0f0;
+		background: var(--bg-subtle);
 		padding: 0 0.25rem;
 		border-radius: 0.2rem;
 	}
@@ -189,7 +212,7 @@
 		min-width: 12rem;
 		text-align: left;
 		padding: 0.85rem 1rem;
-		background: white;
+		background: var(--bg-card);
 		border: 2px solid #ccc;
 		border-radius: 0.5rem;
 		cursor: pointer;
@@ -202,7 +225,7 @@
 	.roles button strong { display: block; font-size: 1rem; }
 	.roles button small {
 		display: block;
-		color: #555;
+		color: var(--text-muted);
 		font-size: 0.85rem;
 		margin-top: 0.2rem;
 	}
@@ -217,7 +240,7 @@
 	input {
 		font: inherit;
 		padding: 0.6rem 0.7rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--border-strong);
 		border-radius: 0.4rem;
 	}
 	input:focus {
@@ -237,7 +260,7 @@
 	button.primary { background: #0b3d91; color: white; border: none; }
 	button.primary:disabled { opacity: 0.6; cursor: progress; }
 	button.danger {
-		background: white;
+		background: var(--bg-card);
 		color: #c0392b;
 		border: 1px solid #c0392b;
 	}
@@ -251,10 +274,10 @@
 		display: inline-block;
 		margin-bottom: 0.4rem;
 	}
-	.status.idle { background: #f3f4f6; color: #555; }
+	.status.idle { background: #f3f4f6; color: var(--text-muted); }
 	.status.connected { background: #ecfdf5; color: #065f46; }
 	.status.connecting { background: #fefce8; color: #854d0e; }
-	.status.offline { background: #f3f4f6; color: #555; }
+	.status.offline { background: #f3f4f6; color: var(--text-muted); }
 	.status.error { background: #fef2f2; color: #991b1b; }
 	.sync-actions {
 		display: flex;
@@ -266,5 +289,28 @@
 	.sync-actions button.primary:disabled {
 		background: #93a3c4;
 		cursor: not-allowed;
+	}
+
+	.theme-row {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.theme-btn {
+		flex: 1 1 0;
+		min-width: 6rem;
+		padding: 0.6rem 0.85rem;
+		background: var(--bg-card);
+		color: var(--text-primary);
+		border: 2px solid var(--border-strong);
+		border-radius: 0.4rem;
+		cursor: pointer;
+		font: inherit;
+		font-weight: 600;
+	}
+	.theme-btn.selected {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+		color: var(--accent);
 	}
 </style>

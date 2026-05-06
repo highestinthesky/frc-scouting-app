@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
 	import { importFile } from '$lib/import.js';
 	import { exportToFile, exportToCsv } from '$lib/export.js';
@@ -76,6 +77,26 @@
 			.sort((a, b) => b.count - a.count || a.pathName.localeCompare(b.pathName));
 		const rawStrengths =
 			ordered.map((e) => e.observations?.strengths?.trim()).find(Boolean) ?? '';
+		// Discrepancies — scouts in the same match+alliance disagreeing on brokeDown.
+		const matchGroups = new Map();
+		for (const e of entries) {
+			const k = `${e.eventCode}/${e.matchNumber}/${e.allianceColor}`;
+			if (!matchGroups.has(k)) matchGroups.set(k, []);
+			matchGroups.get(k).push(e);
+		}
+		const discrepancies = [];
+		for (const [, group] of matchGroups) {
+			if (group.length < 2) continue;
+			const breakdowns = new Set(group.map(entryBrokeDown));
+			if (breakdowns.size > 1) {
+				discrepancies.push({
+					matchNumber: group[0].matchNumber,
+					eventCode: group[0].eventCode,
+					allianceColor: group[0].allianceColor,
+					entries: group
+				});
+			}
+		}
 		return {
 			teamNumber,
 			entryCount: entries.length,
@@ -92,6 +113,8 @@
 			latestCreatedAt: ordered[0]?.createdAt ?? null,
 			strengthsPreview:
 				rawStrengths.length > 80 ? rawStrengths.slice(0, 80) + '…' : rawStrengths,
+			discrepancies,
+			discrepancyCount: discrepancies.length,
 			entries: ordered
 		};
 	}
@@ -376,6 +399,8 @@
 				>
 					{exportingCsv ? 'Exporting…' : 'Export CSV'}
 				</button>
+				<a class="btn secondary" href="{base}/manager/compare/">Compare</a>
+				<a class="btn secondary" href="{base}/manager/picklist/">Picklist</a>
 			</div>
 		</div>
 
@@ -471,6 +496,11 @@
 								</span>
 							</div>
 							<div class="right">
+								{#if t.discrepancyCount > 0}
+									<span class="badge warn" title="Scouts disagree on whether this team broke down in some matches">
+										⚠ {t.discrepancyCount} {t.discrepancyCount === 1 ? 'conflict' : 'conflicts'}
+									</span>
+								{/if}
 								{#if t.breakdownCount > 0}
 									<span class="badge bad"
 										>{t.breakdownCount}
@@ -501,6 +531,9 @@
 
 						<!-- ── Expanded body ──────────────────────────────────── -->
 						{#if isOpen}
+							<div class="full-view-row">
+								<a class="full-view-link" href="{base}/manager/team/{t.teamNumber}/">Full match log →</a>
+							</div>
 							{#if t.autoPathCount > 0}
 								<div class="paths-block">
 									<h3>Auto paths ({t.autoPathEntryCount})</h3>
@@ -573,13 +606,13 @@
 		margin: 1rem 0;
 	}
 	h1 { margin: 0; font-size: 1.5rem; }
-	.updated { color: #777; font-size: 0.9rem; }
-	.muted { color: #777; font-size: 0.95rem; }
+	.updated { color: var(--text-faint); font-size: 0.9rem; }
+	.muted { color: var(--text-faint); font-size: 0.95rem; }
 
 	/* ── empty ────────────────────────────────────────────────────── */
 	.empty {
-		background: #f7f7f7;
-		border: 1px solid #e5e5e5;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
 		border-radius: 0.5rem;
 		padding: 1rem;
 	}
@@ -591,14 +624,14 @@
 		gap: 0.5rem;
 	}
 	.stat {
-		background: #f5f6f9;
-		border: 1px solid #d9deea;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
 		border-radius: 0.5rem;
 		padding: 0.65rem 0.75rem;
 	}
 	.stat small {
 		display: block;
-		color: #555;
+		color: var(--text-muted);
 		font-size: 0.78rem;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -618,7 +651,7 @@
 		max-width: 13rem;
 		font: inherit;
 		padding: 0.55rem 0.7rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--border-strong);
 		border-radius: 0.4rem;
 	}
 	.search:focus { outline: 2px solid #0b3d91; border-color: #0b3d91; outline-offset: 1px; }
@@ -626,9 +659,9 @@
 		font: inherit;
 		font-size: 0.88rem;
 		padding: 0.55rem 0.6rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--border-strong);
 		border-radius: 0.4rem;
-		background: white;
+		background: var(--bg-card);
 		cursor: pointer;
 	}
 	.toolbar-btns {
@@ -655,8 +688,8 @@
 	.btn.primary { background: #0b3d91; color: white; border-color: #0b3d91; }
 	.btn.primary:hover { background: #0a3480; }
 	.btn.primary:disabled { opacity: 0.6; cursor: progress; }
-	.btn.secondary { background: white; border-color: #ccc; color: #222; }
-	.btn.secondary:hover { background: #f5f5f5; }
+	.btn.secondary { background: var(--bg-card); border-color: #ccc; color: var(--text-primary); }
+	.btn.secondary:hover { background: var(--bg-subtle); }
 	.btn.csv { background: #f0fff4; border-color: #86efac; color: #166534; }
 	.btn.csv:hover { background: #dcfce7; }
 	.btn.csv:disabled { opacity: 0.6; cursor: progress; }
@@ -676,11 +709,11 @@
 		margin-top: 0.6rem;
 	}
 	.chip {
-		background: #f0f0f0;
+		background: var(--bg-subtle);
 		border: 1px solid #ddd;
 		border-radius: 999px;
 		padding: 0.3rem 0.65rem;
-		color: #555;
+		color: var(--text-muted);
 		font: inherit;
 		font-size: 0.82rem;
 		cursor: pointer;
@@ -726,7 +759,7 @@
 	.no-results {
 		margin-top: 2.5rem;
 		text-align: center;
-		color: #555;
+		color: var(--text-muted);
 	}
 	.no-results p { margin-bottom: 0.75rem; }
 
@@ -740,9 +773,9 @@
 		gap: 0.55rem;
 	}
 	.team {
-		border: 1px solid #d8d8d8;
+		border: 1px solid var(--border);
 		border-radius: 0.55rem;
-		background: #fff;
+		background: var(--bg-card);
 		overflow: hidden;
 	}
 	.team-row {
@@ -759,7 +792,7 @@
 		font: inherit;
 		flex-wrap: wrap;
 	}
-	.team-row:hover { background: #fafafa; }
+	.team-row:hover { background: var(--bg-page); }
 	.left {
 		display: flex;
 		align-items: center;
@@ -781,7 +814,7 @@
 	.thin-bar { background: #ddd; }
 	.bar .red { background: #e24b4a; }
 	.bar .blue { background: #378add; }
-	.counts { color: #666; font-size: 0.82rem; }
+	.counts { color: var(--text-muted); font-size: 0.82rem; }
 	.thin-label { color: #b45309; font-style: italic; font-size: 0.82rem; }
 	.right {
 		display: flex;
@@ -797,21 +830,22 @@
 		background: #f0ede5;
 		border-radius: 999px;
 		padding: 0.15rem 0.5rem;
-		color: #444;
+		color: var(--text-primary);
 		font-size: 0.78rem;
 		white-space: nowrap;
 	}
 	.badge.bad { background: #fef2f2; color: #991b1b; }
 	.badge.path { background: #f3e8ff; color: #6b21a8; }
-	.age { color: #888; font-size: 0.78rem; }
-	.chev { color: #aaa; font-size: 0.85rem; }
+	.badge.warn { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+	.age { color: var(--text-faint); font-size: 0.78rem; }
+	.chev { color: var(--text-faint); font-size: 0.85rem; }
 
 	/* ── strengths preview ────────────────────────────────────────── */
 	.strength-preview {
 		margin: 0;
 		padding: 0 0.8rem 0.6rem;
 		font-size: 0.87rem;
-		color: #555;
+		color: var(--text-muted);
 		line-height: 1.4;
 	}
 	.preview-label {
@@ -849,13 +883,13 @@
 		list-style: none;
 		margin: 0;
 		padding: 0.5rem;
-		border-top: 1px solid #e5e5e5;
+		border-top: 1px solid var(--border);
 		display: flex;
 		flex-direction: column;
 		gap: 0.4rem;
 	}
 	.team-entry {
-		background: #fafafa;
+		background: var(--bg-page);
 		border-radius: 0.4rem;
 		padding: 0.55rem 0.7rem;
 		border-left: 3px solid #ccc;
@@ -868,8 +902,8 @@
 		align-items: baseline;
 		font-size: 0.9rem;
 	}
-	.alliance { text-transform: capitalize; color: #666; }
-	.by { margin-left: auto; font-size: 0.78rem; color: #888; }
+	.alliance { text-transform: capitalize; color: var(--text-muted); }
+	.by { margin-left: auto; font-size: 0.78rem; color: var(--text-faint); }
 	.team-entry p { margin: 0.2rem 0 0; font-size: 0.88rem; line-height: 1.35; }
 	.team-entry p strong {
 		display: inline-block;
@@ -878,6 +912,19 @@
 	}
 	.team-entry p.brokedown { color: #991b1b; font-weight: 600; }
 	.team-entry p.brokedown strong { color: #991b1b; }
+
+	/* ── full-view link ───────────────────────────────────────────── */
+	.full-view-row {
+		padding: 0.4rem 0.8rem 0;
+		text-align: right;
+	}
+	.full-view-link {
+		font-size: 0.82rem;
+		color: var(--accent);
+		text-decoration: none;
+		font-weight: 600;
+	}
+	.full-view-link:hover { text-decoration: underline; }
 
 	/* ── show more ────────────────────────────────────────────────── */
 	.more-row { text-align: center; padding-top: 0.1rem; }

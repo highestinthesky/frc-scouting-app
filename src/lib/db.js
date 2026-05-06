@@ -179,6 +179,31 @@ export async function getDistinctObservationValues(observationKey) {
 }
 
 /**
+ * Top-N most-used phrases for a given observations key, ordered by
+ * frequency desc. For tag-preset rendering above textareas: when scouts
+ * keep typing "fast cycles" we want that to be a one-tap pill.
+ *
+ * @param {string} observationKey
+ * @param {number} [limit=6]
+ * @returns {Promise<{value: string, count: number}[]>}
+ */
+export async function getMostUsedObservationValues(observationKey, limit = 6) {
+	const all = await db.entries.toArray();
+	const counts = new Map();
+	for (const row of all) {
+		const v = row.observations?.[observationKey];
+		if (typeof v !== 'string') continue;
+		const trimmed = v.trim();
+		if (!trimmed) continue;
+		counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
+	}
+	return [...counts.entries()]
+		.map(([value, count]) => ({ value, count }))
+		.sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+		.slice(0, limit);
+}
+
+/**
  * Insert several entries, skipping any that already exist (matched on
  * the compound index of event+match+team+scout+createdAt).
  * Returns { inserted, skipped }.

@@ -1,7 +1,8 @@
 <script>
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { addEntry } from '$lib/db.js';
+	import { addEntry, listEntries } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
 	import { kick as kickSync } from '$lib/sync.svelte.js';
 	import { IDENTITY_FIELDS, OBSERVATION_FIELDS, ALL_FIELDS } from '$lib/form-config.js';
@@ -22,6 +23,32 @@
 		}
 		return v;
 	}
+
+	// Repeat-entry pre-fill: a scout assigned to one alliance slot will fill out
+	// the same alliance color match after match. Carry it forward from the most
+	// recent entry by this scout at the current event, and bump the match number
+	// by one as a sensible default. The scout can still edit any field before
+	// saving — this is just a starting point, not a constraint.
+	onMount(async () => {
+		try {
+			const all = await listEntries();
+			const mine = all.filter(
+				(e) => e.eventCode === session.eventCode && e.scoutName === session.scoutName
+			);
+			if (mine.length === 0) return;
+			const last = mine[0]; // listEntries returns newest-first
+			const prefill = blank();
+			prefill.allianceColor = last.allianceColor ?? '';
+			if (Number.isFinite(last.matchNumber)) {
+				prefill.matchNumber = String(Number(last.matchNumber) + 1);
+			}
+			values = prefill;
+		} catch (_e) {
+			// If anything goes wrong reading prior entries, just leave the form
+			// blank — the worst case is the scout types fields they could have
+			// inherited.
+		}
+	});
 
 	function validate() {
 		for (const f of ALL_FIELDS) {
@@ -132,9 +159,9 @@
 		font-size: 1rem;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: #666;
+		color: var(--text-muted);
 		margin: 1.5rem 0 0.75rem;
-		border-bottom: 1px solid #e5e5e5;
+		border-bottom: 1px solid var(--border);
 		padding-bottom: 0.35rem;
 	}
 	.error {
@@ -152,7 +179,7 @@
 		margin-top: 1.5rem;
 	}
 	.cancel {
-		color: #666;
+		color: var(--text-muted);
 		text-decoration: none;
 		padding: 0.5rem 0.75rem;
 	}

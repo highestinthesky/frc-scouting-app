@@ -5,6 +5,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { session } from '$lib/session.svelte.js';
 	import { role } from '$lib/role.svelte.js';
+	import { theme } from '$lib/theme.svelte.js';
 	import {
 		syncState,
 		init as syncInit,
@@ -15,7 +16,7 @@
 	let { children } = $props();
 
 	onMount(async () => {
-		await Promise.all([session.load(), role.load()]);
+		await Promise.all([session.load(), role.load(), theme.load()]);
 		await syncInit();
 	});
 
@@ -24,6 +25,16 @@
 	// derives a session id deterministically from the code and (re)connects.
 	$effect(() => {
 		if (session.loaded) syncSetEventCode(session.eventCode);
+	});
+
+	// Apply theme by setting `data-theme` on the document root. "system" leaves
+	// the attribute unset and lets the prefers-color-scheme media query handle
+	// it; explicit light/dark wins over system preference.
+	$effect(() => {
+		if (typeof document === 'undefined' || !theme.loaded) return;
+		const root = document.documentElement;
+		if (theme.value === 'system') root.removeAttribute('data-theme');
+		else root.setAttribute('data-theme', theme.value);
 	});
 
 	function isActive(path) {
@@ -89,15 +100,79 @@
 {/if}
 
 <style>
+	/* ── Theme variables ───────────────────────────────────────────────
+	   Light is the default. Dark applies whenever the OS prefers dark
+	   *unless* the user explicitly chose light, OR whenever the user
+	   explicitly chose dark via Settings → data-theme="dark".
+
+	   Components consume these vars instead of hardcoding hex values. The
+	   accent (navy brand) stays the same in both themes for the app bar;
+	   everything else flips. */
+	:global(:root) {
+		--bg-page: #fafafa;
+		--bg-card: #ffffff;
+		--bg-subtle: #f5f5f5;
+		--bg-elev: #ffffff;
+		--text-primary: #1a1a1a;
+		--text-muted: #555;
+		--text-faint: #888;
+		--border: #e0e0e0;
+		--border-strong: #ccc;
+		--accent: #0b3d91;
+		--accent-hover: #0a3480;
+		--accent-soft: #f0f4fc;
+		--on-accent: #ffffff;
+		--danger: #c0392b;
+		--danger-bg: #fdecea;
+	}
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light'])) {
+			--bg-page: #0e0e10;
+			--bg-card: #1a1a1c;
+			--bg-subtle: #1f1f22;
+			--bg-elev: #232326;
+			--text-primary: #e8e8e8;
+			--text-muted: #a0a0a3;
+			--text-faint: #6e6e72;
+			--border: #2a2a2d;
+			--border-strong: #38383b;
+			--accent: #6a9bf0;
+			--accent-hover: #84afff;
+			--accent-soft: #1a2a4a;
+			--danger: #f7857a;
+			--danger-bg: #3a1a18;
+		}
+	}
+	:global(:root[data-theme='dark']) {
+		--bg-page: #0e0e10;
+		--bg-card: #1a1a1c;
+		--bg-subtle: #1f1f22;
+		--bg-elev: #232326;
+		--text-primary: #e8e8e8;
+		--text-muted: #a0a0a3;
+		--text-faint: #6e6e72;
+		--border: #2a2a2d;
+		--border-strong: #38383b;
+		--accent: #6a9bf0;
+		--accent-hover: #84afff;
+		--accent-soft: #1a2a4a;
+		--danger: #f7857a;
+		--danger-bg: #3a1a18;
+	}
+
 	:global(body) {
 		margin: 0;
-		background: #fafafa;
-		color: #1a1a1a;
+		background: var(--bg-page);
+		color: var(--text-primary);
+	}
+	:global(input), :global(textarea), :global(select) {
+		color: var(--text-primary);
+		background: var(--bg-card);
 	}
 	.boot {
 		text-align: center;
 		margin-top: 4rem;
-		color: #777;
+		color: var(--text-faint);
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.app-bar {
@@ -158,8 +233,8 @@
 	}
 
 	.tabs {
-		background: white;
-		border-bottom: 1px solid #e0e0e0;
+		background: var(--bg-card);
+		border-bottom: 1px solid var(--border);
 		display: flex;
 		justify-content: center;
 		gap: 0.25rem;
@@ -169,15 +244,15 @@
 	.tabs a {
 		padding: 0.65rem 1rem;
 		text-decoration: none;
-		color: #555;
+		color: var(--text-muted);
 		font-weight: 600;
 		font-size: 0.9rem;
 		border-bottom: 3px solid transparent;
 		margin-bottom: -1px;
 	}
 	.tabs a.active {
-		color: #0b3d91;
-		border-bottom-color: #0b3d91;
+		color: var(--accent);
+		border-bottom-color: var(--accent);
 	}
-	.tabs a:hover { color: #0b3d91; }
+	.tabs a:hover { color: var(--accent); }
 </style>

@@ -57,6 +57,32 @@ export async function summarize() {
 				.map(([pathName, count]) => ({ pathName, count }))
 				.sort((a, b) => b.count - a.count || a.pathName.localeCompare(b.pathName));
 			const latestCreatedAt = ordered[0]?.createdAt ?? null;
+
+			// Discrepancy detection: group this team's entries by (event, match,
+			// alliance), and flag any group where two scouts disagree on whether
+			// the robot broke down. Two scouts watching the same team from the
+			// same alliance in the same match should agree on facts that visible.
+			const matchGroups = new Map();
+			for (const entry of list) {
+				const key = `${entry.eventCode}/${entry.matchNumber}/${entry.allianceColor}`;
+				if (!matchGroups.has(key)) matchGroups.set(key, []);
+				matchGroups.get(key).push(entry);
+			}
+			const discrepancies = [];
+			for (const [key, group] of matchGroups) {
+				if (group.length < 2) continue;
+				const breakdowns = new Set(group.map(hadBreakdown));
+				if (breakdowns.size > 1) {
+					discrepancies.push({
+						key,
+						matchNumber: group[0].matchNumber,
+						eventCode: group[0].eventCode,
+						allianceColor: group[0].allianceColor,
+						field: 'brokeDown',
+						entries: group
+					});
+				}
+			}
 			return {
 				teamNumber,
 				entryCount: list.length,
@@ -73,6 +99,8 @@ export async function summarize() {
 				autoPaths,
 				strengthsPreview,
 				latestCreatedAt,
+				discrepancies,
+				discrepancyCount: discrepancies.length,
 				entries: ordered
 			};
 		})
