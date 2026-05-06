@@ -7,11 +7,41 @@
 	import { kick as kickSync } from '$lib/sync.svelte.js';
 	import { IDENTITY_FIELDS, OBSERVATION_FIELDS, ALL_FIELDS } from '$lib/form-config.js';
 	import Field from '$lib/components/Field.svelte';
+	import {
+		getCachedSchedule,
+		qualMatches,
+		nextUnscoutedMatch,
+		teamForPosition,
+		allianceFromPosition,
+		verifyMatchTeam
+	} from '$lib/tba.js';
 
 	// One state object holds the value for every field, keyed by field.key.
 	let values = $state(blank());
 	let saving = $state(false);
 	let error = $state('');
+
+	// ─── schedule / next-match state ────────────────────────────────────────
+
+	// The computed next match from the schedule. Set during onMount; null means
+	// "no schedule loaded" or "all matches already covered."
+	let nextMatch = $state(null);
+	// Qualification match list from the cached schedule (empty if no schedule).
+	let qmList = $state([]);
+	// Whether the schedule banner was dismissed for this form session.
+	let bannerDismissed = $state(false);
+
+	// Mismatch warning: computed from current form values vs schedule.
+	// Only shown when a position is set AND a schedule is loaded.
+	const scheduleCheck = $derived.by(() => {
+		if (!qmList.length || !session.scoutPosition) return null;
+		const mn = Number(values.matchNumber);
+		const tn = Number(values.teamNumber);
+		if (!mn || !tn) return null;
+		return verifyMatchTeam(qmList, mn, tn, session.scoutPosition);
+	});
+
+	// ─── helpers ────────────────────────────────────────────────────────────
 
 	function blank() {
 		// Type-aware defaults: text-ish fields start empty, booleans default to false
@@ -24,31 +54,69 @@
 		return v;
 	}
 
-	// Repeat-entry pre-fill: a scout assigned to one alliance slot will fill out
-	// the same alliance color match after match. Carry it forward from the most
-	// recent entry by this scout at the current event, and bump the match number
-	// by one as a sensible default. The scout can still edit any field before
-	// saving — this is just a starting point, not a constraint.
+	/**
+	 * Fill match identity fields from a TBA match object + scout position.
+	 * Overrides match number, team number, and alliance color.
+	 */
+	function fillFromMatch(match) {
+		if (!match || !session.scoutPosition) return;
+		const team = teamForPosition(match, session.scoutPosition);
+		const alliance = allianceFromPosition(session.scoutPosition);
+		if (team) values.teamNumber = String(team);
+		if (alliance) values.allianceColor = alliance;
+		values.matchNumber = String(match.match_number);
+		bannerDismissed = false; // re-show banner in case user changed something
+	}
+
+	// ─── mount: pre-fill from schedule OR last entry ────────────────────────
+
 	onMount(async () => {
 		try {
 			const all = await listEntries();
 			const mine = all.filter(
 				(e) => e.eventCode === session.eventCode && e.scoutName === session.scoutName
 			);
-			if (mine.length === 0) return;
-			const last = mine[0]; // listEntries returns newest-first
-			const prefill = blank();
-			prefill.allianceColor = last.allianceColor ?? '';
-			if (Number.isFinite(last.matchNumber)) {
-				prefill.matchNumber = String(Number(last.matchNumber) + 1);
+
+			// Try to load the cached TBA schedule for this event.
+			const cached = session.eventCode
+				? await getCachedSchedule(session.eventCode)
+				: null;
+
+			if (cached && session.scoutPosition) {
+				// Schedule available + position set → use schedule-based pre-fill.
+				qmList = qualMatches(cached.matches);
+				const next = nextUnscoutedMatch(qmList, all, session.scoutPosition);
+				nextMatch = next;
+				if (next) {
+					fillFromMatch(next);
+				} else if (mine.length > 0) {
+					// All matches covered; fall back to last-entry pre-fill.
+					applyLastEntryPrefill(mine[0]);
+				}
+			} else if (mine.length > 0) {
+				// No schedule or no position — fall back to carry-forward from last entry.
+				applyLastEntryPrefill(mine[0]);
 			}
-			values = prefill;
 		} catch (_e) {
-			// If anything goes wrong reading prior entries, just leave the form
-			// blank — the worst case is the scout types fields they could have
-			// inherited.
+			// Any failure here leaves the form blank — the worst case is the scout
+			// types a few fields they could have inherited.
 		}
 	});
+
+	/**
+	 * Carry forward alliance color and bump match number from the previous entry.
+	 * This is the pre-schedule fallback behavior: same as before TBA integration.
+	 */
+	function applyLastEntryPrefill(last) {
+		const prefill = blank();
+		prefill.allianceColor = last.allianceColor ?? '';
+		if (Number.isFinite(last.matchNumber)) {
+			prefill.matchNumber = String(Number(last.matchNumber) + 1);
+		}
+		values = prefill;
+	}
+
+	// ─── validation + submit ─────────────────────────────────────────────────
 
 	function validate() {
 		for (const f of ALL_FIELDS) {
@@ -107,12 +175,63 @@
 		<h1>New entry</h1>
 	</header>
 
+	<!--
+		Next-match banner: shown when the schedule is loaded, a position is set,
+		and there is still an unscouted match ahead. The user can dismiss it
+		or tap "Use this match" to lock in the identity fields.
+	-->
+	{#if nextMatch && session.scoutPosition && !bannerDismissed}
+		{@const bannerAlliance = allianceFromPosition(session.scoutPosition)}
+		{@const bannerTeam = teamForPosition(nextMatch, session.scoutPosition)}
+		<div class="next-banner" data-alliance={bannerAlliance}>
+			<div class="banner-body">
+				<strong class="banner-label">Next match</strong>
+				<span class="banner-detail">
+					Q{nextMatch.match_number}
+					{#if bannerTeam} · Team {bannerTeam}{/if}
+					{#if bannerAlliance} · {bannerAlliance}{/if}
+					{#if session.scoutPosition}
+						<span class="banner-pos">({session.scoutPosition})</span>
+					{/if}
+				</span>
+			</div>
+			<div class="banner-actions">
+				<button
+					type="button"
+					class="use-btn"
+					onclick={() => fillFromMatch(nextMatch)}
+				>
+					Use this match
+				</button>
+				<button
+					type="button"
+					class="dismiss-btn"
+					aria-label="Dismiss suggestion"
+					onclick={() => (bannerDismissed = true)}
+				>
+					✕
+				</button>
+			</div>
+		</div>
+	{/if}
+
 	<form onsubmit={submit} novalidate>
 		<section>
 			<h2>Match</h2>
 			{#each IDENTITY_FIELDS as f (f.key)}
 				<Field field={f} bind:value={values[f.key]} />
 			{/each}
+
+			<!--
+				Schedule verification: warn when the entered match + team combination
+				doesn't match what the schedule says for the scout's position.
+				ok: false = definite mismatch  |  ok: null = can't verify  |  ok: true = silent
+			-->
+			{#if scheduleCheck?.ok === false}
+				<p class="sched-warn">
+					<strong>Schedule check:</strong> {scheduleCheck.reason}
+				</p>
+			{/if}
 		</section>
 
 		<section>
@@ -164,6 +283,96 @@
 		border-bottom: 1px solid var(--border);
 		padding-bottom: 0.35rem;
 	}
+
+	/* ── next-match banner ────────────────────────────────────────── */
+	.next-banner {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.65rem 0.8rem;
+		border-radius: 0.5rem;
+		border: 1.5px solid #bccbea;
+		background: #e8effc;
+		margin-bottom: 0.25rem;
+		flex-wrap: wrap;
+	}
+	.next-banner[data-alliance='red'] {
+		background: #fef2f2;
+		border-color: #fca5a5;
+	}
+	.next-banner[data-alliance='blue'] {
+		background: #eff6ff;
+		border-color: #93c5fd;
+	}
+	.banner-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		min-width: 0;
+	}
+	.banner-label {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+	}
+	.banner-detail {
+		font-size: 0.95rem;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+	.banner-pos {
+		font-weight: 400;
+		color: var(--text-muted);
+		font-size: 0.85rem;
+		margin-left: 0.2rem;
+	}
+	.banner-actions {
+		display: flex;
+		gap: 0.35rem;
+		align-items: center;
+		flex-shrink: 0;
+	}
+	.use-btn {
+		font: inherit;
+		font-size: 0.85rem;
+		font-weight: 700;
+		padding: 0.45rem 0.8rem;
+		background: #0b3d91;
+		color: white;
+		border: none;
+		border-radius: 0.4rem;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.use-btn:hover { background: #0a3480; }
+	.dismiss-btn {
+		font: inherit;
+		font-size: 0.9rem;
+		background: transparent;
+		border: none;
+		color: var(--text-faint);
+		cursor: pointer;
+		padding: 0.3rem 0.45rem;
+		border-radius: 0.3rem;
+		line-height: 1;
+	}
+	.dismiss-btn:hover { color: var(--text-primary); background: var(--bg-subtle); }
+
+	/* ── schedule mismatch warning ────────────────────────────────── */
+	.sched-warn {
+		margin: 0.5rem 0 0;
+		padding: 0.5rem 0.7rem;
+		background: #fffbeb;
+		border: 1px solid #fcd34d;
+		border-radius: 0.4rem;
+		font-size: 0.85rem;
+		color: #92400e;
+	}
+	.sched-warn strong { color: #78350f; }
+
+	/* ── form controls ────────────────────────────────────────────── */
 	.error {
 		background: #fdecea;
 		color: #842029;

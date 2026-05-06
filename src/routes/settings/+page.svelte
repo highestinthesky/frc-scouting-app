@@ -1,16 +1,94 @@
 <script>
+	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { session } from '$lib/session.svelte.js';
 	import { role } from '$lib/role.svelte.js';
 	import { clearEntries } from '$lib/db.js';
 	import { syncState, resync } from '$lib/sync.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
+	import {
+		fetchAndCacheSchedule,
+		getCachedSchedule,
+		clearScheduleCache,
+		qualMatches
+	} from '$lib/tba.js';
 
 	let eventCode = $state(session.eventCode);
 	let scoutName = $state(session.scoutName);
 	let saving = $state(false);
 	let savedMsg = $state('');
 	let clearMsg = $state('');
+
+	// ─── TBA schedule state ────────────────────────────────────────────────────
+
+	// Local copies of session fields so the user can edit before saving.
+	let scoutPosition = $state(session.scoutPosition);
+	let tbaApiKey = $state(session.tbaApiKey);
+	let savingTba = $state(false);
+	let tbaMsg = $state('');
+	let tbaError = $state('');
+
+	// Schedule status — loaded on mount and after fetch/clear.
+	let scheduleInfo = $state(null); // { cachedAt, matchCount } | null
+
+	const POSITIONS = ['red 1', 'red 2', 'red 3', 'blue 1', 'blue 2', 'blue 3'];
+
+	async function loadScheduleInfo() {
+		const ev = session.eventCode || eventCode.trim().toLowerCase();
+		if (!ev) { scheduleInfo = null; return; }
+		const cached = await getCachedSchedule(ev);
+		if (!cached) { scheduleInfo = null; return; }
+		const qm = qualMatches(cached.matches);
+		scheduleInfo = { cachedAt: cached.cachedAt, matchCount: qm.length };
+	}
+
+	onMount(loadScheduleInfo);
+
+	async function saveTbaSettings(e) {
+		e.preventDefault();
+		savingTba = true;
+		tbaMsg = '';
+		tbaError = '';
+		try {
+			await session.update({
+				scoutPosition: scoutPosition.trim(),
+				tbaApiKey: tbaApiKey.trim()
+			});
+			tbaMsg = 'Saved.';
+		} catch (err) {
+			tbaError = err.message ?? String(err);
+		} finally {
+			savingTba = false;
+		}
+	}
+
+	async function fetchSchedule() {
+		tbaMsg = '';
+		tbaError = '';
+		const ev = session.eventCode || eventCode.trim().toLowerCase();
+		const key = session.tbaApiKey || tbaApiKey.trim();
+		if (!ev) { tbaError = 'Set an event code in Identity first.'; return; }
+		if (!key) { tbaError = 'Add a TBA API key below before fetching.'; return; }
+		savingTba = true;
+		try {
+			const matches = await fetchAndCacheSchedule(ev, key);
+			const qm = qualMatches(matches);
+			await loadScheduleInfo();
+			tbaMsg = `Schedule loaded: ${qm.length} qual match${qm.length === 1 ? '' : 'es'} for ${ev}.`;
+		} catch (err) {
+			tbaError = err.message ?? String(err);
+		} finally {
+			savingTba = false;
+		}
+	}
+
+	async function clearSchedule() {
+		const ev = session.eventCode || eventCode.trim().toLowerCase();
+		if (!ev) return;
+		await clearScheduleCache(ev);
+		scheduleInfo = null;
+		tbaMsg = 'Schedule cleared.';
+	}
 
 	async function saveSession(e) {
 		e.preventDefault();
@@ -98,6 +176,92 @@
 			</button>
 			{#if savedMsg}<small class="muted ok">{savedMsg}</small>{/if}
 		</form>
+	</section>
+
+	<!-- ── Schedule (TBA) ──────────────────────────────────────────────────── -->
+	<!--
+		This section is only meaningful for scouts (the manager doesn't record
+		entries). We show it regardless of role so the manager can verify their
+		team's configuration.
+	-->
+	<section>
+		<h2>Schedule (TBA)</h2>
+		<p class="muted">
+			Set your alliance position and connect to The Blue Alliance so the entry
+			form can suggest your next match and pre-fill the team number.
+		</p>
+
+		<form onsubmit={saveTbaSettings}>
+			<!-- Scout position picker -->
+			<div class="field">
+				<span class="label">Your alliance position</span>
+				<small class="help">Which slot you're assigned for the whole event.</small>
+				<div class="pos-pills">
+					{#each POSITIONS as pos}
+						{@const isRed = pos.startsWith('red')}
+						<button
+							type="button"
+							class="pos-pill"
+							class:selected={scoutPosition === pos}
+							class:red={isRed}
+							class:blue={!isRed}
+							onclick={() => (scoutPosition = scoutPosition === pos ? '' : pos)}
+						>
+							{pos}
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- TBA API key -->
+			<label class="field">
+				<span class="label">TBA API key</span>
+				<small class="help">
+					Free key at <strong>thebluealliance.com/account</strong> → Read API Keys.
+					Stored only on this device.
+				</small>
+				<input
+					type="password"
+					bind:value={tbaApiKey}
+					autocomplete="off"
+					autocapitalize="none"
+					placeholder="Paste your TBA read API key"
+				/>
+			</label>
+
+			<div class="tba-actions">
+				<button type="submit" class="primary" disabled={savingTba}>
+					{savingTba ? 'Saving…' : 'Save'}
+				</button>
+				<button
+					type="button"
+					class="secondary-btn"
+					onclick={fetchSchedule}
+					disabled={savingTba}
+				>
+					Fetch schedule
+				</button>
+			</div>
+
+			{#if tbaMsg}<small class="muted ok">{tbaMsg}</small>{/if}
+			{#if tbaError}<small class="error-inline">{tbaError}</small>{/if}
+		</form>
+
+		<!-- Schedule cache status -->
+		{#if scheduleInfo}
+			<div class="schedule-status">
+				<span class="sched-ok">
+					{scheduleInfo.matchCount} qual match{scheduleInfo.matchCount === 1 ? '' : 'es'} cached
+					for {session.eventCode || eventCode || '—'}
+				</span>
+				<span class="sched-age">
+					· fetched {new Date(scheduleInfo.cachedAt).toLocaleString()}
+				</span>
+				<button type="button" class="clear-link" onclick={clearSchedule}>Clear</button>
+			</div>
+		{:else if session.eventCode}
+			<p class="muted sched-none">No schedule cached for {session.eventCode}.</p>
+		{/if}
 	</section>
 
 	<section>
@@ -313,4 +477,92 @@
 		background: var(--accent-soft);
 		color: var(--accent);
 	}
+
+	/* ── TBA / schedule section ───────────────────────────────────── */
+	.pos-pills {
+		display: flex;
+		gap: 0.35rem;
+		flex-wrap: wrap;
+		margin-top: 0.2rem;
+	}
+	.pos-pill {
+		font: inherit;
+		font-size: 0.82rem;
+		font-weight: 600;
+		padding: 0.4rem 0.7rem;
+		border-radius: 0.4rem;
+		border: 2px solid #ccc;
+		background: var(--bg-card);
+		cursor: pointer;
+		text-transform: capitalize;
+		min-width: 4.5rem;
+		text-align: center;
+	}
+	.pos-pill.red.selected {
+		background: #c0392b;
+		border-color: #c0392b;
+		color: white;
+	}
+	.pos-pill.blue.selected {
+		background: #2c5cb0;
+		border-color: #2c5cb0;
+		color: white;
+	}
+	.pos-pill:not(.selected):hover { background: var(--bg-subtle); }
+
+	.tba-actions {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+		flex-wrap: wrap;
+		margin-top: 0.5rem;
+	}
+	.secondary-btn {
+		font: inherit;
+		font-weight: 600;
+		padding: 0.6rem 1rem;
+		border-radius: 0.4rem;
+		cursor: pointer;
+		background: var(--bg-card);
+		border: 1px solid var(--border-strong);
+		color: var(--text-primary);
+	}
+	.secondary-btn:hover { background: var(--bg-subtle); }
+	.secondary-btn:disabled { opacity: 0.6; cursor: progress; }
+
+	.error-inline {
+		color: #c0392b;
+		font-size: 0.85rem;
+		display: block;
+		margin-top: 0.35rem;
+	}
+
+	.schedule-status {
+		margin-top: 0.6rem;
+		font-size: 0.85rem;
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+		padding: 0.45rem 0.65rem;
+		background: #ecfdf5;
+		border: 1px solid #6ee7b7;
+		border-radius: 0.4rem;
+		color: #065f46;
+	}
+	.sched-ok { font-weight: 600; }
+	.sched-age { color: #047857; font-size: 0.8rem; }
+	.clear-link {
+		background: none;
+		border: none;
+		font: inherit;
+		font-size: 0.82rem;
+		color: #065f46;
+		cursor: pointer;
+		text-decoration: underline;
+		padding: 0;
+		margin-left: auto;
+	}
+	.clear-link:hover { color: #c0392b; }
+	.sched-none { margin-top: 0.4rem; }
 </style>
