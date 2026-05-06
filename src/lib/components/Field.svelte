@@ -203,7 +203,7 @@
 				<!-- Sub-field 2: opponent team number -->
 				<div class="de-row">
 					<small class="de-label">
-						{defenseRole === 'Defended' ? 'Team we defended against' : 'Team that defended us'}
+						{defenseRole === 'Defended' ? 'Team defended against' : 'Team that defended'}
 						<span class="de-optional">(optional)</span>
 					</small>
 					<input
