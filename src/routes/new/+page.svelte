@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { addEntry, listEntries } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
 	import { kick as kickSync } from '$lib/sync.svelte.js';
@@ -11,8 +12,7 @@
 		getCachedSchedule,
 		qualMatches,
 		nextUnscoutedMatch,
-		teamForPosition,
-		allianceFromPosition,
+		allianceForTeamInMatch,
 		verifyMatchTeam
 	} from '$lib/tba.js';
 
@@ -23,30 +23,26 @@
 
 	// ─── schedule / next-match state ────────────────────────────────────────
 
-	// The computed next match from the schedule. Set during onMount; null means
-	// "no schedule loaded" or "all matches already covered."
-	let nextMatch = $state(null);
-	// Qualification match list from the cached schedule (empty if no schedule).
+	/** Cached qual matches for this event. Empty if no schedule pulled. */
 	let qmList = $state([]);
-	// Whether the schedule banner was dismissed for this form session.
+	/** { match, teams: number[] } for the next match where any of the scout's
+	 *  assigned teams is playing and hasn't been scouted yet. */
+	let suggestion = $state(null);
 	let bannerDismissed = $state(false);
 
-	// Mismatch warning: computed from current form values vs schedule.
-	// Only shown when a position is set AND a schedule is loaded.
+	// Mismatch warning: confirm the entered (match, team) pair really exists
+	// in the schedule.
 	const scheduleCheck = $derived.by(() => {
-		if (!qmList.length || !session.scoutPosition) return null;
+		if (!qmList.length) return null;
 		const mn = Number(values.matchNumber);
 		const tn = Number(values.teamNumber);
 		if (!mn || !tn) return null;
-		return verifyMatchTeam(qmList, mn, tn, session.scoutPosition);
+		return verifyMatchTeam(qmList, mn, tn);
 	});
 
 	// ─── helpers ────────────────────────────────────────────────────────────
 
 	function blank() {
-		// Type-aware defaults: text-ish fields start empty, booleans default to false
-		// so the toggle renders in its "no" state and the saved entry stores a real
-		// boolean rather than an empty string.
 		const v = {};
 		for (const f of ALL_FIELDS) {
 			v[f.key] = f.type === 'boolean' ? false : '';
@@ -55,20 +51,20 @@
 	}
 
 	/**
-	 * Fill match identity fields from a TBA match object + scout position.
-	 * Overrides match number, team number, and alliance color.
+	 * Fill match/team/alliance from a known schedule entry + chosen team.
+	 * The alliance color is derived from the match itself, not from any
+	 * fixed scout position.
 	 */
-	function fillFromMatch(match) {
-		if (!match || !session.scoutPosition) return;
-		const team = teamForPosition(match, session.scoutPosition);
-		const alliance = allianceFromPosition(session.scoutPosition);
-		if (team) values.teamNumber = String(team);
-		if (alliance) values.allianceColor = alliance;
+	function fillFromMatchAndTeam(match, teamNumber) {
+		if (!match || !Number.isFinite(teamNumber)) return;
+		const color = allianceForTeamInMatch(match, teamNumber);
 		values.matchNumber = String(match.match_number);
-		bannerDismissed = false; // re-show banner in case user changed something
+		values.teamNumber = String(teamNumber);
+		if (color) values.allianceColor = color;
+		bannerDismissed = false;
 	}
 
-	// ─── mount: pre-fill from schedule OR last entry ────────────────────────
+	// ─── mount: schedule pre-fill, query-param pre-fill, last-entry fallback ─
 
 	onMount(async () => {
 		try {
@@ -77,36 +73,54 @@
 				(e) => e.eventCode === session.eventCode && e.scoutName === session.scoutName
 			);
 
-			// Try to load the cached TBA schedule for this event.
-			const cached = session.eventCode
-				? await getCachedSchedule(session.eventCode)
-				: null;
+			const cached = session.eventCode ? await getCachedSchedule(session.eventCode) : null;
+			qmList = cached ? qualMatches(cached.matches) : [];
 
-			if (cached && session.scoutPosition) {
-				// Schedule available + position set → use schedule-based pre-fill.
-				qmList = qualMatches(cached.matches);
-				const next = nextUnscoutedMatch(qmList, all, session.scoutPosition);
-				nextMatch = next;
-				if (next) {
-					fillFromMatch(next);
-				} else if (mine.length > 0) {
-					// All matches covered; fall back to last-entry pre-fill.
-					applyLastEntryPrefill(mine[0]);
-				}
-			} else if (mine.length > 0) {
-				// No schedule or no position — fall back to carry-forward from last entry.
-				applyLastEntryPrefill(mine[0]);
+			// 1) Highest priority: explicit query params from the Schedule tab.
+			//    e.g. /new/?match=12&team=1234&color=red
+			const qp = new URLSearchParams(page.url.search);
+			const qMatch = Number(qp.get('match'));
+			const qTeam = Number(qp.get('team'));
+			const qColor = qp.get('color');
+			if (Number.isFinite(qMatch) && qMatch > 0 && Number.isFinite(qTeam) && qTeam > 0) {
+				values.matchNumber = String(qMatch);
+				values.teamNumber = String(qTeam);
+				// Prefer the schedule-derived color over whatever the URL claims,
+				// since the schedule is authoritative; fall back to the URL.
+				const match = qmList.find((m) => m.match_number === qMatch);
+				const color = match
+					? allianceForTeamInMatch(match, qTeam) ?? qColor
+					: qColor;
+				if (color === 'red' || color === 'blue') values.allianceColor = color;
+				return; // skip schedule + last-entry fallbacks
 			}
+
+			// 2) Schedule-driven pre-fill: pick the next match where one of my
+			//    assigned teams is playing and I haven't entered it yet.
+			const teams = session.effectiveTeams;
+			if (qmList.length && teams.length) {
+				const next = nextUnscoutedMatch(qmList, all, teams);
+				if (next) {
+					suggestion = next;
+					// If only one of my teams is in the next match, auto-fill.
+					// If multiple, leave the form blank and let the scout pick
+					// from the banner.
+					if (next.teams.length === 1) {
+						fillFromMatchAndTeam(next.match, next.teams[0]);
+					}
+					return;
+				}
+			}
+
+			// 3) Fallback: carry forward alliance + bump match number from the
+			//    previous entry. Same behavior as before TBA integration.
+			if (mine.length > 0) applyLastEntryPrefill(mine[0]);
 		} catch (_e) {
-			// Any failure here leaves the form blank — the worst case is the scout
+			// Any failure here leaves the form blank — worst case is the scout
 			// types a few fields they could have inherited.
 		}
 	});
 
-	/**
-	 * Carry forward alliance color and bump match number from the previous entry.
-	 * This is the pre-schedule fallback behavior: same as before TBA integration.
-	 */
 	function applyLastEntryPrefill(last) {
 		const prefill = blank();
 		prefill.allianceColor = last.allianceColor ?? '';
@@ -137,8 +151,6 @@
 		error = '';
 		saving = true;
 		try {
-			// Identity fields go on the entry directly; observation fields go
-			// inside an `observations` object so the schema is portable.
 			const observations = {};
 			for (const f of OBSERVATION_FIELDS) observations[f.key] = values[f.key] ?? '';
 
@@ -151,9 +163,6 @@
 				observations
 			});
 
-			// Push to peers immediately rather than waiting for the next poll tick.
-			// No-op if no session is joined or the network is down — the sync
-			// layer will catch up when it can.
 			kickSync();
 
 			await goto(`${base}/`);
@@ -176,33 +185,50 @@
 	</header>
 
 	<!--
-		Next-match banner: shown when the schedule is loaded, a position is set,
-		and there is still an unscouted match ahead. The user can dismiss it
-		or tap "Use this match" to lock in the identity fields.
+		Next-match banner: shown when the schedule is loaded, the scout has
+		assigned teams, and at least one of them has an unscouted match ahead.
+		When exactly one of the scout's teams is in the next match, "Use" just
+		applies it. When two or more of the scout's teams are in the same match,
+		each team is its own button so the scout picks who to scout first.
 	-->
-	{#if nextMatch && session.scoutPosition && !bannerDismissed}
-		{@const bannerAlliance = allianceFromPosition(session.scoutPosition)}
-		{@const bannerTeam = teamForPosition(nextMatch, session.scoutPosition)}
-		<div class="next-banner" data-alliance={bannerAlliance}>
+	{#if suggestion && !bannerDismissed}
+		<div class="next-banner">
 			<div class="banner-body">
 				<strong class="banner-label">Next match</strong>
 				<span class="banner-detail">
-					Q{nextMatch.match_number}
-					{#if bannerTeam} · Team {bannerTeam}{/if}
-					{#if bannerAlliance} · {bannerAlliance}{/if}
-					{#if session.scoutPosition}
-						<span class="banner-pos">({session.scoutPosition})</span>
+					Q{suggestion.match.match_number}
+					{#if suggestion.teams.length === 1}
+						{@const t = suggestion.teams[0]}
+						{@const c = allianceForTeamInMatch(suggestion.match, t)}
+						· Team {t}
+						{#if c} · {c}{/if}
+					{:else}
+						· {suggestion.teams.length} of your teams are in this match
 					{/if}
 				</span>
 			</div>
 			<div class="banner-actions">
-				<button
-					type="button"
-					class="use-btn"
-					onclick={() => fillFromMatch(nextMatch)}
-				>
-					Use this match
-				</button>
+				{#if suggestion.teams.length === 1}
+					<button
+						type="button"
+						class="use-btn"
+						onclick={() => fillFromMatchAndTeam(suggestion.match, suggestion.teams[0])}
+					>
+						Use this match
+					</button>
+				{:else}
+					{#each suggestion.teams as t}
+						{@const c = allianceForTeamInMatch(suggestion.match, t)}
+						<button
+							type="button"
+							class="use-btn pick"
+							data-color={c}
+							onclick={() => fillFromMatchAndTeam(suggestion.match, t)}
+						>
+							{t}
+						</button>
+					{/each}
+				{/if}
 				<button
 					type="button"
 					class="dismiss-btn"
@@ -222,11 +248,6 @@
 				<Field field={f} bind:value={values[f.key]} />
 			{/each}
 
-			<!--
-				Schedule verification: warn when the entered match + team combination
-				doesn't match what the schedule says for the scout's position.
-				ok: false = definite mismatch  |  ok: null = can't verify  |  ok: true = silent
-			-->
 			{#if scheduleCheck?.ok === false}
 				<p class="sched-warn">
 					<strong>Schedule check:</strong> {scheduleCheck.reason}
@@ -297,14 +318,6 @@
 		margin-bottom: 0.25rem;
 		flex-wrap: wrap;
 	}
-	.next-banner[data-alliance='red'] {
-		background: #fef2f2;
-		border-color: #fca5a5;
-	}
-	.next-banner[data-alliance='blue'] {
-		background: #eff6ff;
-		border-color: #93c5fd;
-	}
 	.banner-body {
 		display: flex;
 		flex-direction: column;
@@ -322,16 +335,11 @@
 		font-weight: 600;
 		color: var(--text-primary);
 	}
-	.banner-pos {
-		font-weight: 400;
-		color: var(--text-muted);
-		font-size: 0.85rem;
-		margin-left: 0.2rem;
-	}
 	.banner-actions {
 		display: flex;
 		gap: 0.35rem;
 		align-items: center;
+		flex-wrap: wrap;
 		flex-shrink: 0;
 	}
 	.use-btn {
@@ -346,7 +354,9 @@
 		cursor: pointer;
 		white-space: nowrap;
 	}
-	.use-btn:hover { background: #0a3480; }
+	.use-btn.pick { background: #2c5cb0; }
+	.use-btn.pick[data-color='red'] { background: #c0392b; }
+	.use-btn:hover { filter: brightness(1.06); }
 	.dismiss-btn {
 		font: inherit;
 		font-size: 0.9rem;

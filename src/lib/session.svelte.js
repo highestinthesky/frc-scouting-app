@@ -12,14 +12,29 @@ class Session {
 	eventCode = $state('');
 	scoutName = $state('');
 	/**
-	 * Scout's fixed alliance slot for TBA schedule pre-fill.
-	 * One of: "red 1" | "red 2" | "red 3" | "blue 1" | "blue 2" | "blue 3" | ""
+	 * Team numbers this scout is assigned to watch for the event.
+	 * Populated by the manager from the schedule page and pulled via sync.
+	 * Scouts can also add teams locally via `localExtraTeams` if the manager
+	 * hasn't assigned them yet.
 	 */
-	scoutPosition = $state('');
+	assignedTeams = $state(/** @type {number[]} */ ([]));
 	/**
-	 * TBA v3 read API key — optional. When present, the entry form can
-	 * fetch the event schedule and suggest the next match + team to scout.
-	 * Get a free key at thebluealliance.com/account.
+	 * Teams the scout added on their own device. Survives sync pulls — the
+	 * server only owns the manager-assigned list. The effective set of teams
+	 * the scout is watching is union(assignedTeams, localExtraTeams).
+	 */
+	localExtraTeams = $state(/** @type {number[]} */ ([]));
+	/**
+	 * Manager passphrase token — SHA-256 hex of (passphrase + ':' + eventCode).
+	 * Sent as `x-manager-token` on writes that hit schedules/assignments.
+	 * Only meaningful on devices acting as managers. Stored in plaintext in
+	 * IndexedDB because it's already a hash, not the raw passphrase.
+	 */
+	managerToken = $state('');
+	/**
+	 * The Blue Alliance v3 read API key. Only used by the manager device that
+	 * fetches the schedule and publishes it to Supabase. Scouts never need
+	 * this set. Get a free key at thebluealliance.com/account.
 	 */
 	tbaApiKey = $state('');
 	loaded = $state(false);
@@ -28,10 +43,28 @@ class Session {
 		return Boolean(this.eventCode && this.scoutName);
 	}
 
+	/**
+	 * Union of manager-assigned teams and local additions, deduplicated and
+	 * sorted ascending. This is the list downstream code (entry form, schedule
+	 * UI) should use.
+	 */
+	get effectiveTeams() {
+		const set = new Set();
+		for (const t of this.assignedTeams) if (Number.isFinite(t)) set.add(t);
+		for (const t of this.localExtraTeams) if (Number.isFinite(t)) set.add(t);
+		return [...set].sort((a, b) => a - b);
+	}
+
 	async load() {
 		this.eventCode = (await getSetting('eventCode')) ?? '';
 		this.scoutName = (await getSetting('scoutName')) ?? '';
-		this.scoutPosition = (await getSetting('scoutPosition')) ?? '';
+		// Legacy `scoutPosition` (string) is intentionally ignored. The new
+		// model uses team numbers instead of alliance slots.
+		const at = await getSetting('assignedTeams');
+		this.assignedTeams = Array.isArray(at) ? at.filter(Number.isFinite) : [];
+		const le = await getSetting('localExtraTeams');
+		this.localExtraTeams = Array.isArray(le) ? le.filter(Number.isFinite) : [];
+		this.managerToken = (await getSetting('managerToken')) ?? '';
 		this.tbaApiKey = (await getSetting('tbaApiKey')) ?? '';
 		this.loaded = true;
 	}
@@ -45,9 +78,19 @@ class Session {
 			this.scoutName = patch.scoutName;
 			await setSetting('scoutName', patch.scoutName);
 		}
-		if (patch.scoutPosition !== undefined) {
-			this.scoutPosition = patch.scoutPosition;
-			await setSetting('scoutPosition', patch.scoutPosition);
+		if (patch.assignedTeams !== undefined) {
+			const cleaned = (patch.assignedTeams ?? []).filter(Number.isFinite);
+			this.assignedTeams = cleaned;
+			await setSetting('assignedTeams', cleaned);
+		}
+		if (patch.localExtraTeams !== undefined) {
+			const cleaned = (patch.localExtraTeams ?? []).filter(Number.isFinite);
+			this.localExtraTeams = cleaned;
+			await setSetting('localExtraTeams', cleaned);
+		}
+		if (patch.managerToken !== undefined) {
+			this.managerToken = patch.managerToken;
+			await setSetting('managerToken', patch.managerToken);
 		}
 		if (patch.tbaApiKey !== undefined) {
 			this.tbaApiKey = patch.tbaApiKey;

@@ -1,25 +1,32 @@
-// The Blue Alliance (TBA) API v3 integration.
+// The Blue Alliance (TBA) API v3 integration + central schedule sync.
 //
-// Fetches qual match schedules and caches them in IndexedDB so the entry form
-// can pre-fill match number, team number, and alliance color for a scout who
-// has declared their position ("red 1", "blue 2", etc.).
+// Two flows:
 //
-// API docs: https://www.thebluealliance.com/apidocs/v3
-// Free API keys: https://www.thebluealliance.com/account
+//   Manager flow:
+//     fetchAndCacheSchedule()  → hit TBA, cache locally
+//     publishSchedule()        → upload to Supabase so scouts can pull it
 //
-// All network calls go through fetchAndCacheSchedule(). Everything else is
-// pure computation on the cached data — no network required at match time.
+//   Scout flow:
+//     pullSchedule()           → fetch the manager-published schedule from
+//                                Supabase, cache locally. No TBA key needed.
+//
+// In both flows the cached copy in IndexedDB is what every read-side helper
+// (nextUnscoutedMatch, verifyMatchTeam, etc.) consults. Network calls happen
+// at fetch/publish/pull time only.
+//
+// TBA docs: https://www.thebluealliance.com/apidocs/v3
+// Free TBA keys: https://www.thebluealliance.com/account
 
 import { getSetting, setSetting } from './db.js';
+import { createSupabaseClient, deriveSessionId } from './supabase.js';
 
 const TBA_BASE = 'https://www.thebluealliance.com/api/v3';
 
-// ─── fetch + cache ─────────────────────────────────────────────────────────
+// ─── TBA fetch + local cache ───────────────────────────────────────────────
 
 /**
  * Fetch the full match list for an event from TBA and cache it locally.
- * On success, returns the raw TBA match array.
- * On failure, throws a user-readable Error.
+ * Manager-only — scouts use pullSchedule() instead.
  *
  * @param {string} eventCode  e.g. "2026cala"
  * @param {string} apiKey     TBA read API key
@@ -28,7 +35,7 @@ const TBA_BASE = 'https://www.thebluealliance.com/api/v3';
 export async function fetchAndCacheSchedule(eventCode, apiKey) {
 	if (!apiKey || !apiKey.trim()) {
 		throw new Error(
-			'No TBA API key set. Get a free key at thebluealliance.com/account and add it in Settings → TBA API key.'
+			'No TBA API key set. Get a free key at thebluealliance.com/account and add it in Schedule → TBA API key.'
 		);
 	}
 	if (!eventCode || !eventCode.trim()) {
@@ -43,7 +50,7 @@ export async function fetchAndCacheSchedule(eventCode, apiKey) {
 		throw new Error('Could not reach The Blue Alliance. Check your network connection.');
 	}
 	if (resp.status === 401) {
-		throw new Error('TBA API key not accepted (401). Check Settings → TBA API key.');
+		throw new Error('TBA API key not accepted (401). Check Schedule → TBA API key.');
 	}
 	if (resp.status === 404) {
 		throw new Error(`Event "${code}" not found on The Blue Alliance. Check the event code.`);
@@ -55,11 +62,16 @@ export async function fetchAndCacheSchedule(eventCode, apiKey) {
 	if (!Array.isArray(matches)) {
 		throw new Error('Unexpected response from TBA — expected a match array.');
 	}
-	await setSetting(`tba-schedule:${code}`, {
-		cachedAt: new Date().toISOString(),
+	await cacheSchedule(code, matches);
+	return matches;
+}
+
+/** Write the schedule to IndexedDB. Used by manager fetch and scout pull. */
+async function cacheSchedule(eventCode, matches, fetchedAt) {
+	await setSetting(`tba-schedule:${eventCode}`, {
+		cachedAt: fetchedAt ?? new Date().toISOString(),
 		matches
 	});
-	return matches;
 }
 
 /**
@@ -86,7 +98,116 @@ export async function clearScheduleCache(eventCode) {
 	await setSetting(`tba-schedule:${eventCode.trim().toLowerCase()}`, null);
 }
 
-// ─── schedule helpers ───────────────────────────────────────────────────────
+// ─── Supabase publish + pull ───────────────────────────────────────────────
+
+/**
+ * Manager-only: upload the fetched schedule to Supabase so other devices in
+ * the event can pull it without needing their own TBA key. Requires a valid
+ * manager token (the event's passphrase hash). On a first-time event there
+ * is no passphrase yet and the upload is unauthenticated (bootstrap allowed
+ * by the has_manager_token() helper).
+ *
+ * @param {string} eventCode
+ * @param {TBAMatch[]} matches
+ * @param {object} opts
+ * @param {string} [opts.managerToken]  hex SHA-256 hash; required after
+ *                                       passphrase has been set for the event
+ * @param {string} [opts.fetchedBy]     display name to stamp on the row
+ * @returns {Promise<{ fetchedAt: string }>}
+ */
+export async function publishSchedule(eventCode, matches, opts = {}) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code) throw new Error('No event code.');
+	if (!Array.isArray(matches)) throw new Error('publishSchedule requires a match array.');
+	const sid = await deriveSessionId(code);
+	if (!sid) throw new Error('Could not derive session id from event code.');
+	const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
+	const fetchedAt = new Date().toISOString();
+	const row = {
+		session_id: sid,
+		event_code: code,
+		matches,
+		fetched_at: fetchedAt,
+		fetched_by: opts.fetchedBy ?? null
+	};
+	// Upsert: first publish inserts; subsequent publishes replace the row.
+	const { error } = await client
+		.from('schedules')
+		.upsert(row, { onConflict: 'session_id' });
+	if (error) throw mapSupabaseError(error, 'publish schedule');
+	// Refresh the local cache too — saves a round-trip on the next form load.
+	await cacheSchedule(code, matches, fetchedAt);
+	return { fetchedAt };
+}
+
+/**
+ * Scout (or anyone): pull the published schedule for an event from Supabase
+ * and cache it locally. Returns `{ matches, fetchedAt }` on success, or null
+ * if no schedule has been published yet.
+ *
+ * No manager token needed for reads.
+ *
+ * @param {string} eventCode
+ * @returns {Promise<{ matches: TBAMatch[], fetchedAt: string }|null>}
+ */
+export async function pullSchedule(eventCode) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code) return null;
+	const sid = await deriveSessionId(code);
+	if (!sid) return null;
+	const client = createSupabaseClient(sid);
+	const { data, error } = await client
+		.from('schedules')
+		.select('matches, fetched_at')
+		.eq('session_id', sid)
+		.maybeSingle();
+	if (error) throw mapSupabaseError(error, 'pull schedule');
+	if (!data) return null;
+	const matches = Array.isArray(data.matches) ? data.matches : [];
+	await cacheSchedule(code, matches, data.fetched_at);
+	return { matches, fetchedAt: data.fetched_at };
+}
+
+/**
+ * If the published schedule on Supabase is newer than what's in our local
+ * cache, pull it down and replace. Cheap to call on every sync tick — the
+ * server returns one tiny row and we short-circuit if `fetched_at` hasn't
+ * moved.
+ *
+ * @param {string} eventCode
+ * @returns {Promise<boolean>}  true if the cache was refreshed
+ */
+export async function pullScheduleIfStale(eventCode) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code) return false;
+	const sid = await deriveSessionId(code);
+	if (!sid) return false;
+	const client = createSupabaseClient(sid);
+	// First just ask for the timestamp.
+	const { data: head, error: headErr } = await client
+		.from('schedules')
+		.select('fetched_at')
+		.eq('session_id', sid)
+		.maybeSingle();
+	if (headErr) throw mapSupabaseError(headErr, 'check schedule');
+	if (!head) return false;
+	const cached = await getCachedSchedule(code);
+	if (cached && cached.cachedAt && cached.cachedAt >= head.fetched_at) return false;
+	const pulled = await pullSchedule(code);
+	return Boolean(pulled);
+}
+
+function mapSupabaseError(err, action) {
+	const msg = err.message || String(err);
+	if (/row-level security/i.test(msg) || err.code === '42501') {
+		return new Error(
+			`Permission denied — couldn't ${action}. Check the manager passphrase, or ask whoever set the schedule up.`
+		);
+	}
+	return new Error(`Couldn't ${action}: ${msg}`);
+}
+
+// ─── schedule reading helpers (consumed by entry form) ─────────────────────
 
 /**
  * Return only the qualification matches from a match array, sorted by
@@ -102,89 +223,100 @@ export function qualMatches(matches) {
 }
 
 /**
- * Given a match and a scout-position string ("red 1", "blue 3", etc.),
- * return the integer team number the scout is assigned to watch.
- * Returns null if the position is invalid or not found in the match.
- *
- * TBA stores teams as "frc254" strings; we strip the prefix.
+ * Derive the alliance color ("red"|"blue") of a team in a given match, or
+ * null if that team isn't in the match.
  *
  * @param {TBAMatch} match
- * @param {string} scoutPosition  e.g. "red 2"
- * @returns {number|null}
- */
-export function teamForPosition(match, scoutPosition) {
-	if (!match || !scoutPosition) return null;
-	const parts = scoutPosition.toLowerCase().trim().split(/\s+/);
-	if (parts.length < 2) return null;
-	const color = parts[0]; // "red" | "blue"
-	const slot = parseInt(parts[1], 10) - 1; // convert "1"→0, "2"→1, "3"→2
-	if (!['red', 'blue'].includes(color) || isNaN(slot) || slot < 0 || slot > 2) return null;
-	const teamKey = match.alliances?.[color]?.team_keys?.[slot];
-	if (!teamKey) return null;
-	const n = parseInt(teamKey.replace(/^frc/, ''), 10);
-	return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-/**
- * Derive the alliance color ("red" | "blue") from a scout-position string.
- * Returns null for invalid input.
- *
- * @param {string} scoutPosition
+ * @param {number} teamNumber
  * @returns {"red"|"blue"|null}
  */
-export function allianceFromPosition(scoutPosition) {
-	if (!scoutPosition) return null;
-	const color = scoutPosition.toLowerCase().trim().split(/\s+/)[0];
-	return color === 'red' || color === 'blue' ? color : null;
+export function allianceForTeamInMatch(match, teamNumber) {
+	if (!match || !teamNumber) return null;
+	const key = `frc${teamNumber}`;
+	if ((match.alliances?.red?.team_keys ?? []).includes(key)) return 'red';
+	if ((match.alliances?.blue?.team_keys ?? []).includes(key)) return 'blue';
+	return null;
 }
 
 /**
- * Find the first qual match the scout hasn't submitted an entry for yet.
+ * All teams in the match as an object {red: [n,n,n], blue: [n,n,n]}.
+ * Missing slots become null.
  *
- * "Done" means there is an entry with the correct matchNumber AND teamNumber
- * for the scout's assigned position. We don't check scoutName so a scout can
- * pick up a missed match and have it count.
- *
- * @param {TBAMatch[]} qmList      output of qualMatches()
- * @param {object[]}  entries      all local entries (from listEntries())
- * @param {string}    scoutPosition e.g. "blue 2"
- * @returns {TBAMatch|null}
+ * @param {TBAMatch} match
  */
-export function nextUnscoutedMatch(qmList, entries, scoutPosition) {
-	if (!scoutPosition || !qmList.length) return null;
-	// Build a Set of "matchNumber:teamNumber" pairs already recorded.
-	const done = new Set(entries.map((e) => `${e.matchNumber}:${e.teamNumber}`));
-	for (const match of qmList) {
-		const team = teamForPosition(match, scoutPosition);
-		if (!team) continue;
-		if (!done.has(`${match.match_number}:${team}`)) return match;
-	}
-	return null; // all matches covered
+export function teamsInMatch(match) {
+	const parse = (key) => {
+		if (!key) return null;
+		const n = parseInt(String(key).replace(/^frc/, ''), 10);
+		return Number.isFinite(n) ? n : null;
+	};
+	return {
+		red: (match?.alliances?.red?.team_keys ?? []).map(parse),
+		blue: (match?.alliances?.blue?.team_keys ?? []).map(parse)
+	};
 }
 
 /**
- * Verify whether a match-number + team-number pair is consistent with the
- * schedule for a given scout position.
+ * For a given list of qual matches and a list of teams I'm watching, find
+ * the next match where any of my teams are playing and I haven't already
+ * recorded a (matchNumber, teamNumber) entry for that team.
  *
- * Returns one of:
- *   { ok: true }
- *   { ok: false, reason: string }
- *   { ok: null }  — schedule doesn't have this match (can't verify)
+ * Returns `{ match, teams: number[] }` where `teams` is the subset of
+ * `assignedTeams` actually playing in that match. Returns null when every
+ * scheduled appearance has been covered, or there's no schedule, or no
+ * teams assigned.
  *
  * @param {TBAMatch[]} qmList
- * @param {number}     matchNumber
- * @param {number}     teamNumber
- * @param {string}     scoutPosition
+ * @param {object[]} entries           local entries (from listEntries())
+ * @param {number[]} assignedTeams     team numbers the scout is watching
+ * @returns {{match: TBAMatch, teams: number[]}|null}
  */
-export function verifyMatchTeam(qmList, matchNumber, teamNumber, scoutPosition) {
-	if (!qmList.length || !scoutPosition || !matchNumber || !teamNumber) return { ok: null };
+export function nextUnscoutedMatch(qmList, entries, assignedTeams) {
+	if (!qmList.length || !assignedTeams?.length) return null;
+	const done = new Set(entries.map((e) => `${e.matchNumber}:${e.teamNumber}`));
+	const teamSet = new Set(assignedTeams.filter(Number.isFinite));
+	for (const match of qmList) {
+		const playing = teamsInMatchSet(match);
+		const pending = [...teamSet].filter(
+			(t) => playing.has(t) && !done.has(`${match.match_number}:${t}`)
+		);
+		if (pending.length > 0) return { match, teams: pending };
+	}
+	return null;
+}
+
+function teamsInMatchSet(match) {
+	const out = new Set();
+	for (const arr of [match?.alliances?.red?.team_keys, match?.alliances?.blue?.team_keys]) {
+		for (const k of arr ?? []) {
+			const n = parseInt(String(k).replace(/^frc/, ''), 10);
+			if (Number.isFinite(n)) out.add(n);
+		}
+	}
+	return out;
+}
+
+/**
+ * Verify whether an entered (matchNumber, teamNumber) combination is
+ * consistent with the schedule.
+ *
+ * Returns:
+ *   { ok: true }                 — team really is in that match
+ *   { ok: false, reason: ... }   — team is NOT in that match per the schedule
+ *   { ok: null }                 — can't verify (no schedule, match unknown)
+ *
+ * @param {TBAMatch[]} qmList
+ * @param {number} matchNumber
+ * @param {number} teamNumber
+ */
+export function verifyMatchTeam(qmList, matchNumber, teamNumber) {
+	if (!qmList.length || !matchNumber || !teamNumber) return { ok: null };
 	const match = qmList.find((m) => m.match_number === matchNumber);
-	if (!match) return { ok: null }; // match not in schedule (playoff, or just not listed)
-	const expected = teamForPosition(match, scoutPosition);
-	if (expected === null) return { ok: null };
-	if (expected === teamNumber) return { ok: true };
+	if (!match) return { ok: null }; // playoff or unlisted
+	const playing = teamsInMatchSet(match);
+	if (playing.has(teamNumber)) return { ok: true };
 	return {
 		ok: false,
-		reason: `Schedule says ${scoutPosition} in Q${matchNumber} is team ${expected}, not ${teamNumber}.`
+		reason: `Schedule says team ${teamNumber} isn't in Q${matchNumber}.`
 	};
 }

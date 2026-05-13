@@ -21,6 +21,9 @@ import {
 	markEntrySynced,
 	insertRemoteEntry
 } from './db.js';
+import { pullScheduleIfStale } from './tba.js';
+import { pullAndApplyForScout } from './assignments.js';
+import { session } from './session.svelte.js';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -149,6 +152,11 @@ async function tick() {
 		if (!syncState.eventCode || !syncState.sessionId) return;
 		await pushOutbox();
 		await pullInbox();
+		// Best-effort: keep the cached schedule and this scout's assigned
+		// teams in sync with whatever the manager has published. Failures
+		// here shouldn't take the whole sync tick down, since entries are
+		// what actually matter for the scout's flow.
+		try { await pullScheduleAndAssignments(); } catch (e) { console.warn('schedule/assignments pull failed', e); }
 		syncState.status = 'connected';
 		syncState.lastSyncedAt = new Date().toISOString();
 		syncState.error = null;
@@ -241,5 +249,24 @@ async function pullInbox() {
 		if (!lastSeenAt || remoteRow.created_at > lastSeenAt) {
 			lastSeenAt = remoteRow.created_at;
 		}
+	}
+}
+
+// ─── schedule + assignments pull ────────────────────────────────────────────
+//
+// Both are cheap reads (one row for the schedule, a handful for assignments)
+// and they only matter for scouts. Managers also benefit — they see updates
+// from another manager device, and assignments stay consistent when the
+// active manager changes between sessions.
+
+async function pullScheduleAndAssignments() {
+	const code = syncState.eventCode;
+	if (!code) return;
+	// Schedule first — the entry form's next-match suggestion depends on it
+	// more than the assignment list does (assignments are nice-to-have, the
+	// schedule is mandatory for any pre-fill to work).
+	await pullScheduleIfStale(code);
+	if (session.scoutName) {
+		await pullAndApplyForScout(code, session.scoutName);
 	}
 }

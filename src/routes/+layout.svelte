@@ -86,6 +86,9 @@
 		<a href="{base}/" class:active={isActive('/')}>
 			Entries
 		</a>
+		<a href="{base}/schedule/" class:active={isActive('/schedule')}>
+			Schedule
+		</a>
 		{#if role.isManager}
 			<a href="{base}/manager/" class:active={isActive('/manager')}>
 				Manager
