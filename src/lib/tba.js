@@ -67,9 +67,10 @@ export async function fetchAndCacheSchedule(eventCode, apiKey) {
 }
 
 /** Write the schedule to IndexedDB. Used by manager fetch and scout pull. */
-async function cacheSchedule(eventCode, matches, fetchedAt) {
+async function cacheSchedule(eventCode, matches, fetchedAt, fetchedBy) {
 	await setSetting(`tba-schedule:${eventCode}`, {
 		cachedAt: fetchedAt ?? new Date().toISOString(),
+		fetchedBy: fetchedBy ?? null,
 		matches
 	});
 }
@@ -136,7 +137,7 @@ export async function publishSchedule(eventCode, matches, opts = {}) {
 		.upsert(row, { onConflict: 'session_id' });
 	if (error) throw mapSupabaseError(error, 'publish schedule');
 	// Refresh the local cache too — saves a round-trip on the next form load.
-	await cacheSchedule(code, matches, fetchedAt);
+	await cacheSchedule(code, matches, fetchedAt, opts.fetchedBy ?? null);
 	return { fetchedAt };
 }
 
@@ -158,14 +159,14 @@ export async function pullSchedule(eventCode) {
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
 		.from('schedules')
-		.select('matches, fetched_at')
+		.select('matches, fetched_at, fetched_by')
 		.eq('session_id', sid)
 		.maybeSingle();
 	if (error) throw mapSupabaseError(error, 'pull schedule');
 	if (!data) return null;
 	const matches = Array.isArray(data.matches) ? data.matches : [];
-	await cacheSchedule(code, matches, data.fetched_at);
-	return { matches, fetchedAt: data.fetched_at };
+	await cacheSchedule(code, matches, data.fetched_at, data.fetched_by ?? null);
+	return { matches, fetchedAt: data.fetched_at, fetchedBy: data.fetched_by ?? null };
 }
 
 /**

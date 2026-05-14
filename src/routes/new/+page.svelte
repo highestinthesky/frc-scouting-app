@@ -313,8 +313,8 @@
 		gap: 0.5rem;
 		padding: 0.65rem 0.8rem;
 		border-radius: 0.5rem;
-		border: 1.5px solid #bccbea;
-		background: #e8effc;
+		border: 1.5px solid var(--banner-info-border);
+		background: var(--banner-info-bg);
 		margin-bottom: 0.25rem;
 		flex-wrap: wrap;
 	}
@@ -347,14 +347,14 @@
 		font-size: 0.85rem;
 		font-weight: 700;
 		padding: 0.45rem 0.8rem;
-		background: #0b3d91;
-		color: white;
+		background: var(--accent);
+		color: var(--on-accent);
 		border: none;
 		border-radius: 0.4rem;
 		cursor: pointer;
 		white-space: nowrap;
 	}
-	.use-btn.pick { background: #2c5cb0; }
+	.use-btn.pick { background: #2c5cb0; color: #fff; }
 	.use-btn.pick[data-color='red'] { background: #c0392b; }
 	.use-btn:hover { filter: brightness(1.06); }
 	.dismiss-btn {
@@ -374,18 +374,18 @@
 	.sched-warn {
 		margin: 0.5rem 0 0;
 		padding: 0.5rem 0.7rem;
-		background: #fffbeb;
-		border: 1px solid #fcd34d;
+		background: var(--warning-bg);
+		border: 1px solid var(--warning-border);
 		border-radius: 0.4rem;
 		font-size: 0.85rem;
-		color: #92400e;
+		color: var(--warning);
 	}
-	.sched-warn strong { color: #78350f; }
+	.sched-warn strong { color: var(--warning); filter: brightness(0.85); }
 
 	/* ── form controls ────────────────────────────────────────────── */
 	.error {
-		background: #fdecea;
-		color: #842029;
+		background: var(--danger-bg);
+		color: var(--danger);
 		padding: 0.6rem 0.75rem;
 		border-radius: 0.4rem;
 		margin-top: 1rem;

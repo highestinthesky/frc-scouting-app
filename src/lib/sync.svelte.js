@@ -27,6 +27,11 @@ import { session } from './session.svelte.js';
 
 const POLL_INTERVAL_MS = 3000;
 
+// Schedule + assignments change rarely (a few times per event at most), so
+// don't burn a Supabase read on every 3-second tick. Once every Nth tick is
+// invisible to users but cuts read traffic on those tables ~90%.
+const SCHEDULE_POLL_EVERY_N_TICKS = 10; // 10 × 3s = 30s
+
 /**
  * Reactive sync state. Consumers read fields off this inside Svelte
  * components and re-render when they change.
@@ -52,6 +57,9 @@ let polling = false;
 let lastSeenAt = null;
 /** Cached on first call; stable for the device. */
 let cachedClientId = null;
+/** Tick counter for the schedule/assignments throttle. Starts at the
+ *  threshold so the very first tick after (re)connecting checks them once. */
+let ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
 
 /**
  * Cache of Supabase clients keyed by session_id. Each unique event we
@@ -90,6 +98,8 @@ export async function setEventCode(eventCode) {
 	syncState.sessionId = await deriveSessionId(next);
 	syncState.status = navigator.onLine ? 'connecting' : 'offline';
 	lastSeenAt = null; // do a full backfill whenever the scope changes
+	// New event = check schedule/assignments on the next tick, not 30s from now.
+	ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
 	if (typeof window !== 'undefined') {
 		window.addEventListener('online', onOnline);
 		window.addEventListener('offline', onOffline);
@@ -123,6 +133,9 @@ export function kick() {
 export function resync() {
 	if (!syncState.eventCode) return;
 	lastSeenAt = null;
+	// User explicitly asked for a full refresh — include schedule + assignments
+	// in that, even if we just polled them.
+	ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
 	syncState.status = 'connecting';
 	scheduleTick(0);
 }
@@ -153,10 +166,25 @@ async function tick() {
 		await pushOutbox();
 		await pullInbox();
 		// Best-effort: keep the cached schedule and this scout's assigned
-		// teams in sync with whatever the manager has published. Failures
-		// here shouldn't take the whole sync tick down, since entries are
-		// what actually matter for the scout's flow.
-		try { await pullScheduleAndAssignments(); } catch (e) { console.warn('schedule/assignments pull failed', e); }
+		// teams in sync with whatever the manager has published. Throttled
+		// so we don't burn a Supabase read every 3 seconds on data that
+		// changes once an event. Failures here shouldn't take the whole
+		// sync tick down, since entries are what actually matter for the
+		// scout's flow.
+		if (ticksSinceScheduleCheck >= SCHEDULE_POLL_EVERY_N_TICKS) {
+			try {
+				await pullScheduleAndAssignments();
+				ticksSinceScheduleCheck = 0;
+			} catch (e) {
+				console.warn('schedule/assignments pull failed', e);
+				// Don't reset the counter — we'll try again on the next tick
+				// rather than waiting another full interval after a transient
+				// failure.
+				ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
+			}
+		} else {
+			ticksSinceScheduleCheck += 1;
+		}
 		syncState.status = 'connected';
 		syncState.lastSyncedAt = new Date().toISOString();
 		syncState.error = null;

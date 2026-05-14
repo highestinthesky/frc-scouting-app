@@ -90,6 +90,60 @@ export async function verifyPassphrase(eventCode, passphrase) {
 	return { ok: Array.isArray(data) && data.length === 1, token };
 }
 
+/**
+ * Rotate the manager passphrase. Requires the current token (so a stolen
+ * device can't quietly change it) — RLS on UPDATE checks has_manager_token().
+ *
+ * @param {string} eventCode
+ * @param {string} currentToken   the device's locally-known managerToken
+ * @param {string} newPassphrase  the new passphrase the manager just chose
+ * @returns {Promise<string>}  the new hashed token (also store this locally)
+ */
+export async function rotatePassphrase(eventCode, currentToken, newPassphrase) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code) throw new Error('No event code.');
+	if (!currentToken) throw new Error('Current manager token missing on this device.');
+	if (!newPassphrase || !newPassphrase.trim()) throw new Error('New passphrase is empty.');
+	const sid = await deriveSessionId(code);
+	if (!sid) throw new Error('Could not derive session id.');
+	const newToken = await hashManagerToken(newPassphrase.trim(), code);
+	const client = createSupabaseClient(sid, { managerToken: currentToken });
+	const { data, error } = await client
+		.from('event_meta')
+		.update({ manager_token: newToken, updated_at: new Date().toISOString() })
+		.eq('session_id', sid)
+		.select('session_id');
+	if (error) throw mapErr(error, 'rotate passphrase');
+	if (!Array.isArray(data) || data.length !== 1) {
+		throw new Error('Rotation did not match a row — your current passphrase may be stale.');
+	}
+	return newToken;
+}
+
+/**
+ * Wipe scheduling state for the event: event_meta, schedules, and
+ * assignments. Entries are untouched. Requires a valid manager token.
+ *
+ * After a successful reset the event re-enters bootstrap mode — the next
+ * device to set a passphrase wins. Useful when a passphrase needs to be
+ * fully invalidated (e.g., a previous manager left the team).
+ *
+ * @param {string} eventCode
+ * @param {string} managerToken
+ */
+export async function resetEventData(eventCode, managerToken) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code) throw new Error('No event code.');
+	if (!managerToken) {
+		throw new Error('Manager passphrase required on this device to reset.');
+	}
+	const sid = await deriveSessionId(code);
+	if (!sid) throw new Error('Could not derive session id.');
+	const client = createSupabaseClient(sid, { managerToken });
+	const { error } = await client.rpc('reset_event_data');
+	if (error) throw mapErr(error, 'reset event data');
+}
+
 function mapErr(err, action) {
 	const msg = err?.message || String(err);
 	return new Error(`Couldn't ${action}: ${msg}`);

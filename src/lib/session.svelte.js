@@ -58,14 +58,19 @@ class Session {
 	async load() {
 		this.eventCode = (await getSetting('eventCode')) ?? '';
 		this.scoutName = (await getSetting('scoutName')) ?? '';
-		// Legacy `scoutPosition` (string) is intentionally ignored. The new
-		// model uses team numbers instead of alliance slots.
 		const at = await getSetting('assignedTeams');
 		this.assignedTeams = Array.isArray(at) ? at.filter(Number.isFinite) : [];
 		const le = await getSetting('localExtraTeams');
 		this.localExtraTeams = Array.isArray(le) ? le.filter(Number.isFinite) : [];
 		this.managerToken = (await getSetting('managerToken')) ?? '';
 		this.tbaApiKey = (await getSetting('tbaApiKey')) ?? '';
+		// One-time migration cleanup: drop the obsolete pre-assignments setting
+		// so it doesn't sit in IndexedDB forever. Safe to remove this line a
+		// few months after release.
+		const legacyPos = await getSetting('scoutPosition');
+		if (legacyPos !== undefined && legacyPos !== null) {
+			await setSetting('scoutPosition', null);
+		}
 		this.loaded = true;
 	}
 

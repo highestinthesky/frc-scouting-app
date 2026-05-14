@@ -6,6 +6,13 @@
 	import { exportToFile } from '$lib/export.js';
 	import { importFile } from '$lib/import.js';
 	import { syncState } from '$lib/sync.svelte.js';
+	import {
+		getCachedSchedule,
+		qualMatches,
+		nextUnscoutedMatch,
+		allianceForTeamInMatch
+	} from '$lib/tba.js';
+	import { relativeTime } from '$lib/format.js';
 
 	let entries = $state([]);
 	let loading = $state(true);
@@ -17,20 +24,79 @@
 	let importError = $state('');
 	let fileInput = $state();
 
+	/** Cached qual matches for the current event — populated on mount and
+	 *  refreshed when the sync layer brings new schedule data down. */
+	let qmList = $state([]);
+	/** Wallclock refreshed once a minute so "in 8 min" labels stay current. */
+	let now = $state(new Date());
+
 	async function refresh() {
 		entries = await listEntries();
 	}
 
+	async function refreshSchedule() {
+		const cached = session.eventCode
+			? await getCachedSchedule(session.eventCode)
+			: null;
+		qmList = cached ? qualMatches(cached.matches) : [];
+	}
+
 	onMount(async () => {
-		await refresh();
+		await Promise.all([refresh(), refreshSchedule()]);
 		loading = false;
+		const tickHandle = setInterval(() => (now = new Date()), 60_000);
+		return () => clearInterval(tickHandle);
 	});
 
-	// Re-read entries whenever the sync layer brings in new peer rows.
+	// Re-read entries whenever the sync layer brings new peer rows.
 	$effect(() => {
 		syncState.inboundChanges; // tracked dependency
 		if (!loading) refresh();
 	});
+
+	// Re-read the schedule cache when the event code changes, and (best-effort)
+	// after each successful sync tick so a freshly-pulled schedule shows up
+	// without a manual refresh.
+	$effect(() => {
+		syncState.lastSyncedAt;
+		session.eventCode;
+		if (!loading) refreshSchedule();
+	});
+
+	// ── next-match suggestion for the home banner ──────────────────────────────
+
+	/** {match, teams} for the soonest match where any of my teams plays and
+	 *  hasn't been recorded yet; null if nothing pending. */
+	const nextSuggestion = $derived.by(() => {
+		const teams = session.effectiveTeams;
+		if (!qmList.length || !teams.length) return null;
+		return nextUnscoutedMatch(qmList, entries, teams);
+	});
+
+	const nextMatchTime = $derived(
+		nextSuggestion?.match
+			? nextSuggestion.match.predicted_time ?? nextSuggestion.match.time ?? null
+			: null
+	);
+
+	function homeBannerHref() {
+		if (!nextSuggestion) return `${base}/new/`;
+		const { match, teams } = nextSuggestion;
+		// If only one of my teams is in the match, pre-fill that team + the
+		// schedule-correct alliance. Otherwise route to /new and let the
+		// banner there do the multi-team chooser.
+		if (teams.length === 1) {
+			const t = teams[0];
+			const color = allianceForTeamInMatch(match, t);
+			const qp = new URLSearchParams({
+				match: String(match.match_number),
+				team: String(t),
+				...(color ? { color } : {})
+			});
+			return `${base}/new/?${qp.toString()}`;
+		}
+		return `${base}/new/`;
+	}
 
 	// ── live entry counter ─────────────────────────────────────────────────────
 
@@ -110,6 +176,30 @@
 		<h1>Entries</h1>
 		<a class="primary" href="{base}/new/">+ New entry</a>
 	</div>
+
+	{#if nextSuggestion}
+		{@const teams = nextSuggestion.teams}
+		{@const m = nextSuggestion.match}
+		{@const singleColor = teams.length === 1 ? allianceForTeamInMatch(m, teams[0]) : null}
+		<a class="home-next" data-color={singleColor} href={homeBannerHref()}>
+			<div class="next-body">
+				<strong class="next-label">Next match</strong>
+				<span class="next-detail">
+					Q{m.match_number}
+					{#if teams.length === 1}
+						· Team {teams[0]}
+						{#if singleColor} · {singleColor}{/if}
+					{:else}
+						· {teams.length} of your teams
+					{/if}
+					{#if nextMatchTime}
+						<span class="next-time">· {relativeTime(nextMatchTime, now)}</span>
+					{/if}
+				</span>
+			</div>
+			<span class="next-go">Scout →</span>
+		</a>
+	{/if}
 
 	{#if loading}
 		<p class="muted">Loading…</p>
@@ -221,6 +311,58 @@
 		text-decoration: none;
 		border-radius: 0.4rem;
 		font-weight: 600;
+	}
+
+	/* ── next-match banner ───────────────────────────────────────── */
+	.home-next {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.7rem 0.85rem;
+		margin: 0 0 1rem;
+		border-radius: 0.5rem;
+		border: 1.5px solid var(--banner-info-border);
+		background: var(--banner-info-bg);
+		color: inherit;
+		text-decoration: none;
+	}
+	.home-next[data-color='red'] {
+		background: var(--banner-red-bg);
+		border-color: var(--banner-red-border);
+	}
+	.home-next[data-color='blue'] {
+		background: var(--banner-blue-bg);
+		border-color: var(--banner-blue-border);
+	}
+	.home-next:hover { filter: brightness(0.98); }
+	.next-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		min-width: 0;
+		flex: 1 1 auto;
+	}
+	.next-label {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+	}
+	.next-detail {
+		font-size: 0.95rem;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+	.next-time {
+		font-weight: 400;
+		color: var(--text-muted);
+		margin-left: 0.15rem;
+	}
+	.next-go {
+		font-weight: 700;
+		color: var(--accent);
+		font-size: 0.9rem;
+		white-space: nowrap;
 	}
 
 	/* ── pace counter ─────────────────────────────────────────────── */
