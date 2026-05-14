@@ -65,9 +65,17 @@ export async function getSetting(key) {
 	return row?.value;
 }
 
-/** Save a setting value (object, string, etc.). */
+/** Save a setting value (object, string, etc.).
+ *
+ * The value is JSON-round-tripped before persisting so that Svelte 5 `$state`
+ * proxies (which IndexedDB's structured-clone algorithm rejects with
+ * `DataCloneError`) are unwrapped to plain objects/arrays first. All our
+ * settings are JSON-compatible (no Date instances, no class wrappers, no
+ * functions), so the trip is loss-free.
+ */
 export async function setSetting(key, value) {
-	return db.settings.put({ key, value });
+	const safe = value == null ? value : JSON.parse(JSON.stringify(value));
+	return db.settings.put({ key, value: safe });
 }
 
 /**

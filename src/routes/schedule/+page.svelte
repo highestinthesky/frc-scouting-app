@@ -552,6 +552,31 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 					</button>
 				</div>
 			</section>
+			<!-- ── Schedule preview (manager) ──────────────────────────── -->
+			{#if cached && qmList.length}
+				<section>
+					<h2>Schedule preview</h2>
+					<p class="muted small">
+						{qmList.length} qual matches. Use this to spot-check the fetch before publishing.
+					</p>
+					<ol class="sched-preview">
+						{#each qmList as m (m.match_number)}
+							{@const matchTime = m.actual_time ?? m.predicted_time ?? m.time ?? null}
+							{@const red = (m.alliances?.red?.team_keys ?? []).map((k) => String(k).replace(/^frc/, ''))}
+							{@const blue = (m.alliances?.blue?.team_keys ?? []).map((k) => String(k).replace(/^frc/, ''))}
+							<li class="sched-row">
+								<span class="sp-match">Q{m.match_number}</span>
+								<span class="sp-side red">{red.join(' · ')}</span>
+								<span class="sp-vs">vs</span>
+								<span class="sp-side blue">{blue.join(' · ')}</span>
+								{#if matchTime}
+									<span class="sp-time">{timeOfDay(matchTime)}</span>
+								{/if}
+							</li>
+						{/each}
+					</ol>
+				</section>
+			{/if}
 		{:else}
 			<!-- ── Scout view ───────────────────────────────────────────── -->
 
@@ -916,5 +941,52 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		color: var(--success);
 		font-size: 0.8rem;
 		font-weight: 600;
+	}
+
+	/* ── manager: full-schedule preview ─────────────────────────── */
+	.sched-preview {
+		list-style: none;
+		padding: 0;
+		margin: 0.4rem 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.sched-row {
+		display: grid;
+		grid-template-columns: 2.5rem 1fr auto 1fr auto;
+		align-items: baseline;
+		gap: 0.4rem;
+		padding: 0.35rem 0.55rem;
+		border: 1px solid var(--border);
+		border-radius: 0.3rem;
+		background: var(--bg-card);
+		font-size: 0.85rem;
+	}
+	.sp-match { font-weight: 700; color: var(--accent); }
+	.sp-side { font-variant-numeric: tabular-nums; }
+	.sp-side.red { color: #c0392b; text-align: right; }
+	.sp-side.blue { color: #2c5cb0; text-align: left; }
+	.sp-vs {
+		color: var(--text-faint);
+		font-size: 0.75rem;
+		text-transform: uppercase;
+	}
+	.sp-time {
+		color: var(--text-muted);
+		font-size: 0.78rem;
+		white-space: nowrap;
+	}
+	@media (max-width: 28rem) {
+		.sched-row {
+			grid-template-columns: 2.5rem 1fr 1fr;
+			grid-template-rows: auto auto;
+			row-gap: 0.1rem;
+		}
+		.sp-vs { display: none; }
+		.sp-side.red { grid-row: 1; grid-column: 2; text-align: left; }
+		.sp-side.blue { grid-row: 2; grid-column: 2; text-align: left; }
+		.sp-match { grid-row: 1 / span 2; }
+		.sp-time { grid-row: 1 / span 2; grid-column: 3; align-self: center; }
 	}
 </style>
