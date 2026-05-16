@@ -97,9 +97,15 @@
 
 			// 2) Schedule-driven pre-fill: pick the next match where one of my
 			//    assigned teams is playing and I haven't entered it yet.
+			//    Per-match overrides (from session.overrides) win over the
+			//    base team list when one applies to the (match, scout) pair.
 			const teams = session.effectiveTeams;
-			if (qmList.length && teams.length) {
-				const next = nextUnscoutedMatch(qmList, all, teams);
+			if (qmList.length && (teams.length || session.overrides?.length)) {
+				const next = nextUnscoutedMatch(qmList, all, {
+					assignedTeams: teams,
+					overrides: session.overrides ?? [],
+					scoutName: session.scoutName
+				});
 				if (next) {
 					suggestion = next;
 					// If only one of my teams is in the next match, auto-fill.

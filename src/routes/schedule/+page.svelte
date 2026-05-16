@@ -14,7 +14,13 @@
 		teamsInMatch,
 		nextUnscoutedMatch
 	} from '$lib/tba.js';
-	import { listAssignments, replaceAssignments } from '$lib/assignments.js';
+	import {
+		listAssignments,
+		replaceAssignments,
+		listOverrides,
+		addOverride,
+		removeOverride
+	} from '$lib/assignments.js';
 	import {
 		isPassphraseSet,
 		setPassphrase as setPassphraseRemote,
@@ -22,6 +28,12 @@
 		rotatePassphrase as rotatePassphraseRemote,
 		resetEventData
 	} from '$lib/event-meta.js';
+	import {
+		createReminder,
+		deleteReminder,
+		listReminders
+	} from '$lib/reminders.js';
+	import { reminders as reminderStore } from '$lib/reminders.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
 
 	// ─── shared state ──────────────────────────────────────────────────────
@@ -87,6 +99,148 @@
 	let rotateNew2 = $state('');
 	let showForgotHelp = $state(false);
 
+	// Send-reminder state
+	let reminderTarget = $state(''); // '' = broadcast; otherwise scout name
+	let reminderMatch = $state('');
+	let reminderText = $state('');
+	let recentReminders = $state(/** @type {any[]} */ ([]));
+
+	// Distinct scout names from current assignments — populates the target picker.
+	const reminderScouts = $derived.by(() => {
+		const names = new Set();
+		for (const r of assignRows) {
+			const n = r.scout_name.trim();
+			if (n) names.add(n);
+		}
+		return [...names].sort((a, b) => a.localeCompare(b));
+	});
+
+	// ── overrides + coverage check ──────────────────────────────────────────
+
+	/** Server-pulled override rows; refreshed by reload() and after edits. */
+	let overrideList = $state(/** @type {any[]} */ ([]));
+	/** Per-match new-override form state, keyed by match_number → {scout, team}. */
+	let overrideDraft = $state(/** @type {Record<string, {scout: string, team: string}>} */ ({}));
+
+	/**
+	 * Coverage check: for each qual match, group assigned (and base-resolved)
+	 * teams by scout. Flag scouts assigned to 2+ teams in the same match.
+	 * Item-5 spec: silent display only.
+	 */
+	const coverageConflicts = $derived.by(() => {
+		if (!qmList.length || !assignRows.length) return [];
+		// Build base scout → teams map from the current editor state (not the
+		// server, so the manager sees conflicts immediately as they edit).
+		const baseByScout = new Map();
+		for (const r of assignRows) {
+			const name = r.scout_name.trim();
+			if (!name) continue;
+			const teams = (r.teamsText || '')
+				.split(/[\s,]+/)
+				.map((s) => Number(s.replace(/[^0-9]/g, '')))
+				.filter((n) => Number.isFinite(n) && n > 0);
+			if (teams.length === 0) continue;
+			const prev = baseByScout.get(name) ?? new Set();
+			for (const t of teams) prev.add(t);
+			baseByScout.set(name, prev);
+		}
+		// Build overrides map: { 'match:scout(lower)' → Set<teams> }
+		const overrideKey = (m, s) => `${m}:${String(s ?? '').trim().toLowerCase()}`;
+		const overrideMap = new Map();
+		for (const o of overrideList) {
+			const k = overrideKey(o.match_number, o.scout_name);
+			const set = overrideMap.get(k) ?? new Set();
+			set.add(Number(o.team_number));
+			overrideMap.set(k, set);
+		}
+		const conflicts = [];
+		for (const m of qmList) {
+			const playing = new Set();
+			for (const arr of [m.alliances?.red?.team_keys ?? [], m.alliances?.blue?.team_keys ?? []]) {
+				for (const k of arr) {
+					const n = parseInt(String(k).replace(/^frc/, ''), 10);
+					if (Number.isFinite(n)) playing.add(n);
+				}
+			}
+			for (const [scout, baseSet] of baseByScout) {
+				const overrides = overrideMap.get(overrideKey(m.match_number, scout));
+				const effective = overrides && overrides.size > 0
+					? [...overrides].filter((t) => playing.has(t))
+					: [...baseSet].filter((t) => playing.has(t));
+				if (effective.length >= 2) {
+					conflicts.push({
+						match: m.match_number,
+						scout,
+						teams: effective.sort((a, b) => a - b),
+						hasOverride: Boolean(overrides && overrides.size > 0)
+					});
+				}
+			}
+		}
+		return conflicts;
+	});
+
+	/** Overrides grouped by match for the preview row UI. */
+	const overridesByMatch = $derived.by(() => {
+		const map = new Map();
+		for (const o of overrideList) {
+			const arr = map.get(o.match_number) ?? [];
+			arr.push(o);
+			map.set(o.match_number, arr);
+		}
+		return map;
+	});
+
+	function draftFor(matchNumber) {
+		const key = String(matchNumber);
+		if (!overrideDraft[key]) overrideDraft[key] = { scout: '', team: '' };
+		return overrideDraft[key];
+	}
+
+	async function saveOverride(matchNumber) {
+		err = '';
+		msg = '';
+		const d = draftFor(matchNumber);
+		if (!d.scout?.trim() || !Number(d.team)) {
+			err = 'Pick both a scout and a team.';
+			return;
+		}
+		if (passphraseSetRemote && !session.managerToken) {
+			err = 'Verify the manager passphrase before saving overrides.';
+			return;
+		}
+		try {
+			busy = true;
+			await addOverride(
+				session.eventCode,
+				{ matchNumber, scoutName: d.scout.trim(), teamNumber: Number(d.team) },
+				session.managerToken
+			);
+			d.scout = '';
+			d.team = '';
+			overrideList = await listOverrides(session.eventCode);
+			msg = `Override added for Q${matchNumber}.`;
+		} catch (e) {
+			err = e?.message ?? String(e);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function deleteOverride(id) {
+		err = '';
+		msg = '';
+		try {
+			busy = true;
+			await removeOverride(session.eventCode, id, session.managerToken);
+			overrideList = overrideList.filter((o) => o.id !== id);
+		} catch (e) {
+			err = e?.message ?? String(e);
+		} finally {
+			busy = false;
+		}
+	}
+
 	/** Assignment editor rows. {scout_name, teamsText} so the user can edit
 	 *  the team list as a comma-separated string. We parse to numbers on save. */
 	let assignRows = $state(/** @type {{scout_name: string, teamsText: string}[]} */ ([]));
@@ -120,6 +274,18 @@
 					.sort((a, b) => a.scout_name.localeCompare(b.scout_name));
 				if (assignRows.length === 0) {
 					assignRows = [{ scout_name: '', teamsText: '' }];
+				}
+				// Pull a live list of reminders so the manager can see what's already
+				// out there (and delete stale ones).
+				try {
+					recentReminders = await listReminders(session.eventCode);
+				} catch (_e) {
+					recentReminders = [];
+				}
+				try {
+					overrideList = await listOverrides(session.eventCode);
+				} catch (_e) {
+					overrideList = [];
 				}
 			}
 		} catch (e) {
@@ -278,6 +444,53 @@
 			rotateNew = '';
 			rotateNew2 = '';
 			msg = 'Passphrase rotated. Other manager devices will need the new passphrase before they can publish.';
+		} catch (e) {
+			err = e?.message ?? String(e);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function sendReminder() {
+		err = '';
+		msg = '';
+		try {
+			if (!reminderText.trim()) throw new Error('Reminder message is empty.');
+			if (passphraseSetRemote && !session.managerToken) {
+				throw new Error('Verify the manager passphrase before sending.');
+			}
+			busy = true;
+			const matchNum = Number(reminderMatch);
+			await createReminder(session.eventCode, {
+				scoutName: reminderTarget || undefined,
+				matchNumber: Number.isFinite(matchNum) && matchNum > 0 ? matchNum : undefined,
+				message: reminderText,
+				author: session.scoutName || null,
+				managerToken: session.managerToken
+			});
+			reminderText = '';
+			reminderMatch = '';
+			msg = reminderTarget
+				? `Reminder sent to ${reminderTarget}.`
+				: 'Reminder broadcast to every scout in this event.';
+			// Refresh the local list + the global store so the banner also sees it.
+			recentReminders = await listReminders(session.eventCode);
+			await reminderStore.pull();
+		} catch (e) {
+			err = e?.message ?? String(e);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function removeReminder(id) {
+		err = '';
+		msg = '';
+		try {
+			busy = true;
+			await deleteReminder(session.eventCode, id, session.managerToken);
+			recentReminders = recentReminders.filter((r) => r.id !== id);
+			await reminderStore.pull();
 		} catch (e) {
 			err = e?.message ?? String(e);
 		} finally {
@@ -552,6 +765,102 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 					</button>
 				</div>
 			</section>
+			<!-- ── Coverage check ──────────────────────────────────────── -->
+			<section>
+				<h2>Coverage check</h2>
+				<p class="muted">
+					Spots a single scout assigned to two-plus teams in the same match. Click the
+					match number to jump to the schedule row, where you can add a per-match
+					override that picks one team for this match only.
+				</p>
+				{#if coverageConflicts.length === 0}
+					<p class="muted small ok-inline">✓ No conflicts.</p>
+				{:else}
+					<ul class="conflict-list">
+						{#each coverageConflicts as c (c.match + ':' + c.scout)}
+							<li class="conflict-row">
+								<a class="cf-match" href={`#match-${c.match}`}>Q{c.match}</a>
+								<span class="cf-scout">{c.scout}</span>
+								<span class="cf-teams">{c.teams.join(' · ')}</span>
+								{#if c.hasOverride}
+									<span class="cf-tag">override active, still overlaps</span>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+
+			<!-- ── Send reminder (manager) ───────────────────────────── -->
+			<section>
+				<h2>Send reminder</h2>
+				<p class="muted">
+					Posts a banner to the targeted scout (or everyone) until they dismiss
+					it. Expires automatically after 2 hours. Scouts also get an automatic
+					banner 15 minutes before any match where one of their assigned teams
+					plays — no action needed for those.
+				</p>
+
+				<div class="reminder-form">
+					<label class="field">
+						<span class="label">Recipient</span>
+						<select bind:value={reminderTarget}>
+							<option value="">Everyone</option>
+							{#each reminderScouts as name}
+								<option value={name}>{name}</option>
+							{/each}
+						</select>
+					</label>
+
+					<label class="field reminder-match">
+						<span class="label">Match (optional)</span>
+						<input
+							type="number"
+							bind:value={reminderMatch}
+							placeholder="e.g. 15"
+							inputmode="numeric"
+						/>
+					</label>
+
+					<label class="field reminder-msg">
+						<span class="label">Message</span>
+						<input
+							type="text"
+							bind:value={reminderText}
+							placeholder="e.g. Q15 starts in 5 min — get to position"
+							maxlength="200"
+						/>
+					</label>
+
+					<button class="primary" disabled={busy || !reminderText.trim()} onclick={sendReminder}>
+						{busy ? '…' : 'Send reminder'}
+					</button>
+				</div>
+
+				{#if recentReminders.length > 0}
+					<h3 class="reminder-active-head">Active reminders</h3>
+					<ul class="reminder-list">
+						{#each recentReminders as r (r.id)}
+							<li class="reminder-row">
+								<div class="rr-body">
+									<span class="rr-target">
+										{r.scout_name ? `→ ${r.scout_name}` : '→ everyone'}
+									</span>
+									{#if r.match_number}<span class="rr-match">Q{r.match_number}</span>{/if}
+									<span class="rr-msg">{r.message}</span>
+								</div>
+								<button
+									type="button"
+									class="rr-x"
+									aria-label="Delete reminder"
+									onclick={() => removeReminder(r.id)}
+								>✕</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+
 			<!-- ── Schedule preview (manager) ──────────────────────────── -->
 			{#if cached && qmList.length}
 				<section>
@@ -562,16 +871,61 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 					<ol class="sched-preview">
 						{#each qmList as m (m.match_number)}
 							{@const matchTime = m.actual_time ?? m.predicted_time ?? m.time ?? null}
-							{@const red = (m.alliances?.red?.team_keys ?? []).map((k) => String(k).replace(/^frc/, ''))}
-							{@const blue = (m.alliances?.blue?.team_keys ?? []).map((k) => String(k).replace(/^frc/, ''))}
-							<li class="sched-row">
-								<span class="sp-match">Q{m.match_number}</span>
-								<span class="sp-side red">{red.join(' · ')}</span>
-								<span class="sp-vs">vs</span>
-								<span class="sp-side blue">{blue.join(' · ')}</span>
-								{#if matchTime}
-									<span class="sp-time">{timeOfDay(matchTime)}</span>
-								{/if}
+							{@const red = (m.alliances?.red?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')))}
+							{@const blue = (m.alliances?.blue?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')))}
+							{@const myOv = overridesByMatch.get(m.match_number) ?? []}
+							{@const draft = draftFor(m.match_number)}
+							<li class="sched-li" id={`match-${m.match_number}`}>
+								<div class="sched-row">
+									<span class="sp-match">Q{m.match_number}</span>
+									<span class="sp-side red">{red.join(' · ')}</span>
+									<span class="sp-vs">vs</span>
+									<span class="sp-side blue">{blue.join(' · ')}</span>
+									{#if matchTime}
+										<span class="sp-time">{timeOfDay(matchTime)}</span>
+									{/if}
+								</div>
+								<details class="override-editor">
+									<summary>
+										✎ Override
+										{#if myOv.length > 0}<span class="ov-pill">{myOv.length}</span>{/if}
+									</summary>
+									{#if myOv.length > 0}
+										<ul class="ov-list">
+											{#each myOv as o (o.id)}
+												<li class="ov-row">
+													<span>{o.scout_name} watches <strong>{o.team_number}</strong></span>
+													<button
+														type="button"
+														class="ov-x"
+														aria-label="Remove override"
+														onclick={() => deleteOverride(o.id)}
+													>✕</button>
+												</li>
+											{/each}
+										</ul>
+									{/if}
+									<div class="ov-form">
+										<select bind:value={draft.scout}>
+											<option value="">Scout…</option>
+											{#each reminderScouts as name}
+												<option value={name}>{name}</option>
+											{/each}
+										</select>
+										<select bind:value={draft.team}>
+											<option value="">Team…</option>
+											{#each [...red, ...blue] as t}
+												<option value={String(t)}>{t}</option>
+											{/each}
+										</select>
+										<button
+											type="button"
+											class="primary ov-add"
+											disabled={busy || !draft.scout || !draft.team}
+											onclick={() => saveOverride(m.match_number)}
+										>Add</button>
+									</div>
+								</details>
 							</li>
 						{/each}
 					</ol>
@@ -943,6 +1297,68 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		font-weight: 600;
 	}
 
+	/* ── manager: send reminder ─────────────────────────────────── */
+	.reminder-form {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+		align-items: end;
+	}
+	.reminder-form .field { margin-bottom: 0; }
+	.reminder-form .reminder-msg { grid-column: 1 / -1; }
+	.reminder-form select {
+		font: inherit;
+		padding: 0.55rem 0.7rem;
+		border: 1px solid var(--border-strong);
+		border-radius: 0.4rem;
+		background: var(--bg-card);
+		color: var(--text-primary);
+	}
+	.reminder-form .primary { grid-column: 1 / -1; justify-self: start; }
+
+	.reminder-active-head {
+		margin: 1rem 0 0.4rem;
+		font-size: 0.85rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--text-muted);
+	}
+	.reminder-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.reminder-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		padding: 0.4rem 0.6rem;
+		background: var(--bg-card);
+		border: 1px solid var(--border);
+		border-radius: 0.35rem;
+		font-size: 0.85rem;
+	}
+	.rr-body { flex: 1 1 0; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: baseline; }
+	.rr-target { color: var(--text-muted); font-size: 0.78rem; }
+	.rr-match { font-weight: 700; color: var(--accent); }
+	.rr-msg { color: var(--text-primary); }
+	.rr-x {
+		background: transparent;
+		border: none;
+		font-size: 1rem;
+		color: var(--text-faint);
+		cursor: pointer;
+		padding: 0 0.3rem;
+	}
+	.rr-x:hover { color: var(--danger); }
+
+	@media (max-width: 28rem) {
+		.reminder-form { grid-template-columns: 1fr; }
+	}
+
 	/* ── manager: full-schedule preview ─────────────────────────── */
 	.sched-preview {
 		list-style: none;
@@ -988,5 +1404,108 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		.sp-side.blue { grid-row: 2; grid-column: 2; text-align: left; }
 		.sp-match { grid-row: 1 / span 2; }
 		.sp-time { grid-row: 1 / span 2; grid-column: 3; align-self: center; }
+	}
+
+	.sched-li { list-style: none; }
+	.override-editor {
+		margin: 0.15rem 0 0.3rem 2.9rem;
+		font-size: 0.82rem;
+	}
+	.override-editor summary {
+		cursor: pointer;
+		color: var(--text-muted);
+		font-weight: 500;
+		padding: 0.15rem 0;
+	}
+	.override-editor[open] summary { color: var(--accent); font-weight: 600; }
+	.ov-pill {
+		display: inline-block;
+		margin-left: 0.3rem;
+		padding: 0 0.4rem;
+		background: var(--accent-soft);
+		color: var(--accent);
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 700;
+	}
+	.ov-list {
+		list-style: none;
+		padding: 0.3rem 0 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.ov-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		background: var(--bg-subtle);
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.3rem;
+	}
+	.ov-x {
+		background: transparent;
+		border: none;
+		color: var(--text-faint);
+		cursor: pointer;
+		font-size: 0.9rem;
+	}
+	.ov-x:hover { color: var(--danger); }
+	.ov-form {
+		display: flex;
+		gap: 0.35rem;
+		margin-top: 0.4rem;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+	.ov-form select {
+		font: inherit;
+		font-size: 0.82rem;
+		padding: 0.3rem 0.45rem;
+		border: 1px solid var(--border-strong);
+		border-radius: 0.3rem;
+		background: var(--bg-card);
+		color: var(--text-primary);
+	}
+	.ov-add {
+		font-size: 0.82rem;
+		padding: 0.3rem 0.7rem;
+	}
+
+	/* ── coverage check ─────────────────────────────────────────── */
+	.conflict-list {
+		list-style: none;
+		padding: 0;
+		margin: 0.4rem 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.conflict-row {
+		display: flex;
+		gap: 0.45rem;
+		align-items: baseline;
+		flex-wrap: wrap;
+		padding: 0.4rem 0.6rem;
+		background: var(--warning-bg);
+		border: 1px solid var(--warning-border);
+		border-radius: 0.35rem;
+		font-size: 0.85rem;
+		color: var(--warning);
+	}
+	.cf-match {
+		font-weight: 700;
+		text-decoration: none;
+		color: var(--warning);
+		border-bottom: 1px dotted currentColor;
+	}
+	.cf-scout { font-weight: 600; }
+	.cf-teams { font-variant-numeric: tabular-nums; }
+	.cf-tag {
+		margin-left: auto;
+		color: var(--text-muted);
+		font-size: 0.75rem;
+		font-style: italic;
 	}
 </style>

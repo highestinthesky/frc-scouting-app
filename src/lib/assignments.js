@@ -101,7 +101,10 @@ export async function listAssignments(eventCode) {
 export async function pullAndApplyForScout(eventCode, scoutName) {
 	const name = (scoutName ?? '').trim().toLowerCase();
 	if (!name) return session.assignedTeams ?? [];
-	const all = await listAssignments(eventCode);
+	const [all, overrideRows] = await Promise.all([
+		listAssignments(eventCode),
+		listOverrides(eventCode)
+	]);
 	const mine = all
 		.filter((r) => String(r.scout_name ?? '').trim().toLowerCase() === name)
 		.map((r) => Number(r.team_number))
@@ -110,11 +113,131 @@ export async function pullAndApplyForScout(eventCode, scoutName) {
 	// Compare against current state before writing — avoid touching IndexedDB
 	// when nothing changed (and avoid spurious effect runs).
 	const cur = session.assignedTeams ?? [];
-	const same = cur.length === dedup.length && cur.every((v, i) => v === dedup[i]);
-	if (!same) {
-		await session.update({ assignedTeams: dedup });
-	}
+	const sameTeams = cur.length === dedup.length && cur.every((v, i) => v === dedup[i]);
+	if (!sameTeams) await session.update({ assignedTeams: dedup });
+
+	// Overrides: cache the whole list (managers want it all; scouts only
+	// care about their own rows but the volume is tiny so we don't filter).
+	const ov = overrideRows.map((r) => ({
+		id: r.id,
+		match_number: Number(r.match_number),
+		scout_name: String(r.scout_name ?? ''),
+		team_number: Number(r.team_number)
+	}));
+	const curOv = session.overrides ?? [];
+	const sameOv =
+		curOv.length === ov.length &&
+		curOv.every(
+			(v, i) =>
+				v.match_number === ov[i].match_number &&
+				v.scout_name === ov[i].scout_name &&
+				v.team_number === ov[i].team_number
+		);
+	if (!sameOv) await session.update({ overrides: ov });
+
 	return dedup;
+}
+
+// ─── per-match overrides ──────────────────────────────────────────────────
+//
+// An override row reads: "in match M, scout S watches team T (instead of
+// whatever the base assignments table says)." Multiple rows per (M, S) are
+// allowed so a scout can watch two teams in a single match. If any
+// override row exists for (M, S), it REPLACES the base for that match.
+
+/**
+ * Read every override row for an event. Cheap (typically a handful of rows).
+ *
+ * @param {string} eventCode
+ * @returns {Promise<{id, match_number, scout_name, team_number}[]>}
+ */
+export async function listOverrides(eventCode) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code) return [];
+	const sid = await deriveSessionId(code);
+	if (!sid) return [];
+	const client = createSupabaseClient(sid);
+	const { data, error } = await client
+		.from('assignment_overrides')
+		.select('id, match_number, scout_name, team_number')
+		.eq('session_id', sid)
+		.order('match_number', { ascending: true });
+	if (error) throw mapErr(error, 'load overrides');
+	return data ?? [];
+}
+
+/**
+ * Manager-only: add a single override row.
+ *
+ * @param {string} eventCode
+ * @param {{matchNumber: number, scoutName: string, teamNumber: number}} args
+ * @param {string} managerToken
+ */
+export async function addOverride(eventCode, { matchNumber, scoutName, teamNumber }, managerToken) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	const sid = await deriveSessionId(code);
+	if (!sid) throw new Error('Could not derive session id.');
+	const client = createSupabaseClient(sid, { managerToken });
+	const { error } = await client.from('assignment_overrides').insert({
+		session_id: sid,
+		event_code: code,
+		match_number: Number(matchNumber),
+		scout_name: String(scoutName ?? '').trim(),
+		team_number: Number(teamNumber)
+	});
+	// Dedupe-index 23505: caller probably already has this override; safe to ignore.
+	if (error && error.code !== '23505') throw mapErr(error, 'add override');
+}
+
+/**
+ * Manager-only: delete an override row by id.
+ *
+ * @param {string} eventCode
+ * @param {string} id
+ * @param {string} managerToken
+ */
+export async function removeOverride(eventCode, id, managerToken) {
+	const sid = await deriveSessionId(eventCode);
+	if (!sid) throw new Error('Could not derive session id.');
+	const client = createSupabaseClient(sid, { managerToken });
+	const { error } = await client.from('assignment_overrides').delete().eq('id', id);
+	if (error) throw mapErr(error, 'remove override');
+}
+
+/**
+ * Pure resolution: for a single match, return the set of team numbers this
+ * scout is responsible for. Overrides win; otherwise base ∩ teams-in-match.
+ *
+ * @param {object} match  TBA match object
+ * @param {string} scoutName
+ * @param {number[]} baseAssignments
+ * @param {{match_number: number, scout_name: string, team_number: number}[]} overrides
+ * @returns {number[]}
+ */
+export function resolveTeamsForMatch(match, scoutName, baseAssignments, overrides) {
+	if (!match) return [];
+	const name = (scoutName ?? '').trim().toLowerCase();
+	const mn = match.match_number;
+	const playing = teamsInMatchSet(match);
+	const override = (overrides ?? [])
+		.filter((o) => o.match_number === mn && String(o.scout_name).trim().toLowerCase() === name)
+		.map((o) => Number(o.team_number))
+		.filter((t) => Number.isFinite(t) && playing.has(t));
+	if (override.length > 0) return [...new Set(override)].sort((a, b) => a - b);
+	return (baseAssignments ?? [])
+		.filter((t) => Number.isFinite(t) && playing.has(t))
+		.sort((a, b) => a - b);
+}
+
+function teamsInMatchSet(match) {
+	const out = new Set();
+	for (const arr of [match?.alliances?.red?.team_keys, match?.alliances?.blue?.team_keys]) {
+		for (const k of arr ?? []) {
+			const n = parseInt(String(k).replace(/^frc/, ''), 10);
+			if (Number.isFinite(n)) out.add(n);
+		}
+	}
+	return out;
 }
 
 function mapErr(err, action) {

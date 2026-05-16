@@ -262,28 +262,60 @@ export function teamsInMatch(match) {
  * the next match where any of my teams are playing and I haven't already
  * recorded a (matchNumber, teamNumber) entry for that team.
  *
- * Returns `{ match, teams: number[] }` where `teams` is the subset of
- * `assignedTeams` actually playing in that match. Returns null when every
- * scheduled appearance has been covered, or there's no schedule, or no
- * teams assigned.
+ * The third argument may be either a plain `number[]` (the legacy
+ * "watch-these-teams-everywhere" model) or an options object that supplies
+ * `assignedTeams` plus `overrides` and `scoutName` for per-match override
+ * resolution. Overrides win for any (match, scout) they specify; otherwise
+ * the base team list applies.
  *
  * @param {TBAMatch[]} qmList
- * @param {object[]} entries           local entries (from listEntries())
- * @param {number[]} assignedTeams     team numbers the scout is watching
+ * @param {object[]} entries
+ * @param {number[]|{assignedTeams: number[], overrides?: any[], scoutName?: string}} opts
  * @returns {{match: TBAMatch, teams: number[]}|null}
  */
-export function nextUnscoutedMatch(qmList, entries, assignedTeams) {
-	if (!qmList.length || !assignedTeams?.length) return null;
+export function nextUnscoutedMatch(qmList, entries, opts) {
+	const { assignedTeams, overrides, scoutName } = normalizeOpts(opts);
+	if (!qmList.length) return null;
 	const done = new Set(entries.map((e) => `${e.matchNumber}:${e.teamNumber}`));
-	const teamSet = new Set(assignedTeams.filter(Number.isFinite));
+	const scoutLc = (scoutName ?? '').trim().toLowerCase();
+	const hasOverrides = scoutLc && Array.isArray(overrides) && overrides.length > 0;
 	for (const match of qmList) {
-		const playing = teamsInMatchSet(match);
-		const pending = [...teamSet].filter(
-			(t) => playing.has(t) && !done.has(`${match.match_number}:${t}`)
-		);
+		const myTeams = resolveMyTeams(match, scoutLc, assignedTeams, overrides, hasOverrides);
+		const pending = myTeams.filter((t) => !done.has(`${match.match_number}:${t}`));
 		if (pending.length > 0) return { match, teams: pending };
 	}
 	return null;
+}
+
+function normalizeOpts(opts) {
+	if (Array.isArray(opts)) {
+		return { assignedTeams: opts, overrides: [], scoutName: '' };
+	}
+	return {
+		assignedTeams: opts?.assignedTeams ?? [],
+		overrides: opts?.overrides ?? [],
+		scoutName: opts?.scoutName ?? ''
+	};
+}
+
+function resolveMyTeams(match, scoutLc, baseAssignments, overrides, hasOverrides) {
+	const playing = teamsInMatchSet(match);
+	if (hasOverrides) {
+		const overrideTeams = overrides
+			.filter(
+				(o) =>
+					o.match_number === match.match_number &&
+					String(o.scout_name ?? '').trim().toLowerCase() === scoutLc
+			)
+			.map((o) => Number(o.team_number))
+			.filter((t) => Number.isFinite(t) && playing.has(t));
+		if (overrideTeams.length > 0) {
+			return [...new Set(overrideTeams)].sort((a, b) => a - b);
+		}
+	}
+	return (baseAssignments ?? [])
+		.filter((t) => Number.isFinite(t) && playing.has(t))
+		.sort((a, b) => a - b);
 }
 
 function teamsInMatchSet(match) {

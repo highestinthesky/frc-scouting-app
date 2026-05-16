@@ -25,6 +25,14 @@ class Session {
 	 */
 	localExtraTeams = $state(/** @type {number[]} */ ([]));
 	/**
+	 * Per-match assignment overrides for the event. Flat list pulled from
+	 * Supabase on each sync tick. Shape: {match_number, scout_name, team_number}.
+	 * Cached on every device (managers need them all; scouts only consume
+	 * rows targeting their name, but the row count is small enough that we
+	 * don't filter at cache time).
+	 */
+	overrides = $state(/** @type {any[]} */ ([]));
+	/**
 	 * Manager passphrase token — SHA-256 hex of (passphrase + ':' + eventCode).
 	 * Sent as `x-manager-token` on writes that hit schedules/assignments.
 	 * Only meaningful on devices acting as managers. Stored in plaintext in
@@ -62,6 +70,8 @@ class Session {
 		this.assignedTeams = Array.isArray(at) ? at.filter(Number.isFinite) : [];
 		const le = await getSetting('localExtraTeams');
 		this.localExtraTeams = Array.isArray(le) ? le.filter(Number.isFinite) : [];
+		const ov = await getSetting('overrides');
+		this.overrides = Array.isArray(ov) ? ov : [];
 		this.managerToken = (await getSetting('managerToken')) ?? '';
 		this.tbaApiKey = (await getSetting('tbaApiKey')) ?? '';
 		// One-time migration cleanup: drop the obsolete pre-assignments setting
@@ -92,6 +102,11 @@ class Session {
 			const cleaned = (patch.localExtraTeams ?? []).filter(Number.isFinite);
 			this.localExtraTeams = cleaned;
 			await setSetting('localExtraTeams', cleaned);
+		}
+		if (patch.overrides !== undefined) {
+			const cleaned = Array.isArray(patch.overrides) ? patch.overrides : [];
+			this.overrides = cleaned;
+			await setSetting('overrides', cleaned);
 		}
 		if (patch.managerToken !== undefined) {
 			this.managerToken = patch.managerToken;
