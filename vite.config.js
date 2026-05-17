@@ -32,7 +32,20 @@ export default defineConfig({
 			},
 			workbox: {
 				// Cache the built app shell so it works offline.
-				globPatterns: ['**/*.{js,css,html,svg,png,ico,webp,woff,woff2}']
+				globPatterns: ['**/*.{js,css,html,svg,png,ico,webp,woff,woff2}'],
+				// Take over immediately on update. Without these flags a new
+				// service worker only activates after every tab to the site is
+				// closed — which means a broken deploy keeps serving stale
+				// code for hours. Trade-off: an in-flight request when the
+				// new SW activates may fail and need a retry. Acceptable
+				// because (a) scouting flows are short, (b) the alternative
+				// is users stuck on a broken version.
+				skipWaiting: true,
+				clientsClaim: true,
+				// Don't intercept cross-origin requests (TBA, Supabase) — they
+				// should always hit the network directly. The default
+				// behaviour is fine here, listed explicitly for clarity.
+				navigateFallbackDenylist: [/^\/api\//, /thebluealliance\.com/, /supabase\.co/]
 			},
 			devOptions: {
 				// Lets the PWA work in `npm run dev` so you can test offline mode locally.

@@ -43,11 +43,24 @@ export async function fetchAndCacheSchedule(eventCode, apiKey) {
 	}
 	const code = eventCode.trim().toLowerCase();
 	const url = `${TBA_BASE}/event/${code}/matches/simple`;
+	// 15-second hard timeout so a hung connection (flaky wifi, a broken
+	// service worker intercepting the request, a stuck CORS preflight)
+	// can never lock the UI in its busy state.
+	const ctrl = new AbortController();
+	const timer = setTimeout(() => ctrl.abort(), 15_000);
 	let resp;
 	try {
-		resp = await fetch(url, { headers: { 'X-TBA-Auth-Key': apiKey.trim() } });
-	} catch (_e) {
+		resp = await fetch(url, {
+			headers: { 'X-TBA-Auth-Key': apiKey.trim() },
+			signal: ctrl.signal
+		});
+	} catch (e) {
+		if (e?.name === 'AbortError') {
+			throw new Error('TBA request timed out after 15s. Try again, or do a hard refresh if the issue persists.');
+		}
 		throw new Error('Could not reach The Blue Alliance. Check your network connection.');
+	} finally {
+		clearTimeout(timer);
 	}
 	if (resp.status === 401) {
 		throw new Error('TBA API key not accepted (401). Check Schedule → TBA API key.');
