@@ -11,13 +11,16 @@
 		init as syncInit,
 		setEventCode as syncSetEventCode
 	} from '$lib/sync.svelte.js';
+	import { reminders } from '$lib/reminders.svelte.js';
 	import SessionSetup from '$lib/components/SessionSetup.svelte';
+	import ReminderBanner from '$lib/components/ReminderBanner.svelte';
 
 	let { children } = $props();
 
 	onMount(async () => {
 		await Promise.all([session.load(), role.load(), theme.load()]);
 		await syncInit();
+		await reminders.init();
 	});
 
 	// Re-scope the sync layer whenever the user changes their event code in
@@ -98,6 +101,8 @@
 			Settings
 		</a>
 	</nav>
+
+	<ReminderBanner />
 
 	{@render children()}
 {/if}

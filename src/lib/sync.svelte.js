@@ -23,6 +23,7 @@ import {
 } from './db.js';
 import { pullScheduleIfStale } from './tba.js';
 import { pullAndApplyForScout } from './assignments.js';
+import { reminders } from './reminders.svelte.js';
 import { session } from './session.svelte.js';
 
 const POLL_INTERVAL_MS = 3000;
@@ -293,8 +294,13 @@ async function pullScheduleAndAssignments() {
 	// Schedule first — the entry form's next-match suggestion depends on it
 	// more than the assignment list does (assignments are nice-to-have, the
 	// schedule is mandatory for any pre-fill to work).
-	await pullScheduleIfStale(code);
+	const fresh = await pullScheduleIfStale(code);
 	if (session.scoutName) {
 		await pullAndApplyForScout(code, session.scoutName);
 	}
+	// Refresh the reminders store too. Server reminders are cheap (small rows,
+	// short list). If the schedule was refreshed, also recompute the cached
+	// qual matches the auto-banner reads from.
+	await reminders.pull();
+	if (fresh) await reminders.refreshSchedule();
 }
