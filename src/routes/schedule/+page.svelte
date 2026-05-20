@@ -180,6 +180,34 @@
 		return conflicts;
 	});
 
+	/**
+	 * Roster derived from local entries + the assignment editor state.
+	 * For the manager to confirm who's been recording and who they've
+	 * assigned. Pure client-side, no extra Supabase call — entries are
+	 * already pulled by the sync layer.
+	 */
+	const scoutsInEvent = $derived.by(() => {
+		const map = new Map();
+		const get = (name) => {
+			if (!map.has(name)) map.set(name, { name, assigned: false, recording: false, count: 0, lastEntry: null });
+			return map.get(name);
+		};
+		for (const r of assignRows) {
+			const n = r.scout_name.trim();
+			if (!n) continue;
+			get(n).assigned = true;
+		}
+		for (const e of entries) {
+			const n = String(e.scoutName ?? '').trim();
+			if (!n) continue;
+			const info = get(n);
+			info.recording = true;
+			info.count += 1;
+			if (!info.lastEntry || e.createdAt > info.lastEntry) info.lastEntry = e.createdAt;
+		}
+		return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+	});
+
 	/** Overrides grouped by match for the preview row UI. */
 	const overridesByMatch = $derived.by(() => {
 		const map = new Map();
@@ -329,10 +357,30 @@
 
 	// ─── manager actions ───────────────────────────────────────────────────
 
+	/**
+	 * Safety net for long-running async ops. If the operation hasn't finished
+	 * in `maxMs`, force-reset `busy` to false and surface a generic error so
+	 * the UI can never wedge in a "…" state. The normal try/finally below
+	 * clears the timer first in the success/error path, so this only fires
+	 * when something genuinely hangs (a stale service worker intercepting a
+	 * fetch, an IndexedDB transaction stuck waiting on a lock, etc.).
+	 */
+	function armSafetyTimer(maxMs = 25_000) {
+		return setTimeout(() => {
+			if (busy) {
+				busy = false;
+				err =
+					err ||
+					'That took longer than expected and was cancelled. Try again, or do a hard refresh (Cmd+Shift+R) if the issue keeps happening.';
+			}
+		}, maxMs);
+	}
+
 	async function fetchFromTba() {
 		busy = true;
 		err = '';
 		msg = '';
+		const safety = armSafetyTimer();
 		try {
 			const matches = await fetchAndCacheSchedule(session.eventCode, tbaApiKey || session.tbaApiKey);
 			// Persist the key on this device so reloads don't lose it.
@@ -344,6 +392,7 @@
 		} catch (e) {
 			err = e?.message ?? String(e);
 		} finally {
+			clearTimeout(safety);
 			busy = false;
 		}
 	}
@@ -351,6 +400,7 @@
 	async function publishToTeammates() {
 		err = '';
 		msg = '';
+		let safety;
 		try {
 			if (!cached) throw new Error('Fetch the schedule from TBA first.');
 			if (passphraseSetRemote && !session.managerToken) {
@@ -367,6 +417,7 @@
 			);
 			if (!ok) return;
 			busy = true;
+			safety = armSafetyTimer();
 			const res = await publishSchedule(session.eventCode, cached.matches, {
 				managerToken: session.managerToken || undefined,
 				fetchedBy: session.scoutName || null
@@ -375,6 +426,7 @@
 		} catch (e) {
 			err = e?.message ?? String(e);
 		} finally {
+			if (safety) clearTimeout(safety);
 			busy = false;
 		}
 	}
@@ -765,6 +817,36 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 					</button>
 				</div>
 			</section>
+			<!-- ── Scouts in this event ────────────────────────────────── -->
+			<section>
+				<h2>Scouts in this event</h2>
+				<p class="muted">
+					Anyone who has either been assigned teams above or recorded an entry
+					for <code>{session.eventCode}</code>. Entries are pulled on the sync
+					tick, so a scout who's currently offline may not appear until they
+					reconnect.
+				</p>
+				{#if scoutsInEvent.length === 0}
+					<p class="muted small">Nobody yet. Add assignments above or wait for a scout to record their first entry.</p>
+				{:else}
+					<ul class="roster">
+						{#each scoutsInEvent as s (s.name)}
+							<li class="roster-row">
+								<span class="rs-name">{s.name}</span>
+								<span class="rs-tags">
+									{#if s.assigned}<span class="rs-tag assigned">assigned</span>{/if}
+									{#if s.recording}<span class="rs-tag recording">{s.count} {s.count === 1 ? 'entry' : 'entries'}</span>{/if}
+									{#if !s.assigned && s.recording}<span class="rs-tag warn">not assigned</span>{/if}
+								</span>
+								{#if s.lastEntry}
+									<span class="rs-last">last {relativeTime(s.lastEntry, now)}</span>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+
 			<!-- ── Coverage check ──────────────────────────────────────── -->
 			<section>
 				<h2>Coverage check</h2>
@@ -994,7 +1076,12 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 			</section>
 		{/if}
 
-		<!-- ── Upcoming matches (shared between roles) ────────────────── -->
+		<!-- ── Upcoming matches: scout-only ─────────────────────────────
+			Managers already see every match in the Schedule preview block
+			above; this section is filtered to the device's assigned teams,
+			which is empty for a manager device and just adds confusion.
+		-->
+		{#if !role.isManager}
 		<section>
 			<h2>Upcoming matches</h2>
 			{#if !cached}
@@ -1032,6 +1119,7 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 				</ul>
 			{/if}
 		</section>
+		{/if}
 	{/if}
 
 	{#if msg}<p class="banner ok">{msg}</p>{/if}
@@ -1472,6 +1560,41 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		font-size: 0.82rem;
 		padding: 0.3rem 0.7rem;
 	}
+
+	/* ── scouts roster ──────────────────────────────────────────── */
+	.roster {
+		list-style: none;
+		padding: 0;
+		margin: 0.4rem 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.roster-row {
+		display: flex;
+		gap: 0.5rem;
+		align-items: baseline;
+		flex-wrap: wrap;
+		padding: 0.4rem 0.6rem;
+		background: var(--bg-card);
+		border: 1px solid var(--border);
+		border-radius: 0.35rem;
+		font-size: 0.88rem;
+	}
+	.rs-name { font-weight: 700; }
+	.rs-tags { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+	.rs-tag {
+		font-size: 0.72rem;
+		padding: 0.1rem 0.45rem;
+		border-radius: 999px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.rs-tag.assigned { background: var(--accent-soft); color: var(--accent); }
+	.rs-tag.recording { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+	.rs-tag.warn { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+	.rs-last { margin-left: auto; color: var(--text-muted); font-size: 0.8rem; }
 
 	/* ── coverage check ─────────────────────────────────────────── */
 	.conflict-list {
