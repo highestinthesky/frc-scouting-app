@@ -114,7 +114,7 @@
 	   explicitly chose dark via Settings → data-theme="dark".
 
 	   Components consume these vars instead of hardcoding hex values. The
-	   accent (navy brand) stays the same in both themes for the app bar;
+	   accent (purple brand) stays the same in both themes for the app bar;
 	   everything else flips. */
 	:global(:root) {
 		--bg-page: #fafafa;
@@ -246,7 +246,7 @@
 	}
 	.role-badge.manager {
 		background: #ffb000;
-		color: #5f24a2;
+		color: #5f24a2; /* fixed dark purple on the static yellow chip — adapts poorly to dark mode otherwise */
 		font-weight: 700;
 	}
 

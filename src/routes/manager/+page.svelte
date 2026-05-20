@@ -677,7 +677,7 @@
 		border: 1px solid var(--border-strong);
 		border-radius: 0.4rem;
 	}
-	.search:focus { outline: 2px solid #5f24a2; border-color: #5f24a2; outline-offset: 1px; }
+	.search:focus { outline: 2px solid var(--accent); border-color: var(--accent); outline-offset: 1px; }
 	.sort-select {
 		font: inherit;
 		font-size: 0.88rem;
@@ -708,8 +708,8 @@
 		border: 1px solid transparent;
 		white-space: nowrap;
 	}
-	.btn.primary { background: #5f24a2; color: white; border-color: #5f24a2; }
-	.btn.primary:hover { background: #4e1c87; }
+	.btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+	.btn.primary:hover { background: var(--accent-hover); }
 	.btn.primary:disabled { opacity: 0.6; cursor: progress; }
 	.btn.secondary { background: var(--bg-card); border-color: #ccc; color: var(--text-primary); }
 	.btn.secondary:hover { background: var(--bg-subtle); }
@@ -742,7 +742,7 @@
 		cursor: pointer;
 	}
 	.chip:hover { background: #e5e5e5; }
-	.chip.active { background: #ece1f5; color: #5f24a2; border-color: #d4c2e8; font-weight: 600; }
+	.chip.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 	.chip.alliance-red { background: #fef2f2; color: #991b1b; border-color: #fca5a5; font-weight: 600; }
 	.chip.alliance-blue { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; font-weight: 600; }
 
@@ -759,7 +759,7 @@
 	}
 	.info.single { white-space: normal; }
 	.error {
-		background: #fdecea;
+		background: var(--danger-bg);
 		color: #842029;
 		padding: 0.55rem 0.75rem;
 		border-radius: 0.4rem;
@@ -873,7 +873,7 @@
 	}
 	.preview-label {
 		font-weight: 600;
-		color: #5f24a2;
+		color: var(--accent);
 		margin-right: 0.3rem;
 	}
 
@@ -947,7 +947,7 @@
 	.team-entry p strong {
 		display: inline-block;
 		width: 1rem;
-		color: #5f24a2;
+		color: var(--accent);
 	}
 	.team-entry p.brokedown { color: #991b1b; font-weight: 600; }
 	.team-entry p.brokedown strong { color: #991b1b; }
@@ -970,7 +970,7 @@
 	.show-more {
 		background: none;
 		border: none;
-		color: #5f24a2;
+		color: var(--accent);
 		font: inherit;
 		font-size: 0.85rem;
 		font-weight: 600;
@@ -979,7 +979,7 @@
 		text-decoration: underline;
 		text-underline-offset: 2px;
 	}
-	.show-more:hover { color: #4e1c87; }
+	.show-more:hover { color: var(--accent-hover); }
 
 	/* ── responsive ───────────────────────────────────────────────── */
 	@media (max-width: 600px) {

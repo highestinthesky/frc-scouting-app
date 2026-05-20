@@ -179,7 +179,7 @@
 	.back {
 		font-size: 1.5rem;
 		text-decoration: none;
-		color: #5f24a2;
+		color: var(--accent);
 		padding: 0.25rem 0.5rem;
 	}
 	h1 { margin: 0; }
@@ -194,7 +194,7 @@
 	}
 	.muted { color: var(--text-faint); }
 	.error {
-		background: #fdecea;
+		background: var(--danger-bg);
 		color: #842029;
 		padding: 0.6rem 0.75rem;
 		border-radius: 0.4rem;
@@ -207,7 +207,7 @@
 	.back-link {
 		display: inline-block;
 		margin-top: 1rem;
-		color: #5f24a2;
+		color: var(--accent);
 		font-weight: 600;
 	}
 	.actions {
@@ -230,7 +230,7 @@
 		cursor: pointer;
 		border: 1px solid transparent;
 	}
-	.actions button.primary { background: #5f24a2; color: white; border: none; }
+	.actions button.primary { background: var(--accent); color: white; border: none; }
 	.actions button.primary:disabled { opacity: 0.6; cursor: progress; }
 	.actions button.danger {
 		background: var(--bg-card);
@@ -238,7 +238,7 @@
 		border-color: #c0392b;
 		margin-right: auto;
 	}
-	.actions button.danger:hover { background: #fdecea; }
+	.actions button.danger:hover { background: var(--danger-bg); }
 	.hint {
 		margin-top: 1rem;
 		font-size: 0.85rem;

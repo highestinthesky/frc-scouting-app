@@ -378,7 +378,7 @@
 	}
 	.ops button:hover, .ops a:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 	.ops button:disabled { opacity: 0.4; cursor: not-allowed; }
-	.ops .danger-btn:hover { background: #fdecea; border-color: var(--danger); color: var(--danger); }
+	.ops .danger-btn:hover { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
 	.ops .warn-btn:hover { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
 	.peek { font-size: 0.78rem; }
 </style>

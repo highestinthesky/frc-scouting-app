@@ -196,7 +196,7 @@
 	.back {
 		font-size: 1.5rem;
 		text-decoration: none;
-		color: #5f24a2;
+		color: var(--accent);
 		padding: 0.25rem 0.5rem;
 	}
 	h1 { margin: 0; font-size: 1.5rem; }
@@ -209,7 +209,7 @@
 	}
 	.muted { color: var(--text-faint); font-size: 0.9rem; margin: 0 0 0.6rem; }
 	.muted a { color: var(--accent); }
-	.ok { color: #5f24a2; margin-left: 0.5rem; }
+	.ok { color: var(--accent); margin-left: 0.5rem; }
 	.help { color: var(--text-faint); font-size: 0.82rem; }
 	code {
 		background: var(--bg-subtle);
@@ -228,14 +228,14 @@
 		text-align: left;
 		padding: 0.85rem 1rem;
 		background: var(--bg-card);
-		border: 2px solid #ccc;
+		border: 2px solid var(--border-strong);
 		border-radius: 0.5rem;
 		cursor: pointer;
 		font: inherit;
 	}
 	.roles button.selected {
-		border-color: #5f24a2;
-		background: #f4ebfa;
+		border-color: var(--accent);
+		background: var(--accent-soft);
 	}
 	.roles button strong { display: block; font-size: 1rem; }
 	.roles button small {
@@ -259,9 +259,9 @@
 		border-radius: 0.4rem;
 	}
 	input:focus {
-		outline: 2px solid #5f24a2;
+		outline: 2px solid var(--accent);
 		outline-offset: 1px;
-		border-color: #5f24a2;
+		border-color: var(--accent);
 	}
 	button.primary,
 	button.danger {
@@ -272,14 +272,14 @@
 		cursor: pointer;
 		border: 1px solid transparent;
 	}
-	button.primary { background: #5f24a2; color: white; border: none; }
+	button.primary { background: var(--accent); color: white; border: none; }
 	button.primary:disabled { opacity: 0.6; cursor: progress; }
 	button.danger {
 		background: var(--bg-card);
 		color: #c0392b;
 		border: 1px solid #c0392b;
 	}
-	button.danger:hover { background: #fdecea; }
+	button.danger:hover { background: var(--danger-bg); }
 
 	.status {
 		font-size: 0.9rem;
@@ -289,11 +289,11 @@
 		display: inline-block;
 		margin-bottom: 0.4rem;
 	}
-	.status.idle { background: #f3f4f6; color: var(--text-muted); }
-	.status.connected { background: #ecfdf5; color: #065f46; }
-	.status.connecting { background: #fefce8; color: #854d0e; }
-	.status.offline { background: #f3f4f6; color: var(--text-muted); }
-	.status.error { background: #fef2f2; color: #991b1b; }
+	.status.idle { background: var(--bg-subtle); color: var(--text-muted); }
+	.status.connected { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+	.status.connecting { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+	.status.offline { background: var(--bg-subtle); color: var(--text-muted); }
+	.status.error { background: var(--danger-bg); color: var(--danger); }
 	.sync-actions {
 		display: flex;
 		gap: 0.6rem;
@@ -302,7 +302,8 @@
 		margin-top: 0.5rem;
 	}
 	.sync-actions button.primary:disabled {
-		background: #93a3c4;
+		background: var(--border-strong);
+		color: var(--text-muted);
 		cursor: not-allowed;
 	}
 
