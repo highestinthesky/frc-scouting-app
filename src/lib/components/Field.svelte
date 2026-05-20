@@ -319,9 +319,9 @@
 		background: var(--bg-card);
 	}
 	input:focus, textarea:focus, select:focus {
-		outline: 2px solid #0b3d91;
+		outline: 2px solid #5f24a2;
 		outline-offset: 1px;
-		border-color: #0b3d91;
+		border-color: #5f24a2;
 	}
 	textarea {
 		resize: vertical;
@@ -423,8 +423,8 @@
 		color: white;
 	}
 	.pill.selected:not([data-color='red']):not([data-color='blue']) {
-		background: #0b3d91;
-		border-color: #0b3d91;
+		background: #5f24a2;
+		border-color: #5f24a2;
 		color: white;
 	}
 
@@ -444,7 +444,7 @@
 		font: inherit;
 	}
 	.toggle:focus-visible .track {
-		outline: 2px solid #0b3d91;
+		outline: 2px solid #5f24a2;
 		outline-offset: 2px;
 	}
 	.track {
@@ -466,7 +466,7 @@
 		border-radius: 50%;
 		transition: transform 120ms ease;
 	}
-	.toggle.on .track { background: #0b3d91; }
+	.toggle.on .track { background: #5f24a2; }
 	.toggle.on .thumb { transform: translateX(1.1rem); }
 	.bool-label {
 		font-size: 0.95rem;

@@ -297,7 +297,7 @@
 	.back {
 		font-size: 1.5rem;
 		text-decoration: none;
-		color: #0b3d91;
+		color: #5f24a2;
 		padding: 0.25rem 0.5rem;
 	}
 	h1 { margin: 0; }
@@ -412,7 +412,7 @@
 		font: inherit;
 		font-weight: 600;
 		padding: 0.7rem 1.2rem;
-		background: #0b3d91;
+		background: #5f24a2;
 		color: white;
 		border: none;
 		border-radius: 0.4rem;

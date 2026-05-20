@@ -196,7 +196,7 @@
 	.back {
 		font-size: 1.5rem;
 		text-decoration: none;
-		color: #0b3d91;
+		color: #5f24a2;
 		padding: 0.25rem 0.5rem;
 	}
 	h1 { margin: 0; font-size: 1.5rem; }
@@ -209,7 +209,7 @@
 	}
 	.muted { color: var(--text-faint); font-size: 0.9rem; margin: 0 0 0.6rem; }
 	.muted a { color: var(--accent); }
-	.ok { color: #0b3d91; margin-left: 0.5rem; }
+	.ok { color: #5f24a2; margin-left: 0.5rem; }
 	.help { color: var(--text-faint); font-size: 0.82rem; }
 	code {
 		background: var(--bg-subtle);
@@ -234,8 +234,8 @@
 		font: inherit;
 	}
 	.roles button.selected {
-		border-color: #0b3d91;
-		background: #f0f4fc;
+		border-color: #5f24a2;
+		background: #f4ebfa;
 	}
 	.roles button strong { display: block; font-size: 1rem; }
 	.roles button small {
@@ -259,9 +259,9 @@
 		border-radius: 0.4rem;
 	}
 	input:focus {
-		outline: 2px solid #0b3d91;
+		outline: 2px solid #5f24a2;
 		outline-offset: 1px;
-		border-color: #0b3d91;
+		border-color: #5f24a2;
 	}
 	button.primary,
 	button.danger {
@@ -272,7 +272,7 @@
 		cursor: pointer;
 		border: 1px solid transparent;
 	}
-	button.primary { background: #0b3d91; color: white; border: none; }
+	button.primary { background: #5f24a2; color: white; border: none; }
 	button.primary:disabled { opacity: 0.6; cursor: progress; }
 	button.danger {
 		background: var(--bg-card);

@@ -179,7 +179,7 @@
 	.back {
 		font-size: 1.5rem;
 		text-decoration: none;
-		color: #0b3d91;
+		color: #5f24a2;
 		padding: 0.25rem 0.5rem;
 	}
 	h1 { margin: 0; }
@@ -207,7 +207,7 @@
 	.back-link {
 		display: inline-block;
 		margin-top: 1rem;
-		color: #0b3d91;
+		color: #5f24a2;
 		font-weight: 600;
 	}
 	.actions {
@@ -230,7 +230,7 @@
 		cursor: pointer;
 		border: 1px solid transparent;
 	}
-	.actions button.primary { background: #0b3d91; color: white; border: none; }
+	.actions button.primary { background: #5f24a2; color: white; border: none; }
 	.actions button.primary:disabled { opacity: 0.6; cursor: progress; }
 	.actions button.danger {
 		background: var(--bg-card);

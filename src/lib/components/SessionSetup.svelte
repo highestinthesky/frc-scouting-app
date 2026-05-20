@@ -71,16 +71,16 @@
 		border-radius: 0.4rem;
 	}
 	input:focus {
-		outline: 2px solid #0b3d91;
+		outline: 2px solid #5f24a2;
 		outline-offset: 1px;
-		border-color: #0b3d91;
+		border-color: #5f24a2;
 	}
 	button {
 		width: 100%;
 		padding: 0.8rem 1rem;
 		font: inherit;
 		font-weight: 600;
-		background: #0b3d91;
+		background: #5f24a2;
 		color: white;
 		border: none;
 		border-radius: 0.4rem;

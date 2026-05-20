@@ -208,6 +208,94 @@
 		return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
 	});
 
+	// ── match-detail modal ────────────────────────────────────────────────
+
+	/** Match number currently open in the modal; null = closed. */
+	let editingMatch = $state(/** @type {number|null} */ (null));
+
+	function openMatch(n) {
+		editingMatch = n;
+		// Reset the per-match draft so the form starts empty each time.
+		const k = String(n);
+		if (!overrideDraft[k]) overrideDraft[k] = { scout: '', team: '' };
+	}
+	function closeMatch() { editingMatch = null; }
+
+	// ESC closes the modal.
+	$effect(() => {
+		if (editingMatch == null || typeof window === 'undefined') return;
+		const onKey = (e) => { if (e.key === 'Escape') closeMatch(); };
+		window.addEventListener('keydown', onKey);
+		return () => window.removeEventListener('keydown', onKey);
+	});
+
+	/** The full match object currently being edited. */
+	const editingMatchObj = $derived(
+		editingMatch == null ? null : qmList.find((m) => m.match_number === editingMatch) ?? null
+	);
+
+	/**
+	 * For the modal: each of the 6 teams in this match, with the scouts
+	 * currently effectively watching it (override if any → otherwise base).
+	 * Helps the manager see exactly what coverage looks like.
+	 */
+	const editingMatchCoverage = $derived.by(() => {
+		const m = editingMatchObj;
+		if (!m) return [];
+		const overrideRows = overrideList.filter((o) => o.match_number === m.match_number);
+		// Per-(match,scout) set of override team_numbers; if a scout has any,
+		// only those count as "their teams" for this match.
+		const overrideByScout = new Map();
+		for (const o of overrideRows) {
+			const lc = String(o.scout_name).trim().toLowerCase();
+			const set = overrideByScout.get(lc) ?? { displayName: o.scout_name, teams: new Set() };
+			set.teams.add(Number(o.team_number));
+			overrideByScout.set(lc, set);
+		}
+		// Effective scout → teams map for THIS match: override wins, else base.
+		const scoutTeams = new Map();
+		for (const r of assignRows) {
+			const name = r.scout_name.trim();
+			if (!name) continue;
+			const lc = name.toLowerCase();
+			if (overrideByScout.has(lc)) {
+				scoutTeams.set(name, [...overrideByScout.get(lc).teams]);
+			} else {
+				const base = (r.teamsText || '')
+					.split(/[\s,]+/)
+					.map((s) => Number(s.replace(/[^0-9]/g, '')))
+					.filter((n) => Number.isFinite(n) && n > 0);
+				scoutTeams.set(name, base);
+			}
+		}
+		// Also include scouts who have an override but no base row (rare but possible).
+		for (const { displayName, teams } of overrideByScout.values()) {
+			if (!scoutTeams.has(displayName)) scoutTeams.set(displayName, [...teams]);
+		}
+		// Now compute, for each of the 6 teams in this match, who's watching it.
+		const parseTeam = (key) => Number(String(key).replace(/^frc/, ''));
+		const allianceRows = [];
+		for (const color of ['red', 'blue']) {
+			const keys = m.alliances?.[color]?.team_keys ?? [];
+			for (const key of keys) {
+				const t = parseTeam(key);
+				if (!Number.isFinite(t)) continue;
+				const watchers = [];
+				for (const [scoutName, teams] of scoutTeams) {
+					if (teams.includes(t)) {
+						const override = overrideByScout.get(scoutName.toLowerCase());
+						watchers.push({
+							scout: scoutName,
+							viaOverride: Boolean(override)
+						});
+					}
+				}
+				allianceRows.push({ color, team: t, watchers });
+			}
+		}
+		return allianceRows;
+	});
+
 	/** Overrides grouped by match for the preview row UI. */
 	const overridesByMatch = $derived.by(() => {
 		const map = new Map();
@@ -861,7 +949,7 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 					<ul class="conflict-list">
 						{#each coverageConflicts as c (c.match + ':' + c.scout)}
 							<li class="conflict-row">
-								<a class="cf-match" href={`#match-${c.match}`}>Q{c.match}</a>
+								<button type="button" class="cf-match" onclick={() => openMatch(c.match)}>Q{c.match}</button>
 								<span class="cf-scout">{c.scout}</span>
 								<span class="cf-teams">{c.teams.join(' · ')}</span>
 								{#if c.hasOverride}
@@ -956,7 +1044,6 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 							{@const red = (m.alliances?.red?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')))}
 							{@const blue = (m.alliances?.blue?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')))}
 							{@const myOv = overridesByMatch.get(m.match_number) ?? []}
-							{@const draft = draftFor(m.match_number)}
 							<li class="sched-li" id={`match-${m.match_number}`}>
 								<div class="sched-row">
 									<span class="sp-match">Q{m.match_number}</span>
@@ -966,48 +1053,16 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 									{#if matchTime}
 										<span class="sp-time">{timeOfDay(matchTime)}</span>
 									{/if}
-								</div>
-								<details class="override-editor">
-									<summary>
-										✎ Override
+									<button
+										type="button"
+										class="sp-edit"
+										onclick={() => openMatch(m.match_number)}
+										aria-label={`Edit Q${m.match_number}`}
+									>
+										✎ Edit
 										{#if myOv.length > 0}<span class="ov-pill">{myOv.length}</span>{/if}
-									</summary>
-									{#if myOv.length > 0}
-										<ul class="ov-list">
-											{#each myOv as o (o.id)}
-												<li class="ov-row">
-													<span>{o.scout_name} watches <strong>{o.team_number}</strong></span>
-													<button
-														type="button"
-														class="ov-x"
-														aria-label="Remove override"
-														onclick={() => deleteOverride(o.id)}
-													>✕</button>
-												</li>
-											{/each}
-										</ul>
-									{/if}
-									<div class="ov-form">
-										<select bind:value={draft.scout}>
-											<option value="">Scout…</option>
-											{#each reminderScouts as name}
-												<option value={name}>{name}</option>
-											{/each}
-										</select>
-										<select bind:value={draft.team}>
-											<option value="">Team…</option>
-											{#each [...red, ...blue] as t}
-												<option value={String(t)}>{t}</option>
-											{/each}
-										</select>
-										<button
-											type="button"
-											class="primary ov-add"
-											disabled={busy || !draft.scout || !draft.team}
-											onclick={() => saveOverride(m.match_number)}
-										>Add</button>
-									</div>
-								</details>
+									</button>
+								</div>
 							</li>
 						{/each}
 					</ol>
@@ -1124,6 +1179,125 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 
 	{#if msg}<p class="banner ok">{msg}</p>{/if}
 	{#if err}<p class="banner err">{err}</p>{/if}
+
+	<!-- ── Match-detail modal ────────────────────────────────────────────
+		Manager taps "Edit" on a Schedule preview row OR a Coverage conflict
+		to open this. Shows the match's two alliances, who's currently
+		watching each team (base assignment or active override), and an
+		editor to add/remove overrides for this match.
+	-->
+	{#if editingMatchObj}
+		{@const m = editingMatchObj}
+		{@const matchTime = m.actual_time ?? m.predicted_time ?? m.time ?? null}
+		{@const matchOverrides = overrideList.filter((o) => o.match_number === m.match_number)}
+		{@const teamsRed = (m.alliances?.red?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')))}
+		{@const teamsBlue = (m.alliances?.blue?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')))}
+		{@const draft = draftFor(m.match_number)}
+		<div
+			class="modal-backdrop"
+			role="presentation"
+			onclick={(e) => { if (e.target === e.currentTarget) closeMatch(); }}
+		>
+			<div
+				class="modal-card"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="match-editor-title"
+			>
+				<header class="modal-head">
+					<h2 id="match-editor-title">
+						Q{m.match_number}
+						{#if matchTime}<span class="mh-time">· {timeOfDay(matchTime)}</span>{/if}
+					</h2>
+					<button type="button" class="modal-x" onclick={closeMatch} aria-label="Close">✕</button>
+				</header>
+
+				<div class="modal-body">
+					<!-- Coverage map: for each team, who's watching it. -->
+					<section class="mb-section">
+						<h3 class="mb-h">Coverage</h3>
+						<ul class="mb-coverage">
+							{#each editingMatchCoverage as row (row.color + ':' + row.team)}
+								<li class="mb-team" data-color={row.color}>
+									<span class="mb-color-tag">{row.color}</span>
+									<span class="mb-team-num">{row.team}</span>
+									<span class="mb-watchers">
+										{#if row.watchers.length === 0}
+											<em class="mb-none">no scout</em>
+										{:else}
+											{#each row.watchers as w, i}
+												{w.scout}{#if w.viaOverride} <small class="mb-override-tag">(override)</small>{/if}{#if i < row.watchers.length - 1}, {/if}
+											{/each}
+										{/if}
+									</span>
+								</li>
+							{/each}
+						</ul>
+					</section>
+
+					<!-- Active overrides for this match. -->
+					<section class="mb-section">
+						<h3 class="mb-h">
+							Overrides
+							{#if matchOverrides.length > 0}<span class="ov-pill">{matchOverrides.length}</span>{/if}
+						</h3>
+						{#if matchOverrides.length === 0}
+							<p class="muted small">
+								No overrides for this match. Base assignments apply.
+							</p>
+						{:else}
+							<ul class="mb-overrides">
+								{#each matchOverrides as o (o.id)}
+									<li class="mb-or-row">
+										<span><strong>{o.scout_name}</strong> watches <strong>{o.team_number}</strong></span>
+										<button
+											type="button"
+											class="ov-x"
+											aria-label="Remove override"
+											onclick={() => deleteOverride(o.id)}
+											disabled={busy}
+										>✕</button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+
+						<!-- Add an override for this match. -->
+						<div class="mb-form">
+							<label class="mb-field">
+								<span class="mb-label">Scout</span>
+								<select bind:value={draft.scout}>
+									<option value="">…</option>
+									{#each reminderScouts as name}
+										<option value={name}>{name}</option>
+									{/each}
+								</select>
+							</label>
+							<label class="mb-field">
+								<span class="mb-label">Watches team</span>
+								<select bind:value={draft.team}>
+									<option value="">…</option>
+									{#each [...teamsRed, ...teamsBlue] as t}
+										<option value={String(t)}>{t}</option>
+									{/each}
+								</select>
+							</label>
+							<button
+								type="button"
+								class="primary mb-add"
+								disabled={busy || !draft.scout || !draft.team}
+								onclick={() => saveOverride(m.match_number)}
+							>Add override</button>
+						</div>
+					</section>
+				</div>
+
+				<footer class="modal-foot">
+					<button type="button" class="secondary-btn" onclick={closeMatch}>Done</button>
+				</footer>
+			</div>
+		</div>
+	{/if}
 </main>
 
 <style>
@@ -1495,42 +1669,31 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 	}
 
 	.sched-li { list-style: none; }
-	.override-editor {
-		margin: 0.15rem 0 0.3rem 2.9rem;
-		font-size: 0.82rem;
-	}
-	.override-editor summary {
-		cursor: pointer;
+	.sp-edit {
+		background: transparent;
+		border: 1px solid var(--border);
 		color: var(--text-muted);
-		font-weight: 500;
-		padding: 0.15rem 0;
+		font: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		padding: 0.2rem 0.55rem;
+		border-radius: 0.35rem;
+		cursor: pointer;
+		align-self: center;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		white-space: nowrap;
 	}
-	.override-editor[open] summary { color: var(--accent); font-weight: 600; }
+	.sp-edit:hover { color: var(--accent); border-color: var(--accent); }
 	.ov-pill {
 		display: inline-block;
-		margin-left: 0.3rem;
 		padding: 0 0.4rem;
 		background: var(--accent-soft);
 		color: var(--accent);
 		border-radius: 999px;
-		font-size: 0.72rem;
+		font-size: 0.7rem;
 		font-weight: 700;
-	}
-	.ov-list {
-		list-style: none;
-		padding: 0.3rem 0 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-	}
-	.ov-row {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		background: var(--bg-subtle);
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.3rem;
 	}
 	.ov-x {
 		background: transparent;
@@ -1540,25 +1703,184 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		font-size: 0.9rem;
 	}
 	.ov-x:hover { color: var(--danger); }
-	.ov-form {
+
+	/* ── match-detail modal ─────────────────────────────────────── */
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.5);
 		display: flex;
-		gap: 0.35rem;
-		margin-top: 0.4rem;
 		align-items: center;
-		flex-wrap: wrap;
+		justify-content: center;
+		padding: 1rem;
+		z-index: 50;
+		animation: fadein 0.12s ease-out;
 	}
-	.ov-form select {
+	@keyframes fadein {
+		from { opacity: 0; }
+		to { opacity: 1; }
+	}
+	.modal-card {
+		background: var(--bg-card);
+		color: var(--text-primary);
+		border-radius: 0.6rem;
+		border: 1px solid var(--border);
+		box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+		width: 100%;
+		max-width: 30rem;
+		max-height: calc(100vh - 2rem);
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	.modal-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.85rem 1rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.modal-head h2 {
+		margin: 0;
+		font-size: 1.05rem;
+		font-weight: 700;
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--text-primary);
+		flex: 1 1 0;
+		min-width: 0;
+	}
+	.mh-time {
+		color: var(--text-muted);
+		font-weight: 500;
+		font-size: 0.9rem;
+		margin-left: 0.4rem;
+	}
+	.modal-x {
+		background: transparent;
+		border: none;
+		color: var(--text-faint);
+		font-size: 1.1rem;
+		cursor: pointer;
+		padding: 0.2rem 0.4rem;
+		line-height: 1;
+		border-radius: 0.25rem;
+	}
+	.modal-x:hover { color: var(--text-primary); background: var(--bg-subtle); }
+
+	.modal-body {
+		padding: 0.5rem 1rem 1rem;
+		overflow-y: auto;
+	}
+	.mb-section { margin-top: 0.9rem; }
+	.mb-section:first-child { margin-top: 0.3rem; }
+	.mb-h {
+		font-size: 0.78rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+		margin: 0 0 0.4rem;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.mb-coverage {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.mb-team {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0.55rem;
+		border: 1px solid var(--border);
+		border-left: 4px solid #999;
+		border-radius: 0.35rem;
+		background: var(--bg-card);
+		font-size: 0.88rem;
+	}
+	.mb-team[data-color='red'] { border-left-color: #c0392b; }
+	.mb-team[data-color='blue'] { border-left-color: #2c5cb0; }
+	.mb-color-tag {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--text-faint);
+		min-width: 2.4rem;
+	}
+	.mb-team-num { font-weight: 700; min-width: 3.5rem; }
+	.mb-watchers { color: var(--text-muted); flex: 1 1 0; min-width: 0; }
+	.mb-none { color: var(--text-faint); font-style: italic; }
+	.mb-override-tag {
+		color: var(--accent);
+		font-weight: 600;
+		font-size: 0.75rem;
+	}
+
+	.mb-overrides {
+		list-style: none;
+		padding: 0;
+		margin: 0 0 0.6rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.mb-or-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		background: var(--bg-subtle);
+		padding: 0.4rem 0.55rem;
+		border-radius: 0.35rem;
+		font-size: 0.88rem;
+	}
+
+	.mb-form {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+		align-items: end;
+		margin-top: 0.4rem;
+	}
+	.mb-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.mb-label {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.mb-field select {
 		font: inherit;
-		font-size: 0.82rem;
-		padding: 0.3rem 0.45rem;
+		padding: 0.45rem 0.55rem;
 		border: 1px solid var(--border-strong);
-		border-radius: 0.3rem;
+		border-radius: 0.35rem;
 		background: var(--bg-card);
 		color: var(--text-primary);
 	}
-	.ov-add {
-		font-size: 0.82rem;
-		padding: 0.3rem 0.7rem;
+	.mb-add {
+		grid-column: 1 / -1;
+		justify-self: start;
+		padding: 0.45rem 0.9rem;
+	}
+
+	.modal-foot {
+		padding: 0.65rem 1rem;
+		border-top: 1px solid var(--border);
+		display: flex;
+		justify-content: flex-end;
+	}
+
+	@media (max-width: 28rem) {
+		.modal-card { max-width: 100%; }
+		.mb-form { grid-template-columns: 1fr; }
 	}
 
 	/* ── scouts roster ──────────────────────────────────────────── */
@@ -1618,11 +1940,16 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		color: var(--warning);
 	}
 	.cf-match {
+		font: inherit;
 		font-weight: 700;
-		text-decoration: none;
 		color: var(--warning);
+		background: transparent;
+		border: none;
 		border-bottom: 1px dotted currentColor;
+		padding: 0;
+		cursor: pointer;
 	}
+	.cf-match:hover { color: var(--accent); border-bottom-color: var(--accent); }
 	.cf-scout { font-weight: 600; }
 	.cf-teams { font-variant-numeric: tabular-nums; }
 	.cf-tag {

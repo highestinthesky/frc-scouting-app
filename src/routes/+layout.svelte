@@ -126,9 +126,9 @@
 		--text-faint: #888;
 		--border: #e0e0e0;
 		--border-strong: #ccc;
-		--accent: #0b3d91;
-		--accent-hover: #0a3480;
-		--accent-soft: #f0f4fc;
+		--accent: #5f24a2;
+		--accent-hover: #4e1c87;
+		--accent-soft: #f4ebfa;
 		--on-accent: #ffffff;
 		--danger: #c0392b;
 		--danger-bg: #fdecea;
@@ -138,8 +138,8 @@
 		--warning: #92400e;
 		--warning-bg: #fffbeb;
 		--warning-border: #fcd34d;
-		--banner-info-bg: #e8effc;
-		--banner-info-border: #bccbea;
+		--banner-info-bg: #ece1f5;
+		--banner-info-border: #d4c2e8;
 		--banner-red-bg: #fef2f2;
 		--banner-red-border: #fca5a5;
 		--banner-blue-bg: #eff6ff;
@@ -156,9 +156,9 @@
 			--text-faint: #6e6e72;
 			--border: #2a2a2d;
 			--border-strong: #38383b;
-			--accent: #6a9bf0;
-			--accent-hover: #84afff;
-			--accent-soft: #1a2a4a;
+			--accent: #b18de0;
+			--accent-hover: #c5a8eb;
+			--accent-soft: #2a1e3d;
 			--danger: #f7857a;
 			--danger-bg: #3a1a18;
 			--success: #6ee7b7;
@@ -167,12 +167,12 @@
 			--warning: #fcd34d;
 			--warning-bg: #2a200a;
 			--warning-border: #5a4318;
-			--banner-info-bg: #1a2a4a;
-			--banner-info-border: #2c4480;
+			--banner-info-bg: #2a1e3d;
+			--banner-info-border: #4a3a6e;
 			--banner-red-bg: #3a1a18;
 			--banner-red-border: #5a2a22;
-			--banner-blue-bg: #1a2a4a;
-			--banner-blue-border: #2c4480;
+			--banner-blue-bg: #2a1e3d;
+			--banner-blue-border: #4a3a6e;
 		}
 	}
 	:global(:root[data-theme='dark']) {
@@ -185,9 +185,9 @@
 		--text-faint: #6e6e72;
 		--border: #2a2a2d;
 		--border-strong: #38383b;
-		--accent: #6a9bf0;
-		--accent-hover: #84afff;
-		--accent-soft: #1a2a4a;
+		--accent: #b18de0;
+		--accent-hover: #c5a8eb;
+		--accent-soft: #2a1e3d;
 		--danger: #f7857a;
 		--danger-bg: #3a1a18;
 		--success: #6ee7b7;
@@ -196,12 +196,12 @@
 		--warning: #fcd34d;
 		--warning-bg: #2a200a;
 		--warning-border: #5a4318;
-		--banner-info-bg: #1a2a4a;
-		--banner-info-border: #2c4480;
+		--banner-info-bg: #2a1e3d;
+		--banner-info-border: #4a3a6e;
 		--banner-red-bg: #3a1a18;
 		--banner-red-border: #5a2a22;
-		--banner-blue-bg: #1a2a4a;
-		--banner-blue-border: #2c4480;
+		--banner-blue-bg: #2a1e3d;
+		--banner-blue-border: #4a3a6e;
 	}
 
 	:global(body) {
@@ -220,7 +220,7 @@
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.app-bar {
-		background: #0b3d91;
+		background: #5f24a2;
 		color: white;
 		padding: 0.55rem 1rem;
 		font-family: system-ui, -apple-system, sans-serif;
@@ -246,7 +246,7 @@
 	}
 	.role-badge.manager {
 		background: #ffb000;
-		color: #0b3d91;
+		color: #5f24a2;
 		font-weight: 700;
 	}
 
