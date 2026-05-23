@@ -711,7 +711,7 @@
 	.btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
 	.btn.primary:hover { background: var(--accent-hover); }
 	.btn.primary:disabled { opacity: 0.6; cursor: progress; }
-	.btn.secondary { background: var(--bg-card); border-color: #ccc; color: var(--text-primary); }
+	.btn.secondary { background: var(--bg-card); border-color: var(--border-strong); color: var(--text-primary); }
 	.btn.secondary:hover { background: var(--bg-subtle); }
 	.btn.csv { background: #f0fff4; border-color: #86efac; color: #166534; }
 	.btn.csv:hover { background: #dcfce7; }
@@ -733,7 +733,7 @@
 	}
 	.chip {
 		background: var(--bg-subtle);
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 999px;
 		padding: 0.3rem 0.65rem;
 		color: var(--text-muted);
@@ -741,26 +741,27 @@
 		font-size: 0.82rem;
 		cursor: pointer;
 	}
-	.chip:hover { background: #e5e5e5; }
+	.chip:hover { background: var(--bg-elev); }
 	.chip.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 	.chip.alliance-red { background: #fef2f2; color: #991b1b; border-color: #fca5a5; font-weight: 600; }
 	.chip.alliance-blue { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; font-weight: 600; }
 
 	/* ── messages ─────────────────────────────────────────────────── */
 	.info {
-		background: #eaf3ff;
-		color: #1c3a78;
+		background: var(--banner-blue-bg);
+		color: var(--accent);
 		padding: 0.55rem 0.75rem;
 		border-radius: 0.4rem;
 		margin: 0.5rem 0 0;
 		white-space: pre-wrap;
 		font: inherit;
 		font-size: 0.85rem;
+		border: 1px solid var(--banner-blue-border);
 	}
 	.info.single { white-space: normal; }
 	.error {
 		background: var(--danger-bg);
-		color: #842029;
+		color: var(--danger);
 		padding: 0.55rem 0.75rem;
 		border-radius: 0.4rem;
 		margin: 0.5rem 0 0;
@@ -828,13 +829,14 @@
 	.bar {
 		width: 3rem;
 		height: 0.6rem;
-		background: #ececec;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
 		border-radius: 999px;
 		overflow: hidden;
 		display: flex;
 		flex-shrink: 0;
 	}
-	.thin-bar { background: #ddd; }
+	.thin-bar { background: var(--bg-subtle); }
 	.bar .red { background: #e24b4a; }
 	.bar .blue { background: #378add; }
 	.counts { color: var(--text-muted); font-size: 0.82rem; }
@@ -850,7 +852,8 @@
 
 	/* ── badges ───────────────────────────────────────────────────── */
 	.badge {
-		background: #f0ede5;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
 		border-radius: 999px;
 		padding: 0.15rem 0.5rem;
 		color: var(--text-primary);
@@ -877,10 +880,13 @@
 		margin-right: 0.3rem;
 	}
 
-	/* ── expanded: strengths block ───────────────────────────────── */
+	/* ── expanded: strengths block ─────────────────────────────────
+	   Color pair is locked light-on-light/dark-on-dark explicitly so the
+	   block reads regardless of theme. */
 	.strengths-block {
 		border-color: #d1fae5;
 		background: #f0fdf4;
+		color: #166534;
 	}
 	.strength-list {
 		list-style: none;
@@ -893,15 +899,18 @@
 		color: #166534;
 	}
 
-	/* ── expanded: auto paths ─────────────────────────────────────── */
+	/* ── expanded: auto paths ───────────────────────────────────────
+	   Same idea — explicit dark text on the lavender bg so dark mode
+	   doesn't end up with white text on white. */
 	.paths-block {
 		margin: 0 0.55rem 0.4rem;
 		padding: 0.5rem 0.65rem;
 		border: 1px solid #dfd6ff;
 		background: #f7f3ff;
+		color: #4c1d95;
 		border-radius: 0.4rem;
 	}
-	.paths-block h3 { margin: 0; font-size: 0.88rem; }
+	.paths-block h3 { margin: 0; font-size: 0.88rem; color: #4c1d95; }
 	.path-list {
 		list-style: none;
 		margin: 0.4rem 0 0;

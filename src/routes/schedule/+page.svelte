@@ -1657,15 +1657,26 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 	}
 	@media (max-width: 28rem) {
 		.sched-row {
-			grid-template-columns: 2.5rem 1fr 1fr;
+			grid-template-columns: 2.5rem 1fr auto;
 			grid-template-rows: auto auto;
-			row-gap: 0.1rem;
+			row-gap: 0.15rem;
+			column-gap: 0.55rem;
 		}
 		.sp-vs { display: none; }
 		.sp-side.red { grid-row: 1; grid-column: 2; text-align: left; }
 		.sp-side.blue { grid-row: 2; grid-column: 2; text-align: left; }
 		.sp-match { grid-row: 1 / span 2; }
-		.sp-time { grid-row: 1 / span 2; grid-column: 3; align-self: center; }
+		.sp-time {
+			grid-row: 1;
+			grid-column: 3;
+			align-self: center;
+			justify-self: end;
+		}
+		.sp-edit {
+			grid-row: 2;
+			grid-column: 3;
+			justify-self: end;
+		}
 	}
 
 	.sched-li { list-style: none; }
@@ -1676,14 +1687,17 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		font: inherit;
 		font-size: 0.78rem;
 		font-weight: 600;
-		padding: 0.2rem 0.55rem;
+		line-height: 1.2;
+		padding: 0.4rem 0.75rem;
 		border-radius: 0.35rem;
 		cursor: pointer;
 		align-self: center;
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		gap: 0.3rem;
 		white-space: nowrap;
+		min-height: 1.85rem;
 	}
 	.sp-edit:hover { color: var(--accent); border-color: var(--accent); }
 	.ov-pill {
