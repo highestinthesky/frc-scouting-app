@@ -230,6 +230,7 @@
 		text-align: left;
 		padding: 0.85rem 1rem;
 		background: var(--bg-card);
+		color: var(--text-primary);
 		border: 2px solid var(--border-strong);
 		border-radius: 0.5rem;
 		cursor: pointer;
@@ -238,6 +239,7 @@
 	.roles button.selected {
 		border-color: var(--accent);
 		background: var(--accent-soft);
+		color: var(--accent);
 	}
 	.roles button strong { display: block; font-size: 1rem; }
 	.roles button small {
