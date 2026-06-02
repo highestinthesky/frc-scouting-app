@@ -248,8 +248,9 @@
 	}
 	.error { color: var(--danger); font-size: 0.85rem; }
 	.info {
-		background: #eaf3ff;
-		color: #1c3a78;
+		background: var(--banner-blue-bg);
+		color: var(--alliance-blue);
+		border: 1px solid var(--banner-blue-border);
 		padding: 0.55rem 0.75rem;
 		border-radius: 0.4rem;
 		font-size: 0.86rem;
@@ -307,11 +308,11 @@
 	}
 	dd.text p { margin: 0.2rem 0 0; line-height: 1.4; }
 
-	.r { color: #b91c1c; font-weight: 600; }
-	.b { color: #1d4ed8; font-weight: 600; }
-	.ok { color: #166534; }
-	.bad { color: #991b1b; font-weight: 600; }
-	.warn { color: #92400e; font-weight: 600; }
+	.r { color: var(--alliance-red); font-weight: 600; }
+	.b { color: var(--alliance-blue); font-weight: 600; }
+	.ok { color: var(--success); }
+	.bad { color: var(--danger); font-weight: 600; }
+	.warn { color: var(--warning); font-weight: 600; }
 	.paths { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
 	.paths li { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; }
 	a { color: var(--accent); }

@@ -1,214 +1,224 @@
-# v4 draft — improvements
+# v4 — improvements
 
-Two things to design before we commit to building. Both came from
-scouting-app-v4-draft notes; both deliberately *not* implemented yet.
+Status of the two v4-draft improvements, plus the implementation-ready design
+for the next milestone.
+
+Last updated: 2026-06-01
+
+| Item | Status |
+|------|--------|
+| 2. Decouple event code from TBA event key | **Shipped** (migration 0006) |
+| 1A. Unify schedule + scouting — deeplinks everywhere | **Shipped** |
+| 1B. Unify schedule + scouting — entries as schedule citizens | **Designed, not built** (this doc) |
+| 1C. Unify — single assignment-instances table | **Parked for v5** |
+
+---
+
+## 2. Decouple event code from TBA event key — SHIPPED
+
+The team now picks any memorable event code (e.g. `2027nyc`) for sync, while
+the manager stores TBA's canonical key (e.g. `2027nyny`) separately for
+fetching. Scouts never see or type the TBA key.
+
+What shipped:
+
+- **Migration `0006_tba_event_key.sql`** — adds a nullable `tba_event_key`
+  column to `public.schedules`. Additive and idempotent (`ADD COLUMN IF NOT
+  EXISTS`).
+- **`tba.js`** — `fetchAndCacheSchedule(eventCode, apiKey, tbaEventKey)` now
+  hits TBA with `tbaEventKey` while keeping the local cache keyed by
+  `eventCode`. `publishSchedule` writes the key onto the schedules row;
+  `pullSchedule` returns it; `getPublishedTbaEventKey()` lets a second manager
+  device discover it. All three degrade gracefully on a not-yet-migrated DB
+  (catch "column does not exist", retry without the field).
+- **`session.svelte.js`** — new persisted `tbaEventKey` setting.
+- **Schedule tab (manager)** — a "TBA event key" field above the API-key
+  field, a `your code · TBA key` summary line, and auto-adoption of a
+  teammate's published key on load.
+- **Settings tab** — event-code help text now says "anything your team agrees
+  on," not "TBA-compatible code."
+
+### Deviation from the original draft
+
+The draft proposed storing `tba_event_key` on `event_meta`. We store it on
+`schedules` instead, because:
+
+- The `event_meta` row only exists once a manager sets a passphrase, and its
+  INSERT policy is **bootstrap-only** (`NOT EXISTS`). Writing the TBA key there
+  early would create the row and then make the later passphrase-setting INSERT
+  fail with a unique violation.
+- The `schedules` row is created on the very first publish regardless of
+  passphrase, gated by the same `has_manager_token()` bootstrap rule. The key
+  and the schedule it produced naturally belong together.
+
+Backward-compatible: events published before 0006 have `tba_event_key = NULL`
+and fall back to using the event code as the TBA key — today's behavior.
 
 ---
 
 ## 1. Unify the schedule + scouting systems
 
-### What the user said
+> Source note: "It would be incredibly efficient if we could union the two
+> systems for scheduling and scouting … you are to design the process here."
 
-> It would be incredibly efficient if we could union the two systems for
-> scheduling and scouting. Integrating those two systems would be incredibly
-> efficient — you are to design the process here.
+### 1A. Deeplinks everywhere — SHIPPED
 
-### What "scheduling" and "scouting" currently are
+Every place that names a `(match, team)` now links into a pre-filled `/new`
+entry form, so the hop from "I'm assigned this" to "I'm recording this" is one
+tap with match, team, and alliance color already set.
 
-Today the app already shares an event scope (the event code → Supabase
-session id), but the two flows touch totally separate tables and UIs:
+What shipped:
 
-| | Where it lives now | Who writes | Who reads |
-|---|---|---|---|
-| **Schedule** | `schedules` row keyed on session_id | manager publishes from TBA | every device pulls into IndexedDB |
-| **Assignments** | `assignments` rows (scout → team) | manager edits in Schedule tab | scouts pull, see "Your teams" |
-| **Overrides** | `assignment_overrides` rows per (match, scout, team) | manager edits in match-detail modal | scouts pull, override-aware nextUnscoutedMatch |
-| **Reminders** | `reminders` rows (optional scout, optional match) | manager sends; system auto-generates | scouts see banner |
-| **Entries (scouting data)** | `entries` (Dexie locally, mirrored to `entries` table) | scouts record after each match | manager aggregates in Manager tab |
+- **Match-detail modal coverage list** (manager) — each of the six team rows
+  gets a `Scout →` link to `/new/?match=&team=&color=`.
+- **Reminder banner** (scout) — any reminder tied to a match shows a `Scout →`
+  link. Auto-reminders carry the exact team; manager reminders carry only the
+  match.
+- **`/new` match-only deeplinks** — `/new/?match=12` (no team) now resolves the
+  scout's team for that match (override wins, else effective team list).
+  One match team → auto-filled; several → the existing multi-team picker.
+- Already present before this milestone: the home next-match banner, the
+  Upcoming-matches list, and the `/new` next-match suggestion.
 
-The hand-off today is: manager publishes a schedule + assignments →
-scout walks into the form blind, fills it in, exports → manager imports.
-There's no live tie between "match N, team T, scout S" on the schedule
-side and the entry that scout actually records.
+No schema change — this was pure wiring on top of the data already synced.
 
-### What "union" could mean — three flavors
+### 1B. Entries as first-class schedule citizens — DESIGNED (next milestone)
 
-**A. Light: pre-fill links across every entry point.**
-We already do this in `Upcoming matches` and the home next-match banner.
-Extend it so any place that mentions a `(match, team)` deeplinks to a
-pre-filled `/new` URL — coverage-conflict rows, match-detail modal
-coverage list, reminders ("Q12 starting"). No data-model change; just
-better wiring. Cheapest, least risky.
+The visible-quality jump: the schedule stops being a publish-and-forget list
+and becomes a live coverage board. The manager sees, per match, which teams
+are covered; the scout sees their assignments check off as entries land.
 
-**B. Medium: make entries first-class members of the schedule.**
-On the schedule preview row and inside the match-detail modal, show
-*per-team* status: empty / scout-on-it / submitted. Manager can see a
-match at-a-glance: "Q15 — 4/6 teams scouted, 2 missing." Scout-side, the
-"Your teams" view becomes a checklist that grays out as entries land.
-This needs the manager view to live-merge schedule + assignments +
-entries; it's a UI refactor more than a DB one. The data is already there.
+#### What "submitted" means
 
-  *Detail to nail down:* "submitted" should mean: at least one entry
-  exists with `(event_code, match_number, team_number)`. Multiple entries
-  for the same cell are valid (e.g., two scouts both covered team 1234
-  in Q15 because of an override change). The status should still be
-  "submitted ≥ 1" — don't gate on author identity.
+A `(team_number)` cell in match `M` for event `E` is **submitted** iff at least
+one row exists in `entries` with `eventCode = E`, `matchNumber = M`,
+`teamNumber = team`. Deliberately:
 
-**C. Heavy: collapse the model to one "assignment-instances" table.**
-Today `assignments` is "always" and `assignment_overrides` is "this
-match only." A unified `assignment_instance(event, match_number, scout,
-team)` row would replace both. Base assignments would be materialized
-into N rows (one per qual match the team plays) the moment a manager
-publishes the schedule, and overrides would just be edits to a
-specific row.
+- **No author gate.** Two scouts covering the same team (e.g. after an override
+  swap) both count — status is "submitted ≥ 1", not "submitted by the assigned
+  scout." This avoids the "scout typed their name differently on this device"
+  failure mode.
+- **No quality gate** in v1. A blank-but-saved entry counts as submitted.
+  ("needs re-scout" flag is an open question below.)
 
-Pros:
-- The "what should each scout be doing right now" query becomes one
-  table read, no resolution layer.
-- Entries can FK into assignment-instances and get the scout name "for
-  free" — no more "scout typed their name wrong on this device."
-- Coverage conflicts become a SQL group-by, not a JS reducer.
+Three states per team-in-match:
 
-Cons:
-- It's a real migration. `assignments` is currently the source of truth;
-  pre-existing rows have to be expanded.
-- Adding a team to a scout's base list now means inserting N rows
-  instead of 1. Editing the base list becomes: diff old vs new, then
-  insert/delete instance rows.
-- A team that didn't exist in the schedule yet (manager assigned a
-  scout to team 4321 before publishing) needs a sentinel until publish
-  time. Easiest: keep base `assignments` as the *intent*, and have a
-  trigger or RPC that materializes instances at publish time.
+| State | Condition |
+|-------|-----------|
+| `submitted` | ≥ 1 entry exists for (E, M, team) |
+| `assigned` | a scout is assigned/overridden to this team for this match, no entry yet |
+| `uncovered` | no entry and no scout assigned |
 
-### Recommendation
+#### Data model — no migration needed
 
-Land **A** immediately (it's a free win, mostly wiring), then ship **B**
-as the next milestone. **C** is the right long-term shape but the
-migration is a meaningful piece of work and we shouldn't rush it during
-a competition season. Revisit **C** as v5.
+All inputs already exist locally and are already synced:
 
-### Open questions before implementation
+- `entries` (Dexie + Supabase mirror) — already pulled on each sync tick.
+- the cached schedule (`qmList`) — already in IndexedDB.
+- `assignments` + `assignment_overrides` — already pulled into
+  `session.overrides` and listed on the schedule page.
 
-- Should the "submitted" indicator be visible to scouts, or just
-  managers? (Showing it to scouts can help them realize they missed a
-  match. Hiding it avoids social pressure from peers.)
-- For B, do we want a "needs re-scout" flag on entries that the manager
-  can set (e.g., scout left fields blank)? Or is delete-and-redo fine?
-- For C, what happens to historical entries from older events when
-  we migrate? Probably untouched — they FK to nothing — but worth a row
-  in the migration doc.
+So 1B is a **derived-state + UI** change, not a DB change. Build one memoized
+index and read it from both surfaces.
 
----
+#### Core derived index
 
-## 2. Decouple event code from TBA event key
-
-### What the user said
-
-> I think that the event code and the id to fetch from tba could be
-> separate — the manager could tell everyone we're scouting with code
-> 2027nyc, and then pull data from 2027nyny, which would be the same
-> event, but easier to memorize for the team.
-
-### Why this matters
-
-Today there's one string, `eventCode`, used for two things:
-
-1. **Sync namespace.** The Supabase session id is derived from
-   `sha256(eventCode)`. Every scout on the same code shares data.
-2. **TBA lookup key.** The schedule-fetch endpoint hits TBA's
-   `/event/{eventCode}/matches`, so the code has to match TBA's
-   canonical key (e.g., `2027nyny`, `2027hop`, `2027new` — short, dense,
-   and not always intuitive).
-
-The conflation is a UX papercut: the team has to memorize and type the
-TBA key, even though only the manager actually needs it for fetching.
-
-### Proposed model
-
-Two distinct fields per event:
-
-- **Team event code** (free-form, human-readable, case-insensitive,
-  what gets typed into Settings): `2027nyc`. Drives sync only.
-- **TBA event key** (canonical, set by the manager when they publish):
-  `2027nyny`. Drives fetching only.
-
-The TBA key lives on the manager device + on the published `schedules`
-or `event_meta` row so that any future re-pull uses the right key.
-
-### UI changes
-
-**Settings tab (scouts and managers):**
-- "Event code" field stays. Help text changes from "TBA-compatible code"
-  to "Anything your team agrees on — `2027nyc`, `team1234`, anything."
-
-**Schedule tab (manager only):**
-- New "TBA event key" field next to the "Fetch from TBA" button. Stored
-  per-device as `session.tbaEventKey` and uploaded as part of
-  `event_meta` on publish (so a second manager device can re-fetch
-  without re-typing).
-- Show both keys at the top: `your code: 2027nyc  ·  TBA key: 2027nyny`
-  so the manager can confirm the link before fetching.
-
-**Schedule tab (scout view):**
-- Unchanged. Scouts never see or care about the TBA key.
-
-### Data model changes
-
-- Add `tba_event_key text` column to `event_meta`. Nullable; only set
-  once a manager has fetched.
-- `fetchAndCacheSchedule(eventCode, apiKey)` becomes
-  `fetchAndCacheSchedule(tbaEventKey, apiKey)`. Caller resolves the key
-  from `event_meta` first, falls back to the eventCode itself for
-  backward compatibility.
-- `publishSchedule(eventCode, matches, opts)` also writes
-  `event_meta.tba_event_key = opts.tbaEventKey` so it's discoverable.
-
-### Migration
-
-A new SQL migration that adds the column:
-
-```sql
-alter table public.event_meta
-    add column tba_event_key text;
+```js
+// entryIndex: Map<`${matchNumber}:${teamNumber}`, { count, lastAt, scouts:Set }>
+const entryIndex = $derived.by(() => {
+  const idx = new Map();
+  for (const e of entries) {
+    if (e.eventCode !== session.eventCode) continue;
+    const k = `${e.matchNumber}:${e.teamNumber}`;
+    const cur = idx.get(k) ?? { count: 0, lastAt: null, scouts: new Set() };
+    cur.count += 1;
+    if (!cur.lastAt || e.createdAt > cur.lastAt) cur.lastAt = e.createdAt;
+    if (e.scoutName) cur.scouts.add(String(e.scoutName).trim());
+    idx.set(k, cur);
+  }
+  return idx;
+});
 ```
 
-No data migration needed. Existing events were created with the
-eventCode == TBA key implicitly; the new column being NULL is fine
-because we'll fall back to the eventCode for the TBA fetch when it's
-unset. Once the manager fetches once with the new UI, the column gets
-populated, and from then on the codes are decoupled.
+`statusFor(matchNumber, teamNumber)` then returns `submitted` if the key is in
+`entryIndex`, else `assigned` if a (resolved) scout watches it, else
+`uncovered`.
 
-### Backward-compatibility
+#### Manager surface — `/schedule`
 
-Devices on the old build still write/read `eventCode` only. As long as
-the TBA key column defaults to NULL and the new client falls back to
-`eventCode` when it's missing, mixed-version use is safe. The first
-fetch from a new-build manager populates the column; old-build managers
-that try to fetch will simply hit TBA with the user-typed code (same as
-today).
+- **Schedule preview rows**: append a coverage chip per row, e.g.
+  `4/6 scouted`, colored by completeness (green = all six, amber = partial,
+  neutral grey = none). Tinting reuses the theme tokens (`--success`,
+  `--warning`, `--text-faint`).
+- **Match-detail modal coverage list**: each team row already lists watchers
+  and a `Scout →` link (1A). Add a status dot/word: `✓ submitted` (with count
+  if > 1), `assigned`, or `uncovered`. When submitted, the `Scout →` link
+  becomes a secondary `Re-scout` link.
+- **A roll-up** at the top of the preview: "Q12–Q40 · 142/246 team-matches
+  scouted."
 
-### Open questions before implementation
+#### Scout surface — `/schedule` "Your teams" + Upcoming
 
-- Should the TBA key be visible to scouts in any view (read-only)?
-  Argument for: lets them double-check they're on the right event.
-  Argument against: adds noise to a screen scouts barely use.
-- Do we want a "preset" picker that fetches `/events/{year}/keys` from
-  TBA and lets the manager pick from a list? Nice-to-have; not required
-  for v1.
-- What happens if a manager changes the TBA key mid-event? Probably:
-  re-fetch + re-publish, same as a fresh event. Worth adding a confirm
-  dialog ("This will replace the current schedule for {eventCode}.").
+- "Your teams" stays, but Upcoming-matches rows gain the same `✓ scouted`
+  treatment they already have for `done`, now driven by `entryIndex` rather
+  than the local-only `doneKey` (so a teammate's entry also greys it out).
+- Optional (see open question): a per-scout progress line, "you've logged 11
+  of your 14 assigned team-matches."
+
+#### Files touched (estimate)
+
+- `src/routes/schedule/+page.svelte` — `entryIndex`, `statusFor`, preview-row
+  chips, modal status, roll-up, styles. (Bulk of the work.)
+- `src/lib/aggregate.js` *(or a new `src/lib/coverage.js`)* — factor
+  `entryIndex` / `statusFor` out so both `/schedule` and `/` can import it
+  without duplicating the reducer.
+- `src/routes/+page.svelte` — optional: a "coverage" mini-stat on home.
+- No `tba.js`, no `assignments.js`, no SQL.
+
+#### Acceptance
+
+- Manager publishes Q12; no entries yet → row shows `0/6`, all teams
+  `uncovered`/`assigned`.
+- A scout records team 1678 in Q12 → within one sync tick the manager's Q12 row
+  reads `1/6` and team 1678 shows `✓ submitted`. The scout's own Upcoming row
+  for 1678/Q12 greys to `✓ scouted`.
+- A second scout also records 1678/Q12 → still `submitted`, count shows `2`.
+  No double-count in the `n/6` (it's distinct teams covered, not entries).
+
+#### Open questions before building 1B
+
+1. **Visibility to scouts.** Show the full per-team submitted board to scouts,
+   or only the manager? Showing it helps a scout notice a missed match; hiding
+   it avoids peer pressure. Recommendation: show the scout *their own*
+   assignments' status, not the whole board.
+2. **"needs re-scout" flag.** Should the manager be able to mark an entry as
+   needing redo (e.g. fields left blank), or is delete-and-redo enough? Adds an
+   `entries` column + a control if yes. Recommendation: defer; delete-and-redo
+   covers v1.
+3. **Counting unit for the roll-up.** "team-matches scouted" (6 per qual match)
+   vs "matches fully scouted" (all 6). The former is more motivating mid-event;
+   the latter is the real goal. Recommendation: show both — "X/Y team-matches ·
+   Z matches complete."
+
+### 1C. Single assignment-instances table — PARKED for v5
+
+Collapse `assignments` (always) + `assignment_overrides` (this match) into one
+`assignment_instance(event, match_number, scout, team)` row, materialized at
+publish time. Makes "what should each scout do right now" a single table read,
+lets `entries` FK to an instance for a free scout name, and turns coverage
+conflicts into a SQL `GROUP BY`.
+
+It's the right long-term shape but it's a real migration (expand existing base
+rows into N instances, handle pre-publish intent, re-materialize on schedule
+re-fetch). Not worth doing mid-season. Revisit as v5 after 1B has a real event
+of usage data behind it.
 
 ---
 
-## Combined milestone proposal
+## Recommended sequencing from here
 
-If we're sequencing these two together:
-
-1. **Ship #2 first.** It's contained, has a clean migration, and unlocks
-   nicer event names for the team. Maybe a half-day of work.
-2. **Then ship #1 flavor A** (deeplinks everywhere). Half-day of UI work,
-   no DB changes.
-3. **Then ship #1 flavor B** (entries as schedule citizens). A few
-   days. This is the visible-quality jump.
-4. **Park #1 flavor C** for v5 after a real season of usage data.
+1. **1B** is the next build. It's derived-state + UI, no schema, and it's the
+   visible payoff of the union idea. Half a day to a day.
+2. Resolve the three 1B open questions above first (they change the UI surface
+   area, not the data plumbing).
+3. **1C** stays parked until after a season on 1B.

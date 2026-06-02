@@ -436,8 +436,8 @@
 		padding: 0.7rem 0.85rem;
 		background: var(--bg-card);
 	}
-	.entry[data-color='red'] { border-left-color: #c0392b; }
-	.entry[data-color='blue'] { border-left-color: #2c5cb0; }
+	.entry[data-color='red'] { border-left-color: var(--alliance-red); }
+	.entry[data-color='blue'] { border-left-color: var(--alliance-blue); }
 
 	/* ── tappable entry link ──────────────────────────────────────── */
 	.row {

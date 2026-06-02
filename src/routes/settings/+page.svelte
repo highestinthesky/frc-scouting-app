@@ -82,10 +82,12 @@
 			<label class="field">
 				<span class="label">Event code</span>
 				<small class="help">
-					Anyone on your team using the same event code shares data automatically.
-					Switch events by changing this field.
+					Anything your team agrees on — <code>2027nyc</code>, <code>team1234</code>,
+					anything. Everyone using the same code shares data automatically. It does
+					<strong>not</strong> have to match The Blue Alliance; the manager sets the
+					matching TBA event key on the Schedule tab.
 				</small>
-				<input bind:value={eventCode} autocomplete="off" autocapitalize="none" placeholder="e.g. 2027hvr" />
+				<input bind:value={eventCode} autocomplete="off" autocapitalize="none" placeholder="e.g. 2027nyc" />
 			</label>
 
 			<label class="field">
@@ -276,8 +278,8 @@
 	button.primary:disabled { opacity: 0.6; cursor: progress; }
 	button.danger {
 		background: var(--bg-card);
-		color: #c0392b;
-		border: 1px solid #c0392b;
+		color: var(--danger);
+		border: 1px solid var(--danger);
 	}
 	button.danger:hover { background: var(--danger-bg); }
 

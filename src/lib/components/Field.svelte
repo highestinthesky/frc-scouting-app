@@ -305,7 +305,7 @@
 		font-weight: 600;
 		font-size: 0.95rem;
 	}
-	.req { color: #c0392b; }
+	.req { color: var(--danger); }
 	.help {
 		color: var(--text-faint);
 		font-size: 0.85rem;
@@ -403,7 +403,7 @@
 		font-weight: 600;
 		text-transform: capitalize;
 		background: var(--bg-card);
-		border: 2px solid #ccc;
+		border: 2px solid var(--border-strong);
 		border-radius: 0.4rem;
 		cursor: pointer;
 	}

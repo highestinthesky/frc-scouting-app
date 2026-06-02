@@ -13,6 +13,7 @@
 		qualMatches,
 		nextUnscoutedMatch,
 		allianceForTeamInMatch,
+		teamsInMatch,
 		verifyMatchTeam
 	} from '$lib/tba.js';
 
@@ -76,8 +77,10 @@
 			const cached = session.eventCode ? await getCachedSchedule(session.eventCode) : null;
 			qmList = cached ? qualMatches(cached.matches) : [];
 
-			// 1) Highest priority: explicit query params from the Schedule tab.
-			//    e.g. /new/?match=12&team=1234&color=red
+			// 1) Highest priority: explicit query params from the Schedule tab
+			//    or a reminder banner.
+			//    Full form: /new/?match=12&team=1234&color=red
+			//    Match only: /new/?match=12  → resolve my team for that match.
 			const qp = new URLSearchParams(page.url.search);
 			const qMatch = Number(qp.get('match'));
 			const qTeam = Number(qp.get('team'));
@@ -93,6 +96,36 @@
 					: qColor;
 				if (color === 'red' || color === 'blue') values.allianceColor = color;
 				return; // skip schedule + last-entry fallbacks
+			}
+			if (Number.isFinite(qMatch) && qMatch > 0) {
+				// Match-only deeplink (e.g. from a reminder). Fill the match number,
+				// then resolve which of my teams plays in it — overrides win, else
+				// my effective team list. Auto-fill when exactly one applies;
+				// otherwise show the picker so the scout chooses.
+				values.matchNumber = String(qMatch);
+				const match = qmList.find((m) => m.match_number === qMatch);
+				if (match) {
+					const scoutLc = (session.scoutName ?? '').trim().toLowerCase();
+					const ovTeams = (session.overrides ?? [])
+						.filter(
+							(o) =>
+								o.match_number === qMatch &&
+								String(o.scout_name ?? '').trim().toLowerCase() === scoutLc
+						)
+						.map((o) => Number(o.team_number))
+						.filter(Number.isFinite);
+					const { red, blue } = teamsInMatch(match);
+					const playing = new Set([...red, ...blue].filter(Number.isFinite));
+					const candidates = (ovTeams.length ? ovTeams : session.effectiveTeams)
+						.filter((t) => playing.has(t));
+					const mine = [...new Set(candidates)].sort((a, b) => a - b);
+					if (mine.length === 1) {
+						fillFromMatchAndTeam(match, mine[0]);
+					} else if (mine.length > 1) {
+						suggestion = { match, teams: mine };
+					}
+				}
+				return;
 			}
 
 			// 2) Schedule-driven pre-fill: pick the next match where one of my

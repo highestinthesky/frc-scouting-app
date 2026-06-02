@@ -178,8 +178,8 @@
 		color: var(--text-muted);
 		font-size: 0.78rem;
 	}
-	.badge.bad { background: #fef2f2; color: #991b1b; }
-	.badge.warn { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+	.badge.bad { background: var(--danger-bg); color: var(--danger); }
+	.badge.warn { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
 
 	.paths-block {
 		margin-top: 1rem;

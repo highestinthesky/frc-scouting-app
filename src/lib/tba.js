@@ -28,11 +28,19 @@ const TBA_BASE = 'https://www.thebluealliance.com/api/v3';
  * Fetch the full match list for an event from TBA and cache it locally.
  * Manager-only — scouts use pullSchedule() instead.
  *
- * @param {string} eventCode  e.g. "2026cala"
- * @param {string} apiKey     TBA read API key
+ * `eventCode` is the team's sync namespace (what the cache is keyed by);
+ * `tbaEventKey` is the canonical TBA key the request actually hits (e.g.
+ * "2027nyny"). They're decoupled so a team can scout under a memorable code
+ * like "2027nyc" while still pulling the right TBA event. When `tbaEventKey`
+ * is omitted we fall back to `eventCode`, preserving the old single-string
+ * behavior for events created before the split.
+ *
+ * @param {string} eventCode    team sync code, used for the local cache key
+ * @param {string} apiKey       TBA read API key
+ * @param {string} [tbaEventKey] canonical TBA event key to fetch from
  * @returns {Promise<TBAMatch[]>}
  */
-export async function fetchAndCacheSchedule(eventCode, apiKey) {
+export async function fetchAndCacheSchedule(eventCode, apiKey, tbaEventKey) {
 	if (!apiKey || !apiKey.trim()) {
 		throw new Error(
 			'No TBA API key set. Get a free key at thebluealliance.com/account and add it in Schedule → TBA API key.'
@@ -42,7 +50,9 @@ export async function fetchAndCacheSchedule(eventCode, apiKey) {
 		throw new Error('No event code set. Add one in Settings → Event code.');
 	}
 	const code = eventCode.trim().toLowerCase();
-	const url = `${TBA_BASE}/event/${code}/matches/simple`;
+	// The TBA key drives the fetch; the event code is just the cache namespace.
+	const tbaKey = (tbaEventKey ?? '').trim().toLowerCase() || code;
+	const url = `${TBA_BASE}/event/${tbaKey}/matches/simple`;
 	// 15-second hard timeout so a hung connection (flaky wifi, a broken
 	// service worker intercepting the request, a stuck CORS preflight)
 	// can never lock the UI in its busy state.
@@ -66,7 +76,7 @@ export async function fetchAndCacheSchedule(eventCode, apiKey) {
 		throw new Error('TBA API key not accepted (401). Check Schedule → TBA API key.');
 	}
 	if (resp.status === 404) {
-		throw new Error(`Event "${code}" not found on The Blue Alliance. Check the event code.`);
+		throw new Error(`Event "${tbaKey}" not found on The Blue Alliance. Check the TBA event key.`);
 	}
 	if (!resp.ok) {
 		throw new Error(`TBA request failed (${resp.status}).`);
@@ -127,6 +137,9 @@ export async function clearScheduleCache(eventCode) {
  * @param {string} [opts.managerToken]  hex SHA-256 hash; required after
  *                                       passphrase has been set for the event
  * @param {string} [opts.fetchedBy]     display name to stamp on the row
+ * @param {string} [opts.tbaEventKey]   canonical TBA key this schedule came
+ *                                       from; stored so a second manager
+ *                                       device can re-fetch without retyping
  * @returns {Promise<{ fetchedAt: string }>}
  */
 export async function publishSchedule(eventCode, matches, opts = {}) {
@@ -137,7 +150,8 @@ export async function publishSchedule(eventCode, matches, opts = {}) {
 	if (!sid) throw new Error('Could not derive session id from event code.');
 	const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
 	const fetchedAt = new Date().toISOString();
-	const row = {
+	const tbaEventKey = (opts.tbaEventKey ?? '').trim().toLowerCase() || null;
+	const baseRow = {
 		session_id: sid,
 		event_code: code,
 		matches,
@@ -145,13 +159,27 @@ export async function publishSchedule(eventCode, matches, opts = {}) {
 		fetched_by: opts.fetchedBy ?? null
 	};
 	// Upsert: first publish inserts; subsequent publishes replace the row.
-	const { error } = await client
+	// Try with tba_event_key first; if the column isn't there yet (migration
+	// 0006 not applied), retry without it so publishing never hard-fails on a
+	// not-yet-migrated database.
+	let { error } = await client
 		.from('schedules')
-		.upsert(row, { onConflict: 'session_id' });
+		.upsert({ ...baseRow, tba_event_key: tbaEventKey }, { onConflict: 'session_id' });
+	if (error && isMissingColumn(error, 'tba_event_key')) {
+		({ error } = await client.from('schedules').upsert(baseRow, { onConflict: 'session_id' }));
+	}
 	if (error) throw mapSupabaseError(error, 'publish schedule');
 	// Refresh the local cache too — saves a round-trip on the next form load.
 	await cacheSchedule(code, matches, fetchedAt, opts.fetchedBy ?? null);
 	return { fetchedAt };
+}
+
+/** Detect a PostgREST "column does not exist" error for graceful fallback. */
+function isMissingColumn(err, column) {
+	if (!err) return false;
+	if (err.code === '42703' || err.code === 'PGRST204') return true;
+	const msg = String(err.message || err.hint || '').toLowerCase();
+	return msg.includes(column) && (msg.includes('does not exist') || msg.includes('schema cache') || msg.includes('column'));
 }
 
 /**
@@ -170,16 +198,58 @@ export async function pullSchedule(eventCode) {
 	const sid = await deriveSessionId(code);
 	if (!sid) return null;
 	const client = createSupabaseClient(sid);
-	const { data, error } = await client
+	// Try selecting the TBA key column; fall back if the DB predates 0006.
+	let data, error;
+	({ data, error } = await client
 		.from('schedules')
-		.select('matches, fetched_at, fetched_by')
+		.select('matches, fetched_at, fetched_by, tba_event_key')
 		.eq('session_id', sid)
-		.maybeSingle();
+		.maybeSingle());
+	if (error && isMissingColumn(error, 'tba_event_key')) {
+		({ data, error } = await client
+			.from('schedules')
+			.select('matches, fetched_at, fetched_by')
+			.eq('session_id', sid)
+			.maybeSingle());
+	}
 	if (error) throw mapSupabaseError(error, 'pull schedule');
 	if (!data) return null;
 	const matches = Array.isArray(data.matches) ? data.matches : [];
 	await cacheSchedule(code, matches, data.fetched_at, data.fetched_by ?? null);
-	return { matches, fetchedAt: data.fetched_at, fetchedBy: data.fetched_by ?? null };
+	return {
+		matches,
+		fetchedAt: data.fetched_at,
+		fetchedBy: data.fetched_by ?? null,
+		tbaEventKey: data.tba_event_key ?? null
+	};
+}
+
+/**
+ * Best-effort read of the TBA event key stored on a published schedule, so a
+ * second manager device can pre-fill its "TBA event key" field and re-fetch
+ * without retyping. Returns null if nothing published, the column is absent
+ * (pre-0006 DB), or any read error — callers treat null as "not known yet".
+ *
+ * @param {string} eventCode
+ * @returns {Promise<string|null>}
+ */
+export async function getPublishedTbaEventKey(eventCode) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code) return null;
+	const sid = await deriveSessionId(code);
+	if (!sid) return null;
+	try {
+		const client = createSupabaseClient(sid);
+		const { data, error } = await client
+			.from('schedules')
+			.select('tba_event_key')
+			.eq('session_id', sid)
+			.maybeSingle();
+		if (error) return null;
+		return data?.tba_event_key ?? null;
+	} catch (_e) {
+		return null;
+	}
 }
 
 /**

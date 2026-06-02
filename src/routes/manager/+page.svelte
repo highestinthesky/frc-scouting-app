@@ -713,8 +713,8 @@
 	.btn.primary:disabled { opacity: 0.6; cursor: progress; }
 	.btn.secondary { background: var(--bg-card); border-color: var(--border-strong); color: var(--text-primary); }
 	.btn.secondary:hover { background: var(--bg-subtle); }
-	.btn.csv { background: #f0fff4; border-color: #86efac; color: #166534; }
-	.btn.csv:hover { background: #dcfce7; }
+	.btn.csv { background: var(--success-bg); border-color: var(--success-border); color: var(--success); }
+	.btn.csv:hover { filter: brightness(1.04); }
 	.btn.csv:disabled { opacity: 0.6; cursor: progress; }
 	/* file-input overlay for label-based upload buttons */
 	.import-btn input {
@@ -743,8 +743,8 @@
 	}
 	.chip:hover { background: var(--bg-elev); }
 	.chip.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
-	.chip.alliance-red { background: #fef2f2; color: #991b1b; border-color: #fca5a5; font-weight: 600; }
-	.chip.alliance-blue { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; font-weight: 600; }
+	.chip.alliance-red { background: var(--banner-red-bg); color: var(--alliance-red); border-color: var(--banner-red-border); font-weight: 600; }
+	.chip.alliance-blue { background: var(--banner-blue-bg); color: var(--alliance-blue); border-color: var(--banner-blue-border); font-weight: 600; }
 
 	/* ── messages ─────────────────────────────────────────────────── */
 	.info {
@@ -772,11 +772,11 @@
 	.coverage-hint {
 		margin-top: 0.65rem;
 		padding: 0.5rem 0.75rem;
-		background: #fffbeb;
-		border: 1px solid #fcd34d;
+		background: var(--warning-bg);
+		border: 1px solid var(--warning-border);
 		border-radius: 0.4rem;
 		font-size: 0.86rem;
-		color: #78350f;
+		color: var(--warning);
 	}
 
 	/* ── no results ───────────────────────────────────────────────── */
@@ -840,7 +840,7 @@
 	.bar .red { background: #e24b4a; }
 	.bar .blue { background: #378add; }
 	.counts { color: var(--text-muted); font-size: 0.82rem; }
-	.thin-label { color: #b45309; font-style: italic; font-size: 0.82rem; }
+	.thin-label { color: var(--warning); font-style: italic; font-size: 0.82rem; }
 	.right {
 		display: flex;
 		align-items: center;
@@ -860,9 +860,9 @@
 		font-size: 0.78rem;
 		white-space: nowrap;
 	}
-	.badge.bad { background: #fef2f2; color: #991b1b; }
-	.badge.path { background: #f3e8ff; color: #6b21a8; }
-	.badge.warn { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+	.badge.bad { background: var(--danger-bg); color: var(--danger); }
+	.badge.path { background: var(--accent-soft); color: var(--accent); }
+	.badge.warn { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
 	.age { color: var(--text-faint); font-size: 0.78rem; }
 	.chev { color: var(--text-faint); font-size: 0.85rem; }
 
@@ -881,12 +881,11 @@
 	}
 
 	/* ── expanded: strengths block ─────────────────────────────────
-	   Color pair is locked light-on-light/dark-on-dark explicitly so the
-	   block reads regardless of theme. */
+	   Theme-driven so it reads in both light and dark mode. */
 	.strengths-block {
-		border-color: #d1fae5;
-		background: #f0fdf4;
-		color: #166534;
+		border-color: var(--success-border);
+		background: var(--success-bg);
+		color: var(--success);
 	}
 	.strength-list {
 		list-style: none;
@@ -896,21 +895,20 @@
 		flex-direction: column;
 		gap: 0.3rem;
 		font-size: 0.85rem;
-		color: #166534;
+		color: var(--success);
 	}
 
 	/* ── expanded: auto paths ───────────────────────────────────────
-	   Same idea — explicit dark text on the lavender bg so dark mode
-	   doesn't end up with white text on white. */
+	   Theme-driven lavender block; flips cleanly in dark mode. */
 	.paths-block {
 		margin: 0 0.55rem 0.4rem;
 		padding: 0.5rem 0.65rem;
-		border: 1px solid #dfd6ff;
-		background: #f7f3ff;
-		color: #4c1d95;
+		border: 1px solid var(--banner-info-border);
+		background: var(--accent-soft);
+		color: var(--accent);
 		border-radius: 0.4rem;
 	}
-	.paths-block h3 { margin: 0; font-size: 0.88rem; color: #4c1d95; }
+	.paths-block h3 { margin: 0; font-size: 0.88rem; color: var(--accent); }
 	.path-list {
 		list-style: none;
 		margin: 0.4rem 0 0;
@@ -958,8 +956,8 @@
 		width: 1rem;
 		color: var(--accent);
 	}
-	.team-entry p.brokedown { color: #991b1b; font-weight: 600; }
-	.team-entry p.brokedown strong { color: #991b1b; }
+	.team-entry p.brokedown { color: var(--danger); font-weight: 600; }
+	.team-entry p.brokedown strong { color: var(--danger); }
 
 	/* ── full-view link ───────────────────────────────────────────── */
 	.full-view-row {

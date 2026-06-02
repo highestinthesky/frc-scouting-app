@@ -45,6 +45,14 @@ class Session {
 	 * this set. Get a free key at thebluealliance.com/account.
 	 */
 	tbaApiKey = $state('');
+	/**
+	 * The canonical TBA event key the manager fetches from (e.g. "2027nyny").
+	 * Decoupled from `eventCode`, which is the team-chosen sync namespace
+	 * (e.g. "2027nyc"). Only the manager device needs this set; it's also
+	 * uploaded onto the published schedules row so a second manager device can
+	 * re-fetch without retyping. Falls back to `eventCode` when empty.
+	 */
+	tbaEventKey = $state('');
 	loaded = $state(false);
 
 	get isConfigured() {
@@ -74,6 +82,7 @@ class Session {
 		this.overrides = Array.isArray(ov) ? ov : [];
 		this.managerToken = (await getSetting('managerToken')) ?? '';
 		this.tbaApiKey = (await getSetting('tbaApiKey')) ?? '';
+		this.tbaEventKey = (await getSetting('tbaEventKey')) ?? '';
 		// One-time migration cleanup: drop the obsolete pre-assignments setting
 		// so it doesn't sit in IndexedDB forever. Safe to remove this line a
 		// few months after release.
@@ -115,6 +124,10 @@ class Session {
 		if (patch.tbaApiKey !== undefined) {
 			this.tbaApiKey = patch.tbaApiKey;
 			await setSetting('tbaApiKey', patch.tbaApiKey);
+		}
+		if (patch.tbaEventKey !== undefined) {
+			this.tbaEventKey = patch.tbaEventKey;
+			await setSetting('tbaEventKey', patch.tbaEventKey);
 		}
 	}
 }

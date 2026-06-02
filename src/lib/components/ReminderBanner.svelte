@@ -1,4 +1,5 @@
 <script>
+	import { base } from '$app/paths';
 	import { reminders } from '$lib/reminders.svelte.js';
 
 	let expanded = $state(false);
@@ -13,6 +14,16 @@
 
 	async function onDismiss(r) {
 		await reminders.dismiss(r.id, r.expires_at);
+	}
+
+	// Deeplink a reminder straight into a pre-filled entry form. Auto reminders
+	// carry the exact team; manager reminders carry only the match, so /new
+	// resolves the scout's team for that match. No match → no link.
+	function scoutHref(r) {
+		if (!Number.isFinite(r?.match_number) || r.match_number <= 0) return null;
+		const qp = new URLSearchParams({ match: String(r.match_number) });
+		if (Number.isFinite(r.team) && r.team > 0) qp.set('team', String(r.team));
+		return `${base}/new/?${qp.toString()}`;
 	}
 </script>
 
@@ -29,6 +40,9 @@
 						<small class="r-author">— {r.author}</small>
 					{/if}
 				</div>
+				{#if scoutHref(r)}
+					<a class="r-scout" href={scoutHref(r)}>Scout →</a>
+				{/if}
 				<button
 					type="button"
 					class="r-x"
@@ -114,6 +128,21 @@
 		flex-shrink: 0;
 	}
 	.r-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.05); }
+
+	.r-scout {
+		flex-shrink: 0;
+		align-self: center;
+		font-size: 0.78rem;
+		font-weight: 700;
+		text-decoration: none;
+		color: inherit;
+		border: 1px solid currentColor;
+		border-radius: 0.3rem;
+		padding: 0.15rem 0.5rem;
+		opacity: 0.9;
+		white-space: nowrap;
+	}
+	.r-scout:hover { opacity: 1; }
 
 	.r-more {
 		align-self: flex-start;

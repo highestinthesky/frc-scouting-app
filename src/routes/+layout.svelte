@@ -130,6 +130,8 @@
 		--accent-hover: #4e1c87;
 		--accent-soft: #f4ebfa;
 		--on-accent: #ffffff;
+		--alliance-red: #c0392b;
+		--alliance-blue: #2c5cb0;
 		--danger: #c0392b;
 		--danger-bg: #fdecea;
 		--success: #047857;
@@ -159,6 +161,8 @@
 			--accent: #b18de0;
 			--accent-hover: #c5a8eb;
 			--accent-soft: #2a1e3d;
+			--alliance-red: #f1746a;
+			--alliance-blue: #6fa8ec;
 			--danger: #f7857a;
 			--danger-bg: #3a1a18;
 			--success: #6ee7b7;
@@ -171,8 +175,8 @@
 			--banner-info-border: #4a3a6e;
 			--banner-red-bg: #3a1a18;
 			--banner-red-border: #5a2a22;
-			--banner-blue-bg: #2a1e3d;
-			--banner-blue-border: #4a3a6e;
+			--banner-blue-bg: #16233a;
+			--banner-blue-border: #2c4a7a;
 		}
 	}
 	:global(:root[data-theme='dark']) {
@@ -188,6 +192,8 @@
 		--accent: #b18de0;
 		--accent-hover: #c5a8eb;
 		--accent-soft: #2a1e3d;
+		--alliance-red: #f1746a;
+		--alliance-blue: #6fa8ec;
 		--danger: #f7857a;
 		--danger-bg: #3a1a18;
 		--success: #6ee7b7;
@@ -200,8 +206,8 @@
 		--banner-info-border: #4a3a6e;
 		--banner-red-bg: #3a1a18;
 		--banner-red-border: #5a2a22;
-		--banner-blue-bg: #2a1e3d;
-		--banner-blue-border: #4a3a6e;
+		--banner-blue-bg: #16233a;
+		--banner-blue-border: #2c4a7a;
 	}
 
 	:global(body) {

@@ -9,6 +9,7 @@
 		publishSchedule,
 		pullSchedule,
 		getCachedSchedule,
+		getPublishedTbaEventKey,
 		clearScheduleCache,
 		qualMatches,
 		teamsInMatch,
@@ -88,6 +89,9 @@
 	// ─── manager-only state ────────────────────────────────────────────────
 
 	let tbaApiKey = $state(session.tbaApiKey);
+	// Canonical TBA event key to fetch from (e.g. "2027nyny"), decoupled from
+	// the team's sync event code (e.g. "2027nyc"). Empty falls back to the code.
+	let tbaEventKey = $state(session.tbaEventKey);
 	let passphraseSetRemote = $state(false);
 	let passphraseLocallyKnown = $derived(Boolean(session.managerToken));
 	let pwInput = $state('');
@@ -403,6 +407,15 @@
 				} catch (_e) {
 					overrideList = [];
 				}
+				// If this manager device hasn't got a TBA key yet but a teammate
+				// already published one, adopt it so re-fetching just works.
+				if (!tbaEventKey) {
+					const publishedKey = await getPublishedTbaEventKey(session.eventCode);
+					if (publishedKey) {
+						tbaEventKey = publishedKey;
+						await session.update({ tbaEventKey: publishedKey });
+					}
+				}
 			}
 		} catch (e) {
 			err = e?.message ?? String(e);
@@ -470,13 +483,23 @@
 		msg = '';
 		const safety = armSafetyTimer();
 		try {
-			const matches = await fetchAndCacheSchedule(session.eventCode, tbaApiKey || session.tbaApiKey);
-			// Persist the key on this device so reloads don't lose it.
+			// The TBA key drives the fetch; fall back to the event code when the
+			// manager hasn't entered a separate key.
+			const effectiveTbaKey = (tbaEventKey || '').trim() || session.eventCode;
+			const matches = await fetchAndCacheSchedule(
+				session.eventCode,
+				tbaApiKey || session.tbaApiKey,
+				effectiveTbaKey
+			);
+			// Persist the keys on this device so reloads don't lose them.
 			if (tbaApiKey && tbaApiKey !== session.tbaApiKey) {
 				await session.update({ tbaApiKey });
 			}
+			if ((tbaEventKey || '').trim() !== session.tbaEventKey) {
+				await session.update({ tbaEventKey: (tbaEventKey || '').trim() });
+			}
 			cached = await getCachedSchedule(session.eventCode);
-			msg = `Fetched ${qualMatches(matches).length} qual matches from TBA. Now tap “Publish to teammates”.`;
+			msg = `Fetched ${qualMatches(matches).length} qual matches from TBA (${effectiveTbaKey}). Now tap “Publish to teammates”.`;
 		} catch (e) {
 			err = e?.message ?? String(e);
 		} finally {
@@ -508,7 +531,8 @@
 			safety = armSafetyTimer();
 			const res = await publishSchedule(session.eventCode, cached.matches, {
 				managerToken: session.managerToken || undefined,
-				fetchedBy: session.scoutName || null
+				fetchedBy: session.scoutName || null,
+				tbaEventKey: (tbaEventKey || '').trim() || session.eventCode
 			});
 			msg = `Published — teammates will pull within 30 seconds. (${new Date(res.fetchedAt).toLocaleTimeString()})`;
 		} catch (e) {
@@ -739,6 +763,30 @@
 					You fetch the match schedule from The Blue Alliance, then publish it
 					so every scout on <code>{session.eventCode}</code> can pull it without
 					needing their own TBA key.
+				</p>
+
+				<label class="field">
+					<span class="label">TBA event key</span>
+					<small class="help">
+						The Blue Alliance's canonical key for this event (e.g.
+						<strong>2027nyny</strong>). Can differ from your team's event code —
+						scouts only ever type the code. Leave blank to use
+						<code>{session.eventCode}</code> as the key.
+					</small>
+					<input
+						type="text"
+						bind:value={tbaEventKey}
+						placeholder={session.eventCode}
+						autocomplete="off"
+						autocapitalize="none"
+						spellcheck="false"
+					/>
+				</label>
+
+				<p class="key-summary">
+					Your code: <strong>{session.eventCode}</strong>
+					<span class="key-sep">·</span>
+					TBA key: <strong>{(tbaEventKey || '').trim() || session.eventCode}</strong>
 				</p>
 
 				<label class="field">
@@ -1230,6 +1278,10 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 											{/each}
 										{/if}
 									</span>
+									<a
+										class="mb-scout"
+										href={newEntryHref({ match: m.match_number, team: row.team, color: row.color })}
+									>Scout →</a>
 								</li>
 							{/each}
 						</ul>
@@ -1344,6 +1396,17 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 	}
 	.label { font-weight: 600; font-size: 0.95rem; }
 	.help { color: var(--text-faint); font-size: 0.82rem; }
+	.key-summary {
+		margin: 0 0 0.9rem;
+		padding: 0.4rem 0.6rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 0.4rem;
+		font-size: 0.82rem;
+		color: var(--text-muted);
+	}
+	.key-summary strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+	.key-sep { opacity: 0.5; margin: 0 0.35rem; }
 	input {
 		font: inherit;
 		padding: 0.55rem 0.7rem;
@@ -1530,8 +1593,8 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		border-radius: 0.4rem;
 		background: var(--bg-card);
 	}
-	.upcoming-row[data-color='red'] { border-left-color: #c0392b; }
-	.upcoming-row[data-color='blue'] { border-left-color: #2c5cb0; }
+	.upcoming-row[data-color='red'] { border-left-color: var(--alliance-red); }
+	.upcoming-row[data-color='blue'] { border-left-color: var(--alliance-blue); }
 	.upcoming-row.done { opacity: 0.55; }
 	.upcoming-link {
 		display: flex;
@@ -1632,8 +1695,11 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 	}
 	.sched-row {
 		display: grid;
-		grid-template-columns: 2.5rem 1fr auto 1fr auto;
-		align-items: baseline;
+		/* match · red · vs · blue · time · edit — an explicit column per cell so
+		   the Edit button never auto-flows into the narrow match column (which
+		   used to clip its label). */
+		grid-template-columns: 2.5rem minmax(0, 1fr) auto minmax(0, 1fr) auto auto;
+		align-items: center;
 		gap: 0.4rem;
 		padding: 0.35rem 0.55rem;
 		border: 1px solid var(--border);
@@ -1643,8 +1709,8 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 	}
 	.sp-match { font-weight: 700; color: var(--accent); }
 	.sp-side { font-variant-numeric: tabular-nums; }
-	.sp-side.red { color: #c0392b; text-align: right; }
-	.sp-side.blue { color: #2c5cb0; text-align: left; }
+	.sp-side.red { color: var(--alliance-red); text-align: right; }
+	.sp-side.blue { color: var(--alliance-blue); text-align: left; }
 	.sp-vs {
 		color: var(--text-faint);
 		font-size: 0.75rem;
@@ -1692,6 +1758,7 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		border-radius: 0.35rem;
 		cursor: pointer;
 		align-self: center;
+		justify-self: end;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -1818,8 +1885,8 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		background: var(--bg-card);
 		font-size: 0.88rem;
 	}
-	.mb-team[data-color='red'] { border-left-color: #c0392b; }
-	.mb-team[data-color='blue'] { border-left-color: #2c5cb0; }
+	.mb-team[data-color='red'] { border-left-color: var(--alliance-red); }
+	.mb-team[data-color='blue'] { border-left-color: var(--alliance-blue); }
 	.mb-color-tag {
 		font-size: 0.7rem;
 		text-transform: uppercase;
@@ -1835,6 +1902,18 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		font-weight: 600;
 		font-size: 0.75rem;
 	}
+	.mb-scout {
+		flex-shrink: 0;
+		font-size: 0.76rem;
+		font-weight: 700;
+		text-decoration: none;
+		color: var(--accent);
+		border: 1px solid var(--border-strong);
+		border-radius: 0.3rem;
+		padding: 0.18rem 0.5rem;
+		white-space: nowrap;
+	}
+	.mb-scout:hover { border-color: var(--accent); background: var(--accent-soft); }
 
 	.mb-overrides {
 		list-style: none;

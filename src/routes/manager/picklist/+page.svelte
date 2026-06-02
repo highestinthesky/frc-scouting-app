@@ -314,7 +314,7 @@
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	h2.warn { color: #92400e; }
+	h2.warn { color: var(--warning); }
 	.count { font-size: 0.78rem; color: var(--text-faint); margin-left: 0.3rem; }
 	.block-actions { display: flex; gap: 0.5rem; }
 	.link-btn {
@@ -379,6 +379,6 @@
 	.ops button:hover, .ops a:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 	.ops button:disabled { opacity: 0.4; cursor: not-allowed; }
 	.ops .danger-btn:hover { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
-	.ops .warn-btn:hover { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+	.ops .warn-btn:hover { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning); }
 	.peek { font-size: 0.78rem; }
 </style>
