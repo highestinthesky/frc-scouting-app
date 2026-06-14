@@ -1,60 +1,28 @@
 # FRC Scout
 
-An offline-first FRC scouting PWA.
+MADE FOR 3419 ROHAWKS
 
-## First-time setup
+## Structure
 
-You need [Node.js](https://nodejs.org/) 20 or newer. Check with:
+### Scouts
+- Scouts can create and edit files, whereas they will be pushed to cloud sync to be transferred to a manager
+- Can only edit files that they have created
 
-```sh
-node --version
-```
+### Managers
+- Same as scouts for scouting functionality
+- Can view all entries in _Manager View_, which helps to visualize the best picks
 
-Then, from this folder:
+## Architecture 
+This website is directly connected to an **unencrypted** Supabase **free** database, meaning that it will shut down and require manual reactivation after a week of inactivity
+**However**, stored data should be safe
 
-```sh
-npm install
-```
+All entries are connected to an **event tag**, which is what the website uses to request sync and push files
 
-That downloads everything in `package.json` into a `node_modules/` folder
-(this can take a minute the first time). It only needs to happen once,
-and again whenever dependencies change.
+# Developer
+This website was made for 3419, and has currently not been deployed for practical use
 
-## Day-to-day commands
+Created by Haolun Zhang
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Starts a local dev server, usually at http://localhost:5173. Hot-reloads as you save files. |
-| `npm run build` | Builds the production version into a `build/` folder. |
-| `npm run preview` | Serves the production build locally so you can sanity-check it. |
+Email me for any bugs or problems. 
 
-## Project layout
-
-```
-src/
-  app.html            Page shell (title, meta tags, theme color).
-  routes/
-    +layout.js        SPA settings (no SSR).
-    +layout.svelte    Wraps every page (favicon, future shared chrome).
-    +page.svelte      The home page. Currently a placeholder.
-  lib/
-    db.js             IndexedDB (local storage) via Dexie.
-static/
-  icons/              App icons. Drop PNGs here before deploying.
-  .nojekyll           Tells GitHub Pages not to mangle file names.
-svelte.config.js      Adapter + compiler config.
-vite.config.js        PWA plugin config.
-```
-
-## Deploy (later)
-
-`npm run build` produces a `build/` folder of plain static files.
-You can drop that folder on:
-
-- **Cloudflare Pages** — connect your GitHub repo, set build command to
-  `npm run build`, output directory to `build`. Free.
-- **GitHub Pages** — push the `build/` folder to a `gh-pages` branch.
-  Free.
-- **Netlify** — same idea as Cloudflare. Free.
-
-No server, no database, no recurring cost.
+Regular updates will be implemented as the season comes. 
