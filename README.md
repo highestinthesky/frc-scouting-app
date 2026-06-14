@@ -1,4 +1,4 @@
-# FRC Scout
+# FRC Scouting Application
 
 MADE FOR 3419 ROHAWKS
 
@@ -18,11 +18,13 @@ This website is directly connected to an **unencrypted** Supabase **free** datab
 
 All entries are connected to an **event tag**, which is what the website uses to request sync and push files
 
-# Developer
+Furthermore, to acquire schedules for each scout, a TBA (The Blue Alliance) API key is **required**, however it is free and one can acquire one by simply logging in
+
+## Developer
 This website was made for 3419, and has currently not been deployed for practical use
 
 Created by Haolun Zhang
 
-Email me for any bugs or problems. 
+Email me for any bugs or problems - I will fix them ASAP 
 
 Regular updates will be implemented as the season comes. 
