@@ -146,6 +146,29 @@
 		--banner-red-border: #fca5a5;
 		--banner-blue-bg: #eff6ff;
 		--banner-blue-border: #93c5fd;
+
+		/* ── structural tokens (theme-independent) ──────────────────────
+		   Spacing, radius, type-scale and elevation. These are the single
+		   source of truth the design system is migrating onto so spacing
+		   and corners stop drifting page-to-page. New UI should consume
+		   these instead of hardcoding rem values. */
+		--space-1: 0.25rem;
+		--space-2: 0.5rem;
+		--space-3: 0.75rem;
+		--space-4: 1rem;
+		--space-5: 1.5rem;
+		--space-6: 2rem;
+		--radius-sm: 0.3rem;
+		--radius-md: 0.4rem;
+		--radius-lg: 0.6rem;
+		--radius-pill: 999px;
+		--fs-xs: 0.75rem;
+		--fs-sm: 0.85rem;
+		--fs-md: 0.95rem;
+		--fs-lg: 1.1rem;
+		--fs-xl: 1.5rem;
+		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+		--shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
 	}
 	@media (prefers-color-scheme: dark) {
 		:global(:root:not([data-theme='light'])) {

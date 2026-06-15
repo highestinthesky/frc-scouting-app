@@ -20,8 +20,16 @@
 		replaceAssignments,
 		listOverrides,
 		addOverride,
-		removeOverride
+		removeOverride,
+		autoAssignTeams
 	} from '$lib/assignments.js';
+	import {
+		buildEntryIndex,
+		matchCoverage,
+		scheduleRollup,
+		coverageLevel,
+		teamStatus
+	} from '$lib/coverage.js';
 	import {
 		isPassphraseSet,
 		setPassphrase as setPassphraseRemote,
@@ -48,6 +56,13 @@
 
 	const qmList = $derived(cached ? qualMatches(cached.matches) : []);
 
+	// ── live coverage (shared with home + manager analytics) ────────────────
+	// Index of which (match, team) cells have at least one entry. A teammate's
+	// entry counts too, so coverage reflects the whole team's effort, not just
+	// this device's. Recomputes whenever entries change (sync tick bumps them).
+	const entryIndex = $derived(buildEntryIndex(entries, session.eventCode));
+	const rollup = $derived(scheduleRollup(qmList, entryIndex));
+
 	// Effective teams the scout is watching = manager-assigned ∪ local extras.
 	const effectiveTeams = $derived(session.effectiveTeams);
 
@@ -56,7 +71,6 @@
 	const myUpcoming = $derived.by(() => {
 		if (!qmList.length || !effectiveTeams.length) return [];
 		const teamSet = new Set(effectiveTeams);
-		const doneKey = new Set(entries.map((e) => `${e.matchNumber}:${e.teamNumber}`));
 		const out = [];
 		for (const m of qmList) {
 			const { red, blue } = teamsInMatch(m);
@@ -68,7 +82,7 @@
 					match: m.match_number,
 					team: t,
 					color: isRed ? 'red' : 'blue',
-					done: doneKey.has(`${m.match_number}:${t}`),
+					done: entryIndex.has(`${m.match_number}:${t}`),
 					// TBA fills predicted_time as Unix seconds; actual_time once played.
 					predictedTime: m.predicted_time ?? m.time ?? null,
 					actualTime: m.actual_time ?? null
@@ -77,6 +91,12 @@
 		}
 		return out;
 	});
+
+	// Progress for the scout: how many of their team-matches have an entry.
+	const myProgress = $derived.by(() => ({
+		total: myUpcoming.length,
+		done: myUpcoming.filter((r) => r.done).length
+	}));
 
 	// Re-tick once a minute so the "in 8 min" labels stay accurate without a
 	// manual refresh. $state assignment is what triggers the derived rerun.
@@ -689,6 +709,38 @@
 		}
 	}
 
+	function autoAssign() {
+		err = '';
+		msg = '';
+		const names = assignRows.map((r) => r.scout_name.trim()).filter(Boolean);
+		if (names.length === 0) {
+			err = 'Add at least one scout name first, then auto-assign.';
+			return;
+		}
+		if (!qmList.length) {
+			err = 'Fetch the schedule from TBA first — auto-assign needs the match list.';
+			return;
+		}
+		const ok = confirm(
+			`Auto-assign every team at ${session.eventCode} across ${names.length} ` +
+				`scout${names.length === 1 ? '' : 's'}?\n\n` +
+				`This overwrites the team lists in the editor below. Nothing is saved ` +
+				`until you tap “Save assignments”.`
+		);
+		if (!ok) return;
+		const { assignments, conflicts, teamCount } = autoAssignTeams(qmList, names);
+		assignRows = [...assignments.entries()]
+			.map(([scout_name, teams]) => ({ scout_name, teamsText: teams.join(', ') }))
+			.sort((a, b) => a.scout_name.localeCompare(b.scout_name));
+		msg =
+			conflicts > 0
+				? `Distributed ${teamCount} teams across ${names.length} scouts — ` +
+					`${conflicts} unavoidable same-match overlap${conflicts === 1 ? '' : 's'} ` +
+					`(see Coverage check; resolve with a per-match override). Review, then Save.`
+				: `Distributed ${teamCount} teams across ${names.length} scouts with no ` +
+					`same-match conflicts. Review, then tap Save assignments.`;
+	}
+
 	function addAssignRow() {
 		assignRows = [...assignRows, { scout_name: '', teamsText: '' }];
 	}
@@ -946,8 +998,20 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 						</button>
 					</div>
 				{/each}
+				<p class="muted small">
+					Short on time? Add your scouts' names (leave the team lists blank) and
+					tap <strong>Auto-assign</strong> — it spreads every team at the event
+					evenly across them and avoids putting two teams from the same match on
+					one scout. You can edit the result before saving.
+				</p>
 				<div class="actions-row">
 					<button class="secondary-btn" onclick={addAssignRow}>+ Add scout</button>
+					<button
+						class="secondary-btn"
+						disabled={busy || !qmList.length}
+						onclick={autoAssign}
+						title={qmList.length ? '' : 'Fetch the schedule from TBA first'}
+					>✨ Auto-assign</button>
 					<button class="primary" disabled={busy} onclick={saveAssignments}>
 						{busy ? 'Saving…' : 'Save assignments'}
 					</button>
@@ -1086,12 +1150,30 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 					<p class="muted small">
 						{qmList.length} qual matches. Use this to spot-check the fetch before publishing.
 					</p>
+					{#if rollup.teamMatchesTotal > 0}
+						<div class="cov-rollup" aria-label="Scouting coverage so far">
+							<div class="cov-bar" aria-hidden="true">
+								<span
+									class="cov-bar-fill"
+									style="width:{Math.round((rollup.teamMatchesScouted / rollup.teamMatchesTotal) * 100)}%"
+								></span>
+							</div>
+							<p class="cov-rollup-text">
+								<strong>{rollup.teamMatchesScouted}</strong>/{rollup.teamMatchesTotal}
+								team-matches scouted
+								<span class="key-sep">·</span>
+								<strong>{rollup.matchesComplete}</strong> of {rollup.matchesTotal}
+								matches fully covered
+							</p>
+						</div>
+					{/if}
 					<ol class="sched-preview">
 						{#each qmList as m (m.match_number)}
 							{@const matchTime = m.actual_time ?? m.predicted_time ?? m.time ?? null}
 							{@const red = (m.alliances?.red?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')))}
 							{@const blue = (m.alliances?.blue?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')))}
 							{@const myOv = overridesByMatch.get(m.match_number) ?? []}
+							{@const cov = matchCoverage(m, entryIndex)}
 							<li class="sched-li" id={`match-${m.match_number}`}>
 								<div class="sched-row">
 									<span class="sp-match">Q{m.match_number}</span>
@@ -1101,6 +1183,10 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 									{#if matchTime}
 										<span class="sp-time">{timeOfDay(matchTime)}</span>
 									{/if}
+									<span
+										class="cov-chip {coverageLevel(cov.scoutedTeams, cov.totalTeams)}"
+										title="{cov.scoutedTeams} of {cov.totalTeams} teams in this match have a scouting entry"
+									>{cov.scoutedTeams}/{cov.totalTeams}</span>
 									<button
 										type="button"
 										class="sp-edit"
@@ -1201,6 +1287,18 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 			{:else if myUpcoming.length === 0}
 				<p class="muted small">None of your teams appear in the qual schedule.</p>
 			{:else}
+				<div class="cov-rollup" aria-label="Your scouting progress">
+					<div class="cov-bar" aria-hidden="true">
+						<span
+							class="cov-bar-fill"
+							style="width:{myProgress.total ? Math.round((myProgress.done / myProgress.total) * 100) : 0}%"
+						></span>
+					</div>
+					<p class="cov-rollup-text">
+						You've logged <strong>{myProgress.done}</strong> of
+						<strong>{myProgress.total}</strong> assigned team-matches.
+					</p>
+				</div>
 				<ul class="upcoming">
 					{#each myUpcoming as row (row.match + ':' + row.team)}
 						{@const matchTime = row.actualTime ?? row.predictedTime}
@@ -1266,9 +1364,19 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 						<h3 class="mb-h">Coverage</h3>
 						<ul class="mb-coverage">
 							{#each editingMatchCoverage as row (row.color + ':' + row.team)}
+								{@const st = teamStatus(m.match_number, row.team, entryIndex, row.watchers.length > 0)}
 								<li class="mb-team" data-color={row.color}>
 									<span class="mb-color-tag">{row.color}</span>
 									<span class="mb-team-num">{row.team}</span>
+									<span class="mb-status {st.status}">
+										{#if st.status === 'submitted'}
+											✓ scouted{#if st.count > 1} ×{st.count}{/if}
+										{:else if st.status === 'assigned'}
+											assigned
+										{:else}
+											uncovered
+										{/if}
+									</span>
 									<span class="mb-watchers">
 										{#if row.watchers.length === 0}
 											<em class="mb-none">no scout</em>
@@ -1281,7 +1389,7 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 									<a
 										class="mb-scout"
 										href={newEntryHref({ match: m.match_number, team: row.team, color: row.color })}
-									>Scout →</a>
+									>{st.status === 'submitted' ? 'Re-scout →' : 'Scout →'}</a>
 								</li>
 							{/each}
 						</ul>
@@ -1695,10 +1803,10 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 	}
 	.sched-row {
 		display: grid;
-		/* match · red · vs · blue · time · edit — an explicit column per cell so
-		   the Edit button never auto-flows into the narrow match column (which
-		   used to clip its label). */
-		grid-template-columns: 2.5rem minmax(0, 1fr) auto minmax(0, 1fr) auto auto;
+		/* match · red · vs · blue · time · coverage · edit — an explicit column
+		   per cell so the Edit button never auto-flows into the narrow match
+		   column (which used to clip its label). */
+		grid-template-columns: 2.5rem minmax(0, 1fr) auto minmax(0, 1fr) auto auto auto;
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.35rem 0.55rem;
@@ -1721,26 +1829,85 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		font-size: 0.78rem;
 		white-space: nowrap;
 	}
+
+	/* ── coverage chip + roll-up ────────────────────────────────── */
+	.cov-chip {
+		justify-self: end;
+		align-self: center;
+		font-size: 0.74rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		padding: 0.15rem 0.45rem;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		white-space: nowrap;
+		line-height: 1.3;
+	}
+	.cov-chip.full {
+		color: var(--success);
+		background: var(--success-bg);
+		border-color: var(--success-border);
+	}
+	.cov-chip.partial {
+		color: var(--warning);
+		background: var(--warning-bg);
+		border-color: var(--warning-border);
+	}
+	.cov-rollup {
+		margin: 0.2rem 0 0.7rem;
+	}
+	.cov-bar {
+		height: 0.5rem;
+		border-radius: 999px;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		overflow: hidden;
+	}
+	.cov-bar-fill {
+		display: block;
+		height: 100%;
+		background: var(--success);
+		border-radius: 999px;
+		transition: width 240ms ease;
+	}
+	.cov-rollup-text {
+		margin: 0.35rem 0 0;
+		font-size: 0.82rem;
+		color: var(--text-muted);
+	}
+	.cov-rollup-text strong {
+		color: var(--text-primary);
+		font-variant-numeric: tabular-nums;
+	}
+
 	@media (max-width: 28rem) {
 		.sched-row {
-			grid-template-columns: 2.5rem 1fr auto;
+			grid-template-columns: 2.5rem 1fr auto auto;
 			grid-template-rows: auto auto;
 			row-gap: 0.15rem;
 			column-gap: 0.55rem;
 		}
 		.sp-vs { display: none; }
+		.sp-match { grid-row: 1 / span 2; grid-column: 1; }
 		.sp-side.red { grid-row: 1; grid-column: 2; text-align: left; }
 		.sp-side.blue { grid-row: 2; grid-column: 2; text-align: left; }
-		.sp-match { grid-row: 1 / span 2; }
 		.sp-time {
 			grid-row: 1;
 			grid-column: 3;
 			align-self: center;
 			justify-self: end;
 		}
-		.sp-edit {
+		.cov-chip {
 			grid-row: 2;
 			grid-column: 3;
+			justify-self: end;
+		}
+		.sp-edit {
+			grid-row: 1 / span 2;
+			grid-column: 4;
+			align-self: center;
 			justify-self: end;
 		}
 	}
@@ -1895,6 +2062,27 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		min-width: 2.4rem;
 	}
 	.mb-team-num { font-weight: 700; min-width: 3.5rem; }
+	.mb-status {
+		flex-shrink: 0;
+		font-size: 0.72rem;
+		font-weight: 700;
+		padding: 0.1rem 0.4rem;
+		border-radius: 999px;
+		white-space: nowrap;
+		border: 1px solid var(--border);
+		color: var(--text-faint);
+		background: var(--bg-subtle);
+	}
+	.mb-status.submitted {
+		color: var(--success);
+		background: var(--success-bg);
+		border-color: var(--success-border);
+	}
+	.mb-status.assigned {
+		color: var(--accent);
+		background: var(--accent-soft);
+		border-color: var(--accent-soft);
+	}
 	.mb-watchers { color: var(--text-muted); flex: 1 1 0; min-width: 0; }
 	.mb-none { color: var(--text-faint); font-style: italic; }
 	.mb-override-tag {

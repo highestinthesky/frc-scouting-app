@@ -18,6 +18,7 @@
 
 import { createSupabaseClient, deriveSessionId } from './supabase.js';
 import { session } from './session.svelte.js';
+import { teamsInMatch } from './tba.js';
 
 /**
  * Manager-only: replace the entire assignment list for an event with the
@@ -248,4 +249,74 @@ function mapErr(err, action) {
 		);
 	}
 	return new Error(`Couldn't ${action}: ${msg}`);
+}
+
+// ─── smart auto-assign ──────────────────────────────────────────────────────
+//
+// Given the published schedule and a list of scout names, distribute every
+// distinct team playing at the event across the scouts. Two goals, in order:
+//   1. Avoid same-match conflicts — a scout shouldn't be handed two teams that
+//      ever play each other (they can't physically scout both at once).
+//   2. Balance the load — keep each scout's team count as even as possible.
+//
+// Greedy + most-constrained-first: teams that appear in the most matches are
+// the hardest to place, so we place them first, always choosing the
+// least-loaded scout who has no conflict. If every scout would conflict (more
+// teams overlap than scouts can absorb) we fall back to the least-loaded scout
+// and let the existing Coverage-check surface the unavoidable clash.
+
+/**
+ * @param {object[]} qmList       qual matches (from qualMatches())
+ * @param {string[]} scoutNames   non-empty scout names to distribute across
+ * @returns {{ assignments: Map<string, number[]>, conflicts: number, teamCount: number }}
+ */
+export function autoAssignTeams(qmList, scoutNames) {
+	const names = [...new Set((scoutNames ?? []).map((n) => String(n ?? '').trim()).filter(Boolean))];
+	if (names.length === 0 || !Array.isArray(qmList) || qmList.length === 0) {
+		return { assignments: new Map(), conflicts: 0, teamCount: 0 };
+	}
+
+	// team → Set<match_number> it plays in.
+	const teamMatches = new Map();
+	for (const m of qmList) {
+		const { red, blue } = teamsInMatch(m);
+		for (const t of [...red, ...blue]) {
+			if (!Number.isFinite(t)) continue;
+			const set = teamMatches.get(t) ?? new Set();
+			set.add(m.match_number);
+			teamMatches.set(t, set);
+		}
+	}
+
+	// Most-constrained first (plays in the most matches), then numeric order.
+	const teams = [...teamMatches.keys()].sort((a, b) => {
+		const d = teamMatches.get(b).size - teamMatches.get(a).size;
+		return d !== 0 ? d : a - b;
+	});
+
+	const assigned = new Map(names.map((n) => [n, []]));
+	// Per-scout union of match_numbers already covered, for fast conflict checks.
+	const scoutMatches = new Map(names.map((n) => [n, new Set()]));
+	let conflicts = 0;
+
+	const overlaps = (scout, team) => {
+		const have = scoutMatches.get(scout);
+		for (const mn of teamMatches.get(team)) if (have.has(mn)) return true;
+		return false;
+	};
+
+	for (const team of teams) {
+		// Candidate scouts with no conflict, fewest teams first.
+		const ranked = [...names].sort((a, b) => assigned.get(a).length - assigned.get(b).length);
+		let chosen = ranked.find((n) => !overlaps(n, team));
+		if (!chosen) {
+			chosen = ranked[0]; // unavoidable conflict — give it to the lightest load
+			conflicts += 1;
+		}
+		assigned.get(chosen).push(team);
+		for (const mn of teamMatches.get(team)) scoutMatches.get(chosen).add(mn);
+	}
+
+	for (const [, list] of assigned) list.sort((a, b) => a - b);
+	return { assignments: assigned, conflicts, teamCount: teams.length };
 }
