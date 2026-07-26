@@ -3,7 +3,7 @@
 	import { base } from '$app/paths';
 	import { session } from '$lib/session.svelte.js';
 	import { role } from '$lib/role.svelte.js';
-	import { listEntries } from '$lib/db.js';
+	import { listEntries, getSetting, setSetting } from '$lib/db.js';
 	import {
 		fetchAndCacheSchedule,
 		publishSchedule,
@@ -409,6 +409,64 @@
 	 */
 	let pendingOverrides = $state(/** @type {any[]|null} */ (null));
 
+	// ── unsaved-draft persistence ───────────────────────────────────────────
+	//
+	// Typing a roster into the editor is ten minutes of work, and it used to
+	// evaporate on any refresh — which at an event means a dropped phone, a
+	// backgrounded tab the OS reclaimed, or a fat-fingered pull-to-refresh.
+	// The draft is mirrored into IndexedDB on every keystroke and restored on
+	// load. It is deliberately local-only: an unsaved draft is one person's
+	// work-in-progress, not something to push at teammates mid-edit.
+
+	let draftRestored = $state(false);
+	let draftSavedAt = $state(/** @type {number|null} */ (null));
+	/** Guards the persist effect so the initial server load doesn't overwrite a draft. */
+	let draftReady = $state(false);
+
+	const draftKey = () => `assignDraft:${(session.eventCode ?? '').trim().toLowerCase()}`;
+	const rowsEqual = (a, b) =>
+		a.length === b.length &&
+		a.every(
+			(r, i) =>
+				r.scout_name.trim() === b[i].scout_name.trim() &&
+				r.teamsText.trim() === b[i].teamsText.trim()
+		);
+
+	$effect(() => {
+		// Read every field so the effect re-runs on any edit to any row.
+		const snapshot = assignRows.map((r) => ({
+			scout_name: r.scout_name,
+			teamsText: r.teamsText
+		}));
+		if (!draftReady || !role.isManager || !session.eventCode) return;
+		// Debounced: without this every keystroke is its own IndexedDB write, and
+		// because the writes are async they can also land out of order and leave
+		// a stale snapshot as the final value.
+		const key = draftKey();
+		const id = setTimeout(() => {
+			setSetting(key, { rows: snapshot, savedAt: Date.now() }).catch(() => {});
+		}, 400);
+		return () => clearTimeout(id);
+	});
+
+	async function clearDraft() {
+		draftRestored = false;
+		draftSavedAt = null;
+		try {
+			await setSetting(draftKey(), null);
+		} catch (_e) {
+			/* a draft we can't clear is not worth failing a save over */
+		}
+	}
+
+	/** Throw the draft away and go back to what the server has. */
+	async function discardDraft() {
+		await clearDraft();
+		draftReady = false;
+		await reload();
+		msg = 'Draft discarded — showing the saved assignments.';
+	}
+
 	// ─── mount: load cached schedule, entries, assignments, passphrase state ─
 
 	onMount(async () => {
@@ -439,6 +497,23 @@
 				if (assignRows.length === 0) {
 					assignRows = [{ scout_name: '', teamsText: '' }];
 				}
+				// A draft only wins if it actually differs from what's saved —
+				// otherwise every visit would claim to have restored something.
+				try {
+					const draft = await getSetting(draftKey());
+					if (draft?.rows?.length && !rowsEqual(draft.rows, assignRows)) {
+						assignRows = draft.rows.map((r) => ({
+							scout_name: String(r.scout_name ?? ''),
+							teamsText: String(r.teamsText ?? '')
+						}));
+						draftRestored = true;
+						draftSavedAt = draft.savedAt ?? null;
+					} else if (draft) {
+						await clearDraft();
+					}
+				} catch (_e) {
+					/* no draft, or unreadable — carry on with the server copy */
+				}
 				// Pull a live list of reminders so the manager can see what's already
 				// out there (and delete stale ones).
 				try {
@@ -463,6 +538,10 @@
 			}
 		} catch (e) {
 			err = e?.message ?? String(e);
+		} finally {
+			// Only start mirroring once the server load has settled, so the
+			// initial assignRows write doesn't clobber the draft we just read.
+			draftReady = true;
 		}
 	}
 
@@ -820,6 +899,7 @@
 				overrideNote = ` and ${n} per-match override${n === 1 ? '' : 's'}`;
 			}
 
+			await clearDraft();
 			msg = `Saved ${inserted} assignment row${inserted === 1 ? '' : 's'}${overrideNote}.`;
 		} catch (e) {
 			err = e?.message ?? String(e);
@@ -890,11 +970,15 @@
 				{assignRows}
 				{busy}
 				{qmList}
+				{now}
+				{draftRestored}
+				{draftSavedAt}
 				pendingOverrideCount={pendingOverrides?.length ?? 0}
 				onAddRow={addAssignRow}
 				onRemoveRow={removeAssignRow}
 				onAutoAssign={autoAssign}
 				onSave={saveAssignments}
+				onDiscardDraft={discardDraft}
 			/>
 
 			<ScoutRoster {scoutsInEvent} {now} />

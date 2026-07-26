@@ -4,15 +4,21 @@
 	// assignRows is a $state array owned by the route — mutating a row's fields
 	// through the proxy propagates back without an explicit binding.
 
+	import { relativeTime } from '$lib/format.js';
+
 	let {
 		assignRows,
 		busy,
 		qmList,
+		draftRestored,
+		draftSavedAt,
 		pendingOverrideCount,
+		now,
 		onAddRow,
 		onRemoveRow,
 		onAutoAssign,
-		onSave
+		onSave,
+		onDiscardDraft
 	} = $props();
 </script>
 
@@ -20,6 +26,12 @@
 	<h2>Assign scouts</h2>
 	<p class="muted">One row per scout. Saving replaces the whole list.</p>
 
+	{#if draftRestored}
+		<p class="draft-note">
+			Restored unsaved changes{#if draftSavedAt} from {relativeTime(draftSavedAt, now)}{/if}.
+			<button type="button" class="draft-discard" onclick={onDiscardDraft}>Discard</button>
+		</p>
+	{/if}
 	{#each assignRows as r, i}
 		<div class="assign-row">
 			<input
@@ -72,6 +84,29 @@
 </section>
 
 <style>
+	.draft-note {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		margin: 0 0 0.7rem;
+		padding: 0.4rem 0.6rem;
+		font-size: 0.82rem;
+		background: var(--warning-bg);
+		color: var(--warning);
+		border: 1px solid var(--warning-border);
+		border-radius: 0.35rem;
+	}
+	.draft-discard {
+		font: inherit;
+		font-weight: 600;
+		background: none;
+		border: none;
+		padding: 0;
+		color: inherit;
+		text-decoration: underline;
+		cursor: pointer;
+	}
 	.pending-note { color: var(--accent); }
 	h2 {
 		margin: 1.5rem 0 0.5rem;
