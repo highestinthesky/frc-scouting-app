@@ -21,18 +21,16 @@
 
 <main class="setup">
 	<h1>Set up scouting</h1>
-	<p class="muted">Just once per device. You can change these later.</p>
 
 	<form onsubmit={save}>
 		<label class="field">
 			<span class="label">Event code</span>
-			<small class="help">e.g. <code>2026cala</code> or whatever the event uses on TBA.</small>
+			<small class="help">Whatever your team agreed on.</small>
 			<input bind:value={eventCode} required autocomplete="off" autocapitalize="none" placeholder="2026xxxx" />
 		</label>
 
 		<label class="field">
 			<span class="label">Your name</span>
-			<small class="help">So managers know who scouted what.</small>
 			<input bind:value={scoutName} required autocomplete="name" placeholder="Your name" />
 		</label>
 
@@ -49,8 +47,7 @@
 		padding: 2rem 1.5rem;
 		font-family: system-ui, -apple-system, sans-serif;
 	}
-	h1 { margin: 0 0 0.25rem; }
-	.muted { color: var(--text-muted); margin-bottom: 1.5rem; }
+	h1 { margin: 0 0 1.5rem; }
 	.field {
 		display: flex;
 		flex-direction: column;
@@ -59,11 +56,6 @@
 	}
 	.label { font-weight: 600; }
 	.help { color: var(--text-faint); font-size: 0.85rem; }
-	code {
-		background: var(--bg-subtle);
-		padding: 0 0.25rem;
-		border-radius: 0.2rem;
-	}
 	input {
 		font: inherit;
 		padding: 0.6rem 0.7rem;

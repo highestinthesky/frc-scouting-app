@@ -63,15 +63,14 @@
 
 	<section>
 		<h2>Role</h2>
-		<p class="muted">Choose what this device is being used for.</p>
 		<div class="roles">
 			<button class:selected={role.isScout} onclick={() => setRole('scout')}>
 				<strong>Scout</strong>
-				<small>Records matches, exports a single file.</small>
+				<small>Records matches.</small>
 			</button>
 			<button class:selected={role.isManager} onclick={() => setRole('manager')}>
 				<strong>Manager</strong>
-				<small>Imports scout files, sees aggregated entries, publishes the schedule.</small>
+				<small>Records matches, plus analysis and scheduling.</small>
 			</button>
 		</div>
 	</section>
@@ -82,20 +81,14 @@
 			<label class="field">
 				<span class="label">Event code</span>
 				<small class="help">
-					Anything your team agrees on — <code>2027nyc</code>, <code>team1234</code>,
-					anything. Everyone using the same code shares data automatically. It does
-					<strong>not</strong> have to match The Blue Alliance; the manager sets the
-					matching TBA event key on the Schedule tab.
+					Any code your team agrees on. Everyone using the same one shares data.
 				</small>
 				<input bind:value={eventCode} autocomplete="off" autocapitalize="none" placeholder="e.g. 2027nyc" />
 			</label>
 
 			<label class="field">
 				<span class="label">Your name</span>
-				<small class="help">
-					Must match exactly what the manager typed when assigning you teams on
-					the Schedule tab (case-insensitive).
-				</small>
+				<small class="help">Match what the manager typed when assigning you teams.</small>
 				<input bind:value={scoutName} autocomplete="name" />
 			</label>
 
@@ -109,19 +102,13 @@
 	<section>
 		<h2>Schedule</h2>
 		<p class="muted">
-			Schedule and team assignments now live on the <a href="{base}/schedule/">Schedule</a>
-			tab. Scouts: set your name above, then check the Schedule tab to see which
-			teams you're watching. Managers: open the Schedule tab to fetch from TBA,
-			publish for the team, and assign scouts.
+			Assignments and match schedule live on the
+			<a href="{base}/schedule/">Schedule</a> tab.
 		</p>
 	</section>
 
 	<section>
-		<h2>Wireless sync</h2>
-		<p class="muted">
-			Sync follows the event code above. Anyone with the same code in their
-			Identity sees the same entries within a few seconds.
-		</p>
+		<h2>Sync</h2>
 		<p class="status {syncState.status}">
 			{statusLabel()}{#if syncState.pendingCount > 0} · {syncState.pendingCount} pending{/if}
 		</p>
@@ -141,7 +128,6 @@
 
 	<section>
 		<h2>Appearance</h2>
-		<p class="muted">Choose how the app looks. "System" follows your phone's setting.</p>
 		<div class="theme-row">
 			<button
 				class="theme-btn"
@@ -163,22 +149,9 @@
 
 	<section>
 		<h2>Danger zone</h2>
-		<p class="muted">
-			Wipes every entry stored on this device. Settings are kept. Use this
-			after exporting and confirming the file works on the manager side.
-		</p>
+		<p class="muted">Wipes every entry on this device. Synced copies are unaffected.</p>
 		<button class="danger" onclick={clearAll}>Clear all entries</button>
 		{#if clearMsg}<small class="muted ok">{clearMsg}</small>{/if}
-	</section>
-
-	<section>
-		<h2>About</h2>
-		<p class="muted">
-			FRC Scout is local-first. Entries live on this device; if your event
-			code matches a teammate's, both devices push and pull through the cloud
-			automatically. Files (<code>.scout</code>) work as a fallback for
-			venues with no network.
-		</p>
 	</section>
 </main>
 
@@ -213,11 +186,6 @@
 	.muted a { color: var(--accent); }
 	.ok { color: var(--accent); margin-left: 0.5rem; }
 	.help { color: var(--text-faint); font-size: 0.82rem; }
-	code {
-		background: var(--bg-subtle);
-		padding: 0 0.25rem;
-		border-radius: 0.2rem;
-	}
 
 	.roles {
 		display: flex;

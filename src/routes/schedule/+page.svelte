@@ -812,18 +812,13 @@
 			<section>
 				<h2>Publish schedule</h2>
 				<p class="muted">
-					You fetch the match schedule from The Blue Alliance, then publish it
-					so every scout on <code>{session.eventCode}</code> can pull it without
-					needing their own TBA key.
+					Fetch from The Blue Alliance, then publish so scouts can pull it.
 				</p>
 
 				<label class="field">
 					<span class="label">TBA event key</span>
 					<small class="help">
-						The Blue Alliance's canonical key for this event (e.g.
-						<strong>2027nyny</strong>). Can differ from your team's event code —
-						scouts only ever type the code. Leave blank to use
-						<code>{session.eventCode}</code> as the key.
+						e.g. <strong>2027nyny</strong>. Blank uses <code>{session.eventCode}</code>.
 					</small>
 					<input
 						type="text"
@@ -844,8 +839,7 @@
 				<label class="field">
 					<span class="label">TBA API key</span>
 					<small class="help">
-						Free key at <strong>thebluealliance.com/account</strong> → Read API
-						Keys. Stored only on this device.
+						Free at <strong>thebluealliance.com/account</strong> → Read API Keys.
 					</small>
 					<input
 						type="password"
@@ -887,15 +881,11 @@
 			<section>
 				<h2>Manager passphrase</h2>
 				<p class="muted">
-					Once set, publishing the schedule and editing assignments requires this
-					passphrase. Scouts never need it.
+					Required to publish schedules and edit assignments. Scouts don't need it.
 				</p>
 
 				{#if !passphraseSetRemote}
-					<p class="muted small">
-						No passphrase set for <code>{session.eventCode}</code> yet. The first
-						manager device to set one wins.
-					</p>
+					<p class="muted small">Not set yet for <code>{session.eventCode}</code>.</p>
 					<label class="field">
 						<span class="label">New passphrase</span>
 						<input type="password" bind:value={pwInput} autocomplete="new-password" />
@@ -971,10 +961,7 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 
 			<section>
 				<h2>Assign scouts</h2>
-				<p class="muted">
-					One row per scout. Team numbers are comma- or space-separated. Saving
-					replaces the entire assignment list on the server.
-				</p>
+				<p class="muted">One row per scout. Saving replaces the whole list.</p>
 				{#each assignRows as r, i}
 					<div class="assign-row">
 						<input
@@ -1020,14 +1007,8 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 			<!-- ── Scouts in this event ────────────────────────────────── -->
 			<section>
 				<h2>Scouts in this event</h2>
-				<p class="muted">
-					Anyone who has either been assigned teams above or recorded an entry
-					for <code>{session.eventCode}</code>. Entries are pulled on the sync
-					tick, so a scout who's currently offline may not appear until they
-					reconnect.
-				</p>
 				{#if scoutsInEvent.length === 0}
-					<p class="muted small">Nobody yet. Add assignments above or wait for a scout to record their first entry.</p>
+					<p class="muted small">Nobody yet.</p>
 				{:else}
 					<ul class="roster">
 						{#each scoutsInEvent as s (s.name)}
@@ -1051,9 +1032,7 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 			<section>
 				<h2>Coverage check</h2>
 				<p class="muted">
-					Spots a single scout assigned to two-plus teams in the same match. Click the
-					match number to jump to the schedule row, where you can add a per-match
-					override that picks one team for this match only.
+					Scouts assigned two or more teams in one match. Tap a match to override.
 				</p>
 				{#if coverageConflicts.length === 0}
 					<p class="muted small ok-inline">✓ No conflicts.</p>
@@ -1076,12 +1055,7 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 			<!-- ── Send reminder (manager) ───────────────────────────── -->
 			<section>
 				<h2>Send reminder</h2>
-				<p class="muted">
-					Posts a banner to the targeted scout (or everyone) until they dismiss
-					it. Expires automatically after 2 hours. Scouts also get an automatic
-					banner 15 minutes before any match where one of their assigned teams
-					plays — no action needed for those.
-				</p>
+				<p class="muted">Banner shows until dismissed, or 2 hours.</p>
 
 				<div class="reminder-form">
 					<label class="field">
@@ -1207,16 +1181,11 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 
 			<section>
 				<h2>Your teams</h2>
-				<p class="muted">
-					Teams you're watching today. Manager-assigned teams appear here
-					automatically; you can also add extras yourself if you're filling in.
-				</p>
 
 				{#if effectiveTeams.length === 0}
 					<p class="muted small">
-						No teams yet. Either the manager hasn't assigned you, or your scout
-						name on this device doesn't match the one they used.
-						Your name: <strong>{session.scoutName || '(not set)'}</strong>.
+						Nothing assigned to <strong>{session.scoutName || '(no name set)'}</strong>.
+						Check the spelling matches what your manager used.
 					</p>
 				{:else}
 					<div class="team-chips">

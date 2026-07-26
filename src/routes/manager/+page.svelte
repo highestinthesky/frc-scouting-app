@@ -362,17 +362,10 @@
 				>
 					{exportingCsv ? 'Exporting…' : 'Export CSV'}
 				</button>
-				<a class="btn secondary" href="{base}/manager/compare/">Compare</a>
-				<a class="btn secondary" href="{base}/manager/picklist/">Picklist</a>
 			</div>
 		</div>
 
 		<!-- ── Filter chips ────────────────────────────────────────────── -->
-		<!--
-			Each chip cycles through its values on click. Active chips are
-			highlighted. The derived filteredTeams list recomputes per-team stats
-			whenever any filter changes.
-		-->
 		<div class="chips">
 			<button
 				class="chip {eventFilter ? 'active' : ''}"
