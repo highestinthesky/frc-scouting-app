@@ -1031,6 +1031,8 @@
 				{effectiveTeams}
 				{myUpcoming}
 				{myProgress}
+				{qmList}
+				{entryIndex}
 				{now}
 				hrefFor={newEntryHref}
 			/>

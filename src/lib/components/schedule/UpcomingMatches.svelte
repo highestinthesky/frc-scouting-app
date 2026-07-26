@@ -1,14 +1,84 @@
 <script>
-	// The scout's own match list, filtered to their teams. Already-recorded
-	// rows stay in the list but muted, so the scout keeps a sense of pace.
+	// The scout's match list. Two views of the same schedule:
+	//
+	//   "My teams"    one row per team-match they're responsible for. This is the
+	//                 working list — already-recorded rows stay visible but muted
+	//                 so the scout keeps a sense of pace.
+	//   "All matches" every qual match at the event. Useful while waiting: you can
+	//                 see what's actually on the field, with your own rows marked.
+	//
+	// Either way a row expands in place to show all six robots, so a scout can
+	// check partners and opponents without going to the manager's preview.
 	import { role } from '$lib/role.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
+	import { teamStatus } from '$lib/coverage.js';
+	import { SvelteSet } from 'svelte/reactivity';
 
-	let { cached, effectiveTeams, myUpcoming, myProgress, now, hrefFor } = $props();
+	let {
+		cached,
+		effectiveTeams,
+		myUpcoming,
+		myProgress,
+		qmList,
+		entryIndex,
+		now,
+		hrefFor
+	} = $props();
+
+	let view = $state(/** @type {'mine'|'all'} */ ('mine'));
+	/** Expanded match numbers — a Set so several can be open at once. */
+	let expanded = new SvelteSet();
+
+	function toggle(matchNumber) {
+		// SvelteSet is reactive, so mutating in place is enough.
+		if (expanded.has(matchNumber)) expanded.delete(matchNumber);
+		else expanded.add(matchNumber);
+	}
+
+	const mine = $derived(new Set(effectiveTeams ?? []));
+	const matchByNumber = $derived(new Map((qmList ?? []).map((m) => [m.match_number, m])));
+
+	/** The six robots in a match, in alliance order, with per-team state. */
+	function lineup(matchNumber) {
+		const m = matchByNumber.get(matchNumber);
+		if (!m) return [];
+		const out = [];
+		for (const color of ['red', 'blue']) {
+			for (const key of m.alliances?.[color]?.team_keys ?? []) {
+				const team = Number(String(key).replace(/^frc/, ''));
+				if (!Number.isFinite(team)) continue;
+				const st = teamStatus(matchNumber, team, entryIndex, mine.has(team));
+				out.push({ color, team, isMine: mine.has(team), status: st.status, count: st.count });
+			}
+		}
+		return out;
+	}
+
+	const matchTimeOf = (m) => m?.actual_time ?? m?.predicted_time ?? m?.time ?? null;
 </script>
 
 <section>
 	<h2>Upcoming matches</h2>
+
+	{#if cached && qmList?.length}
+		<div class="view-toggle" role="group" aria-label="Which matches to show">
+			<button
+				type="button"
+				class="vt-btn"
+				class:selected={view === 'mine'}
+				aria-pressed={view === 'mine'}
+				onclick={() => (view = 'mine')}
+			>My teams</button>
+			<button
+				type="button"
+				class="vt-btn"
+				class:selected={view === 'all'}
+				aria-pressed={view === 'all'}
+				onclick={() => (view = 'all')}
+			>All matches</button>
+		</div>
+	{/if}
+
 	{#if !cached}
 		<p class="muted small">
 			{#if role.isManager}
@@ -18,11 +88,58 @@
 				manager has published.
 			{/if}
 		</p>
+	{:else if view === 'all'}
+		<!-- ── Every qual match at the event ─────────────────────────── -->
+		{#if !qmList?.length}
+			<p class="muted small">No qual matches in the published schedule.</p>
+		{:else}
+			<ul class="upcoming">
+				{#each qmList as m (m.match_number)}
+					{@const t = matchTimeOf(m)}
+					{@const teams = lineup(m.match_number)}
+					{@const yours = teams.filter((x) => x.isMine)}
+					{@const open = expanded.has(m.match_number)}
+					<li class="upcoming-row" class:has-mine={yours.length > 0}>
+						<button
+							type="button"
+							class="upcoming-link as-button"
+							aria-expanded={open}
+							onclick={() => toggle(m.match_number)}
+						>
+							<span class="up-match">Q{m.match_number}</span>
+							<span class="up-lineup">
+								<span class="side red"
+									>{teams.filter((x) => x.color === 'red').map((x) => x.team).join(' · ')}</span
+								>
+								<span class="up-vs">vs</span>
+								<span class="side blue"
+									>{teams.filter((x) => x.color === 'blue').map((x) => x.team).join(' · ')}</span
+								>
+							</span>
+							{#if yours.length > 0}
+								<span class="up-yours">yours: {yours.map((x) => x.team).join(', ')}</span>
+							{/if}
+							{#if t}
+								<span class="up-time">
+									{timeOfDay(t)}
+									<span class="up-rel">· {relativeTime(t, now)}</span>
+								</span>
+							{/if}
+							<span class="up-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+						</button>
+						{#if open}
+							{@render detail(teams, m.match_number)}
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	{:else if !effectiveTeams.length}
 		<p class="muted small">Add at least one team above to see your matches.</p>
 	{:else if myUpcoming.length === 0}
 		<p class="muted small">None of your teams appear in the qual schedule.</p>
 	{:else}
+		<!-- ── Just the scout's own team-matches ─────────────────────── -->
 		<div class="cov-rollup" aria-label="Your scouting progress">
 			<div class="cov-bar" aria-hidden="true">
 				<span
@@ -38,24 +155,68 @@
 		<ul class="upcoming">
 			{#each myUpcoming as row (row.match + ':' + row.team)}
 				{@const matchTime = row.actualTime ?? row.predictedTime}
+				{@const open = expanded.has(row.match)}
 				<li class="upcoming-row" data-color={row.color} class:done={row.done}>
-					<a href={hrefFor(row)} class="upcoming-link">
-						<span class="up-match">Q{row.match}</span>
-						<span class="up-team">Team {row.team}</span>
-						<span class="up-color">{row.color}</span>
-						{#if matchTime}
-							<span class="up-time">
-								{timeOfDay(matchTime)}
-								<span class="up-rel">· {relativeTime(matchTime, now)}</span>
-							</span>
-						{/if}
-						{#if row.done}<span class="up-done">✓ scouted</span>{/if}
-					</a>
+					<div class="row-main">
+						<a href={hrefFor(row)} class="upcoming-link">
+							<span class="up-match">Q{row.match}</span>
+							<span class="up-team">Team {row.team}</span>
+							<span class="up-color">{row.color}</span>
+							{#if matchTime}
+								<span class="up-time">
+									{timeOfDay(matchTime)}
+									<span class="up-rel">· {relativeTime(matchTime, now)}</span>
+								</span>
+							{/if}
+							{#if row.done}<span class="up-done">✓ scouted</span>{/if}
+						</a>
+						<button
+							type="button"
+							class="up-expand"
+							aria-expanded={open}
+							aria-label="Show the rest of Q{row.match}"
+							onclick={() => toggle(row.match)}
+						>{open ? '▾' : '▸'}</button>
+					</div>
+					{#if open}
+						{@render detail(lineup(row.match), row.match)}
+					{/if}
 				</li>
 			{/each}
 		</ul>
 	{/if}
 </section>
+
+{#snippet detail(teams, matchNumber)}
+	<div class="md-panel">
+		{#if teams.length === 0}
+			<p class="muted small md-empty">That match isn't in the pulled schedule.</p>
+		{:else}
+			<ul class="md-list">
+				{#each teams as x (x.color + ':' + x.team)}
+					<li class="md-row" data-color={x.color} class:mine={x.isMine}>
+						<span class="md-color">{x.color}</span>
+						<span class="md-team">{x.team}</span>
+						{#if x.isMine}<span class="md-tag">yours</span>{/if}
+						<span class="md-status {x.status}">
+							{#if x.status === 'submitted'}
+								✓ scouted{#if x.count > 1} ×{x.count}{/if}
+							{:else if x.status === 'assigned'}
+								assigned
+							{:else}
+								uncovered
+							{/if}
+						</span>
+						<a
+							class="md-scout"
+							href={hrefFor({ match: matchNumber, team: x.team, color: x.color })}
+						>{x.status === 'submitted' ? 'Re-scout →' : 'Scout →'}</a>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</div>
+{/snippet}
 
 <style>
 	h2 {
@@ -67,6 +228,31 @@
 	}
 	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
 	.muted.small { font-size: 0.82rem; }
+
+	/* ── view toggle ────────────────────────────────────────────────── */
+	.view-toggle {
+		display: flex;
+		gap: 0.35rem;
+		margin: 0 0 0.6rem;
+	}
+	.vt-btn {
+		font: inherit;
+		font-size: 0.85rem;
+		font-weight: 600;
+		padding: 0.4rem 0.8rem;
+		min-height: 2.75rem;
+		border-radius: 999px;
+		border: 1px solid var(--border-strong);
+		background: var(--bg-card);
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.vt-btn.selected {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
 	/* ── upcoming matches list ──────────────────────────────────────── */
 	.upcoming {
 		list-style: none;
@@ -85,6 +271,8 @@
 	.upcoming-row[data-color='red'] { border-left-color: var(--alliance-red); }
 	.upcoming-row[data-color='blue'] { border-left-color: var(--alliance-blue); }
 	.upcoming-row.done { opacity: 0.55; }
+	.upcoming-row.has-mine { border-left-color: var(--accent); }
+	.row-main { display: flex; align-items: stretch; }
 	.upcoming-link {
 		display: flex;
 		align-items: baseline;
@@ -93,11 +281,52 @@
 		color: inherit;
 		text-decoration: none;
 		flex-wrap: wrap;
+		flex: 1 1 auto;
+		min-width: 0;
 	}
 	.upcoming-link:hover { background: var(--bg-subtle); }
+	.as-button {
+		font: inherit;
+		width: 100%;
+		background: none;
+		border: none;
+		cursor: pointer;
+		text-align: left;
+	}
+	.up-expand {
+		font: inherit;
+		flex: 0 0 auto;
+		min-width: 2.75rem;
+		background: none;
+		border: none;
+		border-left: 1px solid var(--border);
+		color: var(--text-faint);
+		cursor: pointer;
+	}
+	.up-expand:hover { background: var(--bg-subtle); color: var(--text-primary); }
 	.up-match { font-weight: 700; color: var(--accent); min-width: 3rem; }
 	.up-team { font-weight: 600; }
 	.up-color { color: var(--text-muted); text-transform: capitalize; font-size: 0.85rem; }
+	.up-lineup {
+		display: inline-flex;
+		gap: 0.4rem;
+		align-items: baseline;
+		flex-wrap: wrap;
+		min-width: 0;
+		font-variant-numeric: tabular-nums;
+		font-size: 0.9rem;
+	}
+	.side.red { color: var(--alliance-red); font-weight: 600; }
+	.side.blue { color: var(--alliance-blue); font-weight: 600; }
+	.up-vs { color: var(--text-faint); font-size: 0.78rem; }
+	.up-yours {
+		font-size: 0.76rem;
+		font-weight: 700;
+		padding: 0.05rem 0.4rem;
+		border-radius: 999px;
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
 	.up-time {
 		color: var(--text-muted);
 		font-size: 0.82rem;
@@ -110,6 +339,70 @@
 		font-size: 0.8rem;
 		font-weight: 600;
 	}
+	.up-caret { color: var(--text-faint); font-size: 0.8rem; }
+
+	/* ── expanded match detail ──────────────────────────────────────── */
+	.md-panel {
+		border-top: 1px solid var(--border);
+		background: var(--bg-subtle);
+		padding: 0.4rem 0.5rem;
+		border-radius: 0 0 0.35rem 0.35rem;
+	}
+	.md-empty { margin: 0.2rem 0.25rem; }
+	.md-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.md-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		padding: 0.35rem 0.5rem;
+		border-radius: 0.3rem;
+		background: var(--bg-card);
+		border: 1px solid var(--border);
+		font-size: 0.85rem;
+	}
+	.md-row.mine { border-color: var(--accent); }
+	.md-color {
+		text-transform: uppercase;
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		padding: 0.08rem 0.35rem;
+		border-radius: 0.25rem;
+	}
+	.md-row[data-color='red'] .md-color { background: var(--alliance-red); color: #fff; }
+	.md-row[data-color='blue'] .md-color { background: var(--alliance-blue); color: #fff; }
+	.md-team { font-weight: 700; font-variant-numeric: tabular-nums; }
+	.md-tag {
+		font-size: 0.66rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		padding: 0.08rem 0.35rem;
+		border-radius: 999px;
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	.md-status { font-size: 0.76rem; color: var(--text-muted); }
+	.md-status.submitted { color: var(--success); font-weight: 600; }
+	.md-status.uncovered { color: var(--warning); font-weight: 600; }
+	.md-scout {
+		margin-left: auto;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--accent);
+		text-decoration: none;
+		white-space: nowrap;
+		padding: 0.3rem 0.2rem;
+	}
+
 	.cov-rollup {
 		margin: 0.2rem 0 0.7rem;
 	}
