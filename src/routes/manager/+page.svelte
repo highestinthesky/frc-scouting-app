@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
+	import { allMetricStats, hasAnyMetrics, readMetric, fmt } from '$lib/metrics.js';
+	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { exportToCsv } from '$lib/csv.js';
 	import { session } from '$lib/session.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
@@ -104,9 +106,12 @@
 				});
 			}
 		}
+		const metrics = allMetricStats(entries);
 		return {
 			teamNumber,
 			entryCount: entries.length,
+			metrics,
+			hasMetrics: hasAnyMetrics(metrics),
 			matchesCovered: new Set(entries.map((e) => e.matchNumber)).size,
 			scoutsCovered: new Set(entries.map((e) => e.scoutName)).size,
 			redCount,
@@ -125,6 +130,15 @@
 			discrepancyCount: discrepancies.length,
 			entries: ordered
 		};
+	}
+
+	/** Metrics actually recorded on one entry, for the expanded per-match list. */
+	function recordedCounts(entry) {
+		return METRIC_FIELDS.map((m) => ({
+			key: m.key,
+			label: m.label,
+			value: readMetric(entry, m.key)
+		})).filter((c) => c.value !== null);
 	}
 
 	// ─── filter chip cycling ───────────────────────────────────────────────────
@@ -196,6 +210,19 @@
 
 		// Sort
 		return teams.slice().sort((a, b) => {
+			// Metric sorts are prefixed "metric:" so adding a counter to
+			// form-config.js adds a sort option without touching this code.
+			if (sortBy.startsWith('metric:')) {
+				const key = sortBy.slice(7);
+				const sa = a.metrics?.[key];
+				const sb = b.metrics?.[key];
+				// Teams with no reading sink to the bottom regardless of direction —
+				// "unknown" should never outrank a real measurement.
+				if (sa?.mean === null || sa?.mean === undefined) return 1;
+				if (sb?.mean === null || sb?.mean === undefined) return -1;
+				const better = sa.higherIsBetter === false ? sa.mean - sb.mean : sb.mean - sa.mean;
+				return better || b.entryCount - a.entryCount;
+			}
 			if (sortBy === 'recent')
 				return new Date(b.latestCreatedAt) - new Date(a.latestCreatedAt);
 			if (sortBy === 'auto-paths')
@@ -316,6 +343,11 @@
 			<select class="sort-select" bind:value={sortBy} aria-label="Sort teams by">
 				<option value="entries">Most entries</option>
 				<option value="recent">Most recent</option>
+				{#each METRIC_FIELDS as m (m.key)}
+					<option value="metric:{m.key}">
+						{m.higherIsBetter === false ? 'Fewest' : 'Best'} {m.label.toLowerCase()}
+					</option>
+				{/each}
 				<option value="auto-paths">Most auto paths</option>
 				<option value="breakdowns">Most breakdowns</option>
 				<option value="defense">Most defense notes</option>
@@ -452,6 +484,24 @@
 							</div>
 						</button>
 
+						<!-- ── Metric strip ─────────────────────────────────── -->
+						{#if t.hasMetrics}
+							<div class="metric-strip">
+								{#each METRIC_FIELDS as m (m.key)}
+									{@const s = t.metrics[m.key]}
+									{#if s.n > 0}
+										<div class="ms-cell" class:provisional={!s.confident}>
+											<small class="ms-label">{m.label}</small>
+											<span class="ms-mean">{fmt(s.mean)}</span>
+											<small class="ms-meta">
+												n={s.n}{#if s.max !== null} · max {s.max}{/if}
+											</small>
+										</div>
+									{/if}
+								{/each}
+							</div>
+						{/if}
+
 						<!-- ── Strengths preview (collapsed rows only) ──────── -->
 						{#if !isOpen && t.strengthsPreview}
 							<p class="strength-preview">
@@ -496,6 +546,14 @@
 											<span class="alliance">{e.allianceColor}</span>
 											<span class="by">by {e.scoutName}</span>
 										</div>
+										{#if recordedCounts(e).length > 0}
+											<p class="entry-counts">
+												{#each recordedCounts(e) as c, i (c.key)}
+													<span class="ec"><em>{c.label}</em> {c.value}</span
+													>{#if i < recordedCounts(e).length - 1}<span class="ec-sep">·</span>{/if}
+												{/each}
+											</p>
+										{/if}
 										{#if e.observations?.autoPathing}<p><strong>→</strong> {e.observations.autoPathing}</p>{/if}
 										{#if e.observations?.weaknesses}<p><strong>−</strong> {e.observations.weaknesses}</p>{/if}
 										{#if e.observations?.defense}<p><strong>D</strong> {e.observations.defense}</p>{/if}
@@ -689,6 +747,58 @@
 		font-size: 0.86rem;
 		color: var(--warning);
 	}
+
+	/* ── metric strip ─────────────────────────────────────────────── */
+	.metric-strip {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		padding: 0 0.8rem 0.6rem;
+	}
+	.ms-cell {
+		flex: 1 1 5rem;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.05rem;
+		padding: 0.4rem 0.5rem;
+		border-radius: 0.4rem;
+		background: var(--bg-subtle);
+	}
+	/* Fewer than 3 readings — shown, but visibly held at arm's length. */
+	.ms-cell.provisional { opacity: 0.62; }
+	.ms-label {
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.ms-mean {
+		font-size: 1.15rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		line-height: 1.1;
+	}
+	.ms-meta {
+		font-size: 0.68rem;
+		color: var(--text-faint);
+		font-variant-numeric: tabular-nums;
+	}
+	.entry-counts {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem 0.45rem;
+		font-size: 0.8rem;
+		font-variant-numeric: tabular-nums;
+	}
+	.entry-counts .ec em {
+		font-style: normal;
+		color: var(--text-muted);
+	}
+	.ec-sep { color: var(--text-faint); }
 
 	/* ── no results ───────────────────────────────────────────────── */
 	.no-results {

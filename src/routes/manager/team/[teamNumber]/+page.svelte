@@ -3,6 +3,9 @@
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
+	import { fmt } from '$lib/metrics.js';
+	import { METRIC_FIELDS } from '$lib/form-config.js';
+	import Sparkline from '$lib/components/Sparkline.svelte';
 	import { syncState } from '$lib/sync.svelte.js';
 
 	let summary = $state(null);
@@ -76,6 +79,39 @@
 			</div>
 		</section>
 
+		<!-- Metrics, with a sparkline of the raw readings in match order -->
+		{#if team.hasMetrics}
+			<section class="metrics">
+				<h2>Metrics</h2>
+				<div class="metric-grid">
+					{#each METRIC_FIELDS as m (m.key)}
+						{@const s = team.metrics[m.key]}
+						{#if s.n > 0}
+							<div class="mcard" class:provisional={!s.confident}>
+								<div class="mc-head">
+									<small class="mc-label">{m.label}</small>
+									{#if !s.confident}<small class="mc-prov">n={s.n}</small>{/if}
+								</div>
+								<div class="mc-value">
+									<strong>{fmt(s.mean)}</strong>
+									{#if s.trend !== null && Math.abs(s.trend) >= 0.5}
+										<span class="mc-trend" class:up={s.trend > 0}>
+											{s.trend > 0 ? '▲' : '▼'}{fmt(Math.abs(s.trend))}
+										</span>
+									{/if}
+								</div>
+								<Sparkline values={s.values} higherIsBetter={m.higherIsBetter !== false} />
+								<small class="mc-meta">
+									med {fmt(s.median)} · max {s.max} · min {s.min}
+									{#if s.stdDev !== null} · ±{fmt(s.stdDev)}{/if}
+								</small>
+							</div>
+						{/if}
+					{/each}
+				</div>
+			</section>
+		{/if}
+
 		<!-- Auto pathing roll-up -->
 		{#if team.autoPathCount > 0}
 			<section class="paths-block">
@@ -127,6 +163,61 @@
 		align-items: center;
 		gap: 0.75rem;
 		margin: 1rem 0;
+	}
+
+	/* ── metric cards ─────────────────────────────────────────────── */
+	.metric-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+		gap: 0.6rem;
+	}
+	.mcard {
+		padding: 0.6rem 0.7rem;
+		border: 1px solid var(--border);
+		border-radius: 0.5rem;
+		background: var(--bg-card);
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	.mcard.provisional { opacity: 0.68; }
+	.mc-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 0.3rem;
+	}
+	.mc-label {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+	}
+	.mc-prov {
+		font-size: 0.66rem;
+		color: var(--text-faint);
+		font-variant-numeric: tabular-nums;
+	}
+	.mc-value {
+		display: flex;
+		align-items: baseline;
+		gap: 0.35rem;
+	}
+	.mc-value strong {
+		font-size: 1.5rem;
+		font-variant-numeric: tabular-nums;
+		line-height: 1.1;
+	}
+	.mc-trend {
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+	}
+	.mc-trend.up { color: var(--ok, var(--accent)); }
+	.mc-meta {
+		font-size: 0.68rem;
+		color: var(--text-faint);
+		font-variant-numeric: tabular-nums;
 	}
 	.back {
 		font-size: 1.5rem;

@@ -4,6 +4,8 @@
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
+	import { fmt } from '$lib/metrics.js';
+	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { syncState } from '$lib/sync.svelte.js';
 
 	let summary = $state(null);
@@ -48,6 +50,28 @@
 	$effect(() => {
 		syncState.inboundChanges;
 		if (!loading) refresh();
+	});
+
+	/**
+	 * Which team leads on each metric, so the winning cell can be marked.
+	 * Only teams with an actual reading are eligible, and a tie leaves every
+	 * tied team unmarked rather than arbitrarily crowning the first one.
+	 */
+	const leaders = $derived.by(() => {
+		const out = {};
+		for (const m of METRIC_FIELDS) {
+			const withValue = teams
+				.map((t) => ({ teamNumber: t.teamNumber, mean: t.metrics?.[m.key]?.mean }))
+				.filter((x) => x.mean !== null && x.mean !== undefined);
+			if (withValue.length < 2) continue;
+			const best =
+				m.higherIsBetter === false
+					? Math.min(...withValue.map((x) => x.mean))
+					: Math.max(...withValue.map((x) => x.mean));
+			const winners = withValue.filter((x) => x.mean === best);
+			if (winners.length === 1) out[m.key] = winners[0].teamNumber;
+		}
+		return out;
 	});
 
 	function setTeams(list) {
@@ -107,10 +131,7 @@
 		</div>
 	{:else}
 		{#if missing.length > 0}
-			<p class="info">
-				No entries on file for: {missing.join(', ')}.
-				They'll appear here as soon as a scout records something for them.
-			</p>
+			<p class="info">No entries yet for: {missing.join(', ')}.</p>
 		{/if}
 		<div class="grid">
 			{#each teams as t (t.teamNumber)}
@@ -124,6 +145,27 @@
 					<dl>
 						<dt>Coverage</dt>
 						<dd>{t.entryCount} {t.entryCount === 1 ? 'entry' : 'entries'} · {t.matchesCovered} {t.matchesCovered === 1 ? 'match' : 'matches'} · {t.scoutsCovered} {t.scoutsCovered === 1 ? 'scout' : 'scouts'}</dd>
+
+						{#each METRIC_FIELDS as m (m.key)}
+							{@const s = t.metrics?.[m.key]}
+							<dt>{m.label}</dt>
+							<dd class="metric" class:leader={leaders[m.key] === t.teamNumber}>
+								{#if !s || s.n === 0}
+									<span class="muted">not recorded</span>
+								{:else}
+									<strong class="mv">{fmt(s.mean)}</strong>
+									<span class="mmeta">
+										avg of {s.n}{#if s.max !== null} · max {s.max}{/if}{#if s.stdDev !== null} · ±{fmt(s.stdDev)}{/if}
+									</span>
+									{#if !s.confident}<span class="prov">thin sample</span>{/if}
+									{#if s.trend !== null && Math.abs(s.trend) >= 0.5}
+										<span class="trend" class:up={s.trend > 0}>
+											{s.trend > 0 ? '▲' : '▼'}{fmt(Math.abs(s.trend))}
+										</span>
+									{/if}
+								{/if}
+							</dd>
+						{/each}
 
 						<dt>Alliance split</dt>
 						<dd>
@@ -307,6 +349,52 @@
 		color: var(--text-primary);
 	}
 	dd.text p { margin: 0.2rem 0 0; line-height: 1.4; }
+
+	/* ── metric rows ──────────────────────────────────────────────── */
+	dd.metric {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.3rem;
+	}
+	.mv {
+		font-size: 1.05rem;
+		font-variant-numeric: tabular-nums;
+	}
+	.mmeta {
+		font-size: 0.74rem;
+		color: var(--text-faint);
+		font-variant-numeric: tabular-nums;
+	}
+	/* Leader gets a filled chip plus the word "best" via ::after — colour alone
+	   would be the only signal otherwise, which fails for colourblind users. */
+	dd.metric.leader {
+		background: var(--accent-soft);
+		border-radius: 0.3rem;
+		padding: 0.2rem 0.4rem;
+		margin-left: -0.4rem;
+	}
+	dd.metric.leader .mv { color: var(--accent); }
+	dd.metric.leader::after {
+		content: 'best';
+		font-size: 0.66rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		font-weight: 700;
+		color: var(--accent);
+	}
+	.prov {
+		font-size: 0.66rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--warn, var(--text-muted));
+	}
+	.trend {
+		font-size: 0.72rem;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+	}
+	.trend.up { color: var(--ok, var(--accent)); }
 
 	.r { color: var(--alliance-red); font-weight: 600; }
 	.b { color: var(--alliance-blue); font-weight: 600; }

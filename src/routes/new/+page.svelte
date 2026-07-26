@@ -6,7 +6,13 @@
 	import { addEntry, listEntries } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
 	import { kick as kickSync } from '$lib/sync.svelte.js';
-	import { IDENTITY_FIELDS, OBSERVATION_FIELDS, ALL_FIELDS } from '$lib/form-config.js';
+	import {
+		IDENTITY_FIELDS,
+		METRIC_FIELDS,
+		NOTE_FIELDS,
+		OBSERVATION_FIELDS,
+		ALL_FIELDS
+	} from '$lib/form-config.js';
 	import Field from '$lib/components/Field.svelte';
 	import {
 		getCachedSchedule,
@@ -295,8 +301,15 @@
 		</section>
 
 		<section>
-			<h2>Observations</h2>
-			{#each OBSERVATION_FIELDS as f (f.key)}
+			<h2>Counts</h2>
+			{#each METRIC_FIELDS as f (f.key)}
+				<Field field={f} bind:value={values[f.key]} />
+			{/each}
+		</section>
+
+		<section>
+			<h2>Notes</h2>
+			{#each NOTE_FIELDS as f (f.key)}
 				<Field field={f} bind:value={values[f.key]} scopeTeam={Number(values.teamNumber)} />
 			{/each}
 		</section>

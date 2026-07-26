@@ -5,7 +5,13 @@
 	import { base } from '$app/paths';
 	import { getEntry, updateEntry, deleteEntry } from '$lib/db.js';
 	import { kick as kickSync } from '$lib/sync.svelte.js';
-	import { IDENTITY_FIELDS, OBSERVATION_FIELDS, ALL_FIELDS } from '$lib/form-config.js';
+	import {
+		IDENTITY_FIELDS,
+		METRIC_FIELDS,
+		NOTE_FIELDS,
+		OBSERVATION_FIELDS,
+		ALL_FIELDS
+	} from '$lib/form-config.js';
 	import Field from '$lib/components/Field.svelte';
 
 	// Edit form state. `entry` is the existing row we loaded; `values` mirrors
@@ -125,7 +131,6 @@
 	{:else if notFound}
 		<div class="not-found">
 			<p>That entry doesn't exist on this device.</p>
-			<p class="muted">It may have been deleted, or imported from a sync that isn't on this device yet.</p>
 			<a class="back-link" href="{base}/">Back to entries</a>
 		</div>
 	{:else}
@@ -138,8 +143,15 @@
 			</section>
 
 			<section>
-				<h2>Observations</h2>
-				{#each OBSERVATION_FIELDS as f (f.key)}
+				<h2>Counts</h2>
+				{#each METRIC_FIELDS as f (f.key)}
+					<Field field={f} bind:value={values[f.key]} />
+				{/each}
+			</section>
+
+			<section>
+				<h2>Notes</h2>
+				{#each NOTE_FIELDS as f (f.key)}
 					<Field field={f} bind:value={values[f.key]} scopeTeam={Number(values.teamNumber)} />
 				{/each}
 			</section>

@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
+	import { scoreTeams, fmt } from '$lib/metrics.js';
+	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { getSetting, setSetting } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
@@ -35,9 +37,16 @@
 		if (stored && typeof stored === 'object') {
 			primary = Array.isArray(stored.primary) ? stored.primary.slice() : [];
 			doNotPick = Array.isArray(stored.doNotPick) ? stored.doNotPick.slice() : [];
+			// Merge rather than replace: a metric added to form-config since this
+			// list was saved needs a default weight, not undefined.
+			weights = {
+				...Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 1])),
+				...(stored.weights ?? {})
+			};
 		} else {
 			primary = [];
 			doNotPick = [];
+			weights = Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 1]));
 		}
 	}
 
@@ -46,6 +55,7 @@
 			eventCode: session.eventCode,
 			primary,
 			doNotPick,
+			weights,
 			updatedAt: new Date().toISOString()
 		});
 	}
@@ -66,6 +76,7 @@
 	$effect(() => {
 		primary;
 		doNotPick;
+		weights;
 		if (!loading) saveList();
 	});
 
@@ -113,6 +124,31 @@
 	function teamFor(n) {
 		return summary?.teams.find((t) => t.teamNumber === n);
 	}
+
+	// ─── weighted scoring ──────────────────────────────────────────────────────
+	//
+	// The manager sets a weight per metric; the engine normalizes each team's
+	// mean against the pool and combines them. This only ever *suggests* an
+	// order — the manual list above is authoritative, because the numbers can't
+	// see a robot that just looks fragile.
+
+	/** metric key → 0..3 weight. Persisted alongside the picklist. */
+	let weights = $state(Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 1])));
+	let showScored = $state(false);
+
+	const scored = $derived.by(() => {
+		if (!summary || !showScored) return [];
+		const pool = availableTeams.map((t) => ({
+			teamNumber: t.teamNumber,
+			metrics: t.metrics
+		}));
+		const ranked = scoreTeams(pool, weights);
+		return ranked
+			.map((r) => ({ ...r, team: teamFor(r.teamNumber) }))
+			.filter((r) => r.team);
+	});
+
+	const anyWeight = $derived(METRIC_FIELDS.some((m) => (weights[m.key] ?? 0) > 0));
 
 	async function copyText() {
 		const lines = [`Picklist · ${session.eventCode || 'event'}`];
@@ -224,6 +260,63 @@
 			</section>
 		{/if}
 
+		<!-- ── Scored suggestions ───────────────────────────────────── -->
+		<section class="block">
+			<div class="block-head">
+				<h2>Suggested order</h2>
+				<button class="link-btn" onclick={() => (showScored = !showScored)}>
+					{showScored ? 'Hide' : 'Show'}
+				</button>
+			</div>
+
+			{#if showScored}
+				<div class="weights">
+					{#each METRIC_FIELDS as m (m.key)}
+						<label class="weight">
+							<span class="w-label">
+								{m.label}
+								{#if m.higherIsBetter === false}<small class="w-inv">lower is better</small>{/if}
+							</span>
+							<input
+								type="range"
+								min="0"
+								max="3"
+								step="1"
+								bind:value={weights[m.key]}
+								aria-label="Weight for {m.label}"
+							/>
+							<span class="w-val">{weights[m.key] === 0 ? 'off' : '×' + weights[m.key]}</span>
+						</label>
+					{/each}
+				</div>
+
+				{#if !anyWeight}
+					<p class="muted">Turn at least one metric on to rank.</p>
+				{:else if scored.length === 0}
+					<p class="muted">No unpicked teams to rank.</p>
+				{:else}
+					<ol class="scored">
+						{#each scored.slice(0, 12) as s (s.teamNumber)}
+							<li>
+								<span class="team-num">Team {s.teamNumber}</span>
+								<span class="score-bar" aria-hidden="true">
+									<span class="score-fill" style="width: {Math.max(0, s.score) * 100}%"></span>
+								</span>
+								<span class="score-val">{fmt(s.score * 100, 0)}</span>
+								{#if s.confidence < 0.5}
+									<span class="thin" title="Fewer than 3 readings on most metrics">thin</span>
+								{/if}
+								<button onclick={() => addToPick(s.teamNumber)}>Pick</button>
+							</li>
+						{/each}
+					</ol>
+					<p class="muted small">
+						Scores are relative to the teams still available, not an absolute rating.
+					</p>
+				{/if}
+			{/if}
+		</section>
+
 		<!-- ── Available teams ──────────────────────────────────────── -->
 		<section class="block">
 			<div class="block-head">
@@ -283,6 +376,84 @@
 	h1 { margin: 0; font-size: 1.5rem; }
 	.event { color: var(--text-faint); font-size: 0.9rem; }
 	.muted { color: var(--text-faint); }
+
+	/* ── weighted scoring ─────────────────────────────────────────── */
+	.weights {
+		display: grid;
+		gap: 0.4rem;
+		margin-bottom: 0.8rem;
+	}
+	.weight {
+		display: grid;
+		grid-template-columns: minmax(6rem, 9rem) 1fr 2.5rem;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.85rem;
+	}
+	.w-label { display: flex; flex-direction: column; }
+	.w-inv {
+		font-size: 0.66rem;
+		color: var(--text-faint);
+	}
+	.w-val {
+		font-variant-numeric: tabular-nums;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		text-align: right;
+	}
+	.scored {
+		list-style: none;
+		counter-reset: rank;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.scored li {
+		counter-increment: rank;
+		display: grid;
+		grid-template-columns: auto 1fr auto auto auto;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.35rem 0.5rem;
+		border-radius: 0.35rem;
+		background: var(--bg-subtle);
+	}
+	.scored li::before {
+		content: counter(rank);
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--text-faint);
+		font-variant-numeric: tabular-nums;
+		min-width: 1.2rem;
+	}
+	.scored .team-num { grid-column: 2; }
+	.score-bar {
+		grid-column: 2;
+		grid-row: 2;
+		height: 3px;
+		border-radius: 2px;
+		background: var(--border);
+		overflow: hidden;
+	}
+	.score-fill {
+		display: block;
+		height: 100%;
+		background: var(--accent);
+	}
+	.score-val {
+		font-variant-numeric: tabular-nums;
+		font-size: 0.85rem;
+		font-weight: 600;
+	}
+	.thin {
+		font-size: 0.62rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-faint);
+	}
+	.small { font-size: 0.78rem; margin-top: 0.5rem; }
 	.hint { font-size: 0.92rem; }
 
 	.empty {
