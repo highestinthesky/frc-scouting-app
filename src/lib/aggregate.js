@@ -2,6 +2,7 @@
 // Used by the manager view to summarise and group records.
 
 import { listEntries } from './db.js';
+import { allMetricStats, hasAnyMetrics } from './metrics.js';
 
 /**
  * "Did the robot break down on this entry?"
@@ -96,9 +97,13 @@ export async function summarize() {
 					});
 				}
 			}
+			const metrics = allMetricStats(list);
+
 			return {
 				teamNumber,
 				entryCount: list.length,
+				metrics,
+				hasMetrics: hasAnyMetrics(metrics),
 				matchesCovered: new Set(list.map((e) => e.matchNumber)).size,
 				scoutsCovered: new Set(list.map((e) => e.scoutName)).size,
 				redCount,

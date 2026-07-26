@@ -51,6 +51,30 @@
 		})();
 	});
 
+	// ── counter logic ───────────────────────────────────────────────────────
+	//
+	// Blank means "not recorded"; 0 means "recorded, and it was zero". Those are
+	// different facts and the aggregation engine treats them differently, so the
+	// control has to make both reachable in one tap. From blank, + goes to 1 and
+	// − goes to 0. Clear puts it back to blank.
+
+	const counterValue = $derived(
+		value === '' || value === null || value === undefined ? null : Number(value)
+	);
+
+	function bump(delta) {
+		const max = field.max ?? Infinity;
+		if (counterValue === null) {
+			value = delta > 0 ? 1 : 0;
+			return;
+		}
+		value = Math.max(0, Math.min(max, counterValue + delta));
+	}
+
+	function clearCounter() {
+		value = '';
+	}
+
 	// ── tag pill logic ──────────────────────────────────────────────────────
 
 	function applyTag(phrase) {
@@ -145,6 +169,32 @@
 			required={field.required}
 			placeholder={field.placeholder}
 		/>
+
+	{:else if field.type === 'counter'}
+		<div class="counter" role="group" aria-label={field.label}>
+			<button
+				type="button"
+				class="ct-btn"
+				onclick={() => bump(-1)}
+				disabled={counterValue === 0}
+				aria-label="Decrease {field.label}"
+			>−</button>
+			<span class="ct-value" class:unset={counterValue === null} aria-live="polite">
+				{counterValue === null ? '–' : counterValue}
+			</span>
+			<button
+				type="button"
+				class="ct-btn"
+				onclick={() => bump(1)}
+				disabled={field.max !== undefined && counterValue !== null && counterValue >= field.max}
+				aria-label="Increase {field.label}"
+			>+</button>
+			{#if counterValue !== null}
+				<button type="button" class="ct-clear" onclick={clearCounter}>Clear</button>
+			{:else}
+				<span class="ct-hint">Not recorded</span>
+			{/if}
+		</div>
 
 	{:else if field.type === 'text'}
 		<input
@@ -322,6 +372,56 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 		border-color: var(--accent);
+	}
+
+	/* ── counter ──────────────────────────────────────────────────── */
+	.counter {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.ct-btn {
+		flex: 0 0 auto;
+		width: 3rem;
+		height: 3rem;
+		font: inherit;
+		font-size: 1.5rem;
+		line-height: 1;
+		font-weight: 600;
+		color: var(--accent);
+		background: var(--bg-card);
+		border: 1px solid var(--border-strong);
+		border-radius: 0.5rem;
+		cursor: pointer;
+		touch-action: manipulation;
+	}
+	.ct-btn:hover:not(:disabled) {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+	}
+	.ct-btn:active:not(:disabled) { transform: scale(0.94); }
+	.ct-btn:disabled { opacity: 0.35; cursor: default; }
+	.ct-value {
+		min-width: 2.5rem;
+		text-align: center;
+		font-size: 1.4rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.ct-value.unset { color: var(--text-faint); font-weight: 400; }
+	.ct-clear {
+		font: inherit;
+		font-size: 0.8rem;
+		padding: 0.3rem 0.5rem;
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	.ct-hint {
+		font-size: 0.8rem;
+		color: var(--text-faint);
 	}
 	textarea {
 		resize: vertical;
