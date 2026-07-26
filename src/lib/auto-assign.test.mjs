@@ -76,6 +76,31 @@ const names = (n) => [...Array(n)].map((_, i) => 'Scout' + i);
 		}
 		return [...per.values()].every((v) => v === 1);
 	})());
+	ok('shedding a team also pins the scout who shed it', (() => {
+		// If a match has any override at all, every scout in that match whose
+		// effective list changed must have their own row — otherwise the team
+		// was given away without being taken back.
+		const byMatch = new Map();
+		for (const o of r.overrides) {
+			if (!byMatch.has(o.match_number)) byMatch.set(o.match_number, new Set());
+			byMatch.get(o.match_number).add(o.scout_name);
+		}
+		const owner = new Map();
+		for (const [s, ts] of r.assignments) for (const t of ts) owner.set(t, s);
+		for (const m of qm) {
+			const scoutsHere = byMatch.get(m.match_number);
+			if (!scoutsHere) continue;
+			const playing = [...m.alliances.red.team_keys, ...m.alliances.blue.team_keys]
+				.map((k) => +String(k).slice(3));
+			const baseCount = new Map();
+			for (const t of playing) {
+				const s = owner.get(t);
+				if (s) baseCount.set(s, (baseCount.get(s) ?? 0) + 1);
+			}
+			for (const [s, n] of baseCount) if (n > 1 && !scoutsHere.has(s)) return false;
+		}
+		return true;
+	})());
 }
 
 // ─── determinism ──────────────────────────────────────────────────────────
@@ -89,6 +114,55 @@ const names = (n) => [...Array(n)].map((_, i) => 'Scout' + i);
 		const c = autoAssignTeams(qm, [...names(8)].reverse());
 		return c.coverage.scouted === a.coverage.scouted;
 	})());
+}
+
+// ─── the app's own conflict logic must agree ──────────────────────────────
+//
+// Regression guard. The first version of the repair pass handed a shed team to
+// an idle scout but never took it off the original scout, who is still told to
+// watch two robots — an override REPLACES a scout's list for a match, it does
+// not add to it. It went unnoticed because evaluateCoverage resolved per
+// (match, team) rather than per (match, scout), so the evaluator and the bug
+// shared a mental model and the tests agreed with both.
+//
+// This mirrors the route's coverageConflicts exactly, independently of
+// auto-assign.js, so the two can't drift back into agreeing wrongly.
+function conflictsLikeTheApp(qmList, assignments, overrides) {
+	const baseByScout = new Map([...assignments].map(([s, ts]) => [s, new Set(ts)]));
+	const key = (m, s) => `${m}:${String(s ?? '').trim().toLowerCase()}`;
+	const ovMap = new Map();
+	for (const o of overrides) {
+		const k = key(o.match_number, o.scout_name);
+		if (!ovMap.has(k)) ovMap.set(k, new Set());
+		ovMap.get(k).add(Number(o.team_number));
+	}
+	let n = 0;
+	for (const m of qmList) {
+		const playing = new Set();
+		for (const arr of [m.alliances?.red?.team_keys ?? [], m.alliances?.blue?.team_keys ?? []])
+			for (const k of arr) playing.add(parseInt(String(k).replace(/^frc/, ''), 10));
+		for (const [scout, baseSet] of baseByScout) {
+			const ov = ovMap.get(key(m.match_number, scout));
+			const eff =
+				ov && ov.size > 0
+					? [...ov].filter((t) => playing.has(t))
+					: [...baseSet].filter((t) => playing.has(t));
+			if (eff.length >= 2) n += 1;
+		}
+	}
+	return n;
+}
+
+for (const [nT, plays] of [[34, 12], [36, 12], [48, 12], [60, 10]]) {
+	const qm = schedule(nT, plays);
+	for (const nS of [6, 8, 11, 12]) {
+		const r = autoAssignTeams(qm, names(nS));
+		ok(`${nT} teams / ${nS} scouts leaves no double-booked scout`,
+			conflictsLikeTheApp(qm, r.assignments, r.overrides) === 0,
+			`${conflictsLikeTheApp(qm, r.assignments, r.overrides)} conflicts`);
+		ok(`${nT} teams / ${nS} scouts — evaluator agrees with the app`,
+			r.coverage.conflicts === conflictsLikeTheApp(qm, r.assignments, r.overrides));
+	}
 }
 
 // ─── coverage: the thing that actually matters ────────────────────────────

@@ -155,37 +155,68 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 	}
 
 	// ── pass 2: per-match repair via overrides ────────────────────────────
+	//
 	// Colouring is a compromise across all of a team's matches. This pass looks
 	// at one match at a time, where the right answer is unambiguous: six robots,
 	// hand each to a different person.
+	//
+	// The subtlety that matters, and that a first version of this got wrong:
+	// an override row does not add a team to a scout, it REPLACES that scout's
+	// whole list for that match (see resolveTeamsForMatch). So handing a shed
+	// team to an idle scout is only half the job — without a matching row
+	// pinning the original scout to what they kept, they are still told to
+	// watch both robots and the clash survives in exactly the place the fix
+	// was supposed to remove it.
+	//
+	// So: compute the intended lineup for the match, then write rows for every
+	// scout whose intended list differs from their base list.
 	const overrides = [];
 	if (generateOverrides) {
 		for (const m of qmList) {
 			const six = teamsIn(m);
-			/** scout → teams of theirs playing in THIS match */
-			const mine = new Map();
+
+			/** scout → their base teams playing in THIS match */
+			const base = new Map();
 			for (const t of six) {
 				const s = owner.get(t);
 				if (!s) continue;
-				if (!mine.has(s)) mine.set(s, []);
-				mine.get(s).push(t);
+				if (!base.has(s)) base.set(s, []);
+				base.get(s).push(t);
 			}
-			// Everyone with nothing to watch in this match is available.
-			const idle = names.filter((n) => !mine.has(n));
-			if (idle.length === 0) continue;
-			// A scout keeps their lowest-numbered team and sheds the rest, so the
-			// choice is stable rather than dependent on schedule ordering.
-			const orphaned = [];
-			for (const [, ts] of mine) {
-				ts.sort((a, b) => a - b);
-				for (const t of ts.slice(1)) orphaned.push(t);
+			for (const [, ts] of base) ts.sort((a, b) => a - b);
+
+			/** scout → who they should actually watch here */
+			const intended = new Map([...base].map(([s, ts]) => [s, [...ts]]));
+			const idle = names.filter((n) => !base.has(n));
+
+			// Teams nobody owns come first — an unwatched robot is worse than a
+			// doubled-up one, since the doubled scout still records something.
+			const orphans = six.filter((t) => !owner.get(t)).sort((a, b) => a - b);
+			for (const [s, ts] of intended) {
+				if (ts.length > 1) orphans.push(...ts.slice(1));
 			}
-			for (const t of six) if (!owner.get(t)) orphaned.push(t);
-			orphaned.sort((a, b) => a - b);
-			for (const t of orphaned) {
-				const s = idle.shift();
-				if (!s) break;
-				overrides.push({ match_number: m.match_number, scout_name: s, team_number: t });
+
+			for (const t of orphans) {
+				const taker = idle.shift();
+				// Nobody free: the original scout keeps it and the clash is real.
+				// Coverage check will show it, and it means "you need more people".
+				if (!taker) continue;
+				// Remove it from whoever held it, then give it to the free scout.
+				for (const [s, ts] of intended) {
+					const at = ts.indexOf(t);
+					if (at !== -1) ts.splice(at, 1);
+				}
+				intended.set(taker, [t]);
+			}
+
+			// Write rows only where the plan differs from the base assignment.
+			for (const [s, ts] of intended) {
+				const was = base.get(s) ?? [];
+				const same = was.length === ts.length && was.every((t, i) => t === ts[i]);
+				if (same) continue;
+				for (const t of ts) {
+					overrides.push({ match_number: m.match_number, scout_name: s, team_number: t });
+				}
 			}
 		}
 	}
@@ -209,36 +240,55 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 }
 
 /**
- * How many (match, team) cells does this plan actually get eyes on?
+ * How many robots does this plan actually get eyes on?
  *
- * The honest measure, and deliberately not the same as counting clashes: a
- * scout holding three teams in one match contributes one scouted cell, not
- * three. Overrides win over the base assignment, matching resolveTeamsForMatch.
+ * Resolution here must mirror resolveTeamsForMatch exactly, per (match, scout):
+ * if a scout has ANY override row for a match, those rows replace their base
+ * list for that match; otherwise their base list applies. Resolving per
+ * (match, team) instead — asking "who owns this robot" rather than "what is
+ * this person watching" — reads plausibly and is wrong, because it can't see a
+ * scout who has been left holding two teams. That mistake is what let a broken
+ * repair pass report full coverage.
+ *
+ * A scout with two teams in one match covers one of them; the other is lost.
  *
  * @param {object[]} qmList
  * @param {Map<string, number[]>} assignments
  * @param {{match_number: number, scout_name: string, team_number: number}[]} [overrides]
- * @returns {{scouted: number, total: number, pct: number}}
+ * @returns {{scouted: number, total: number, pct: number, conflicts: number}}
  */
 export function evaluateCoverage(qmList, assignments, overrides = []) {
-	const owner = new Map();
-	for (const [scout, list] of assignments ?? []) for (const t of list) owner.set(t, scout);
-	const byCell = new Map();
+	/** scout → base teams */
+	const baseOf = new Map();
+	for (const [scout, list] of assignments ?? []) baseOf.set(scout, list ?? []);
+
+	/** `match:scout` → Set<team> */
+	const ovBy = new Map();
 	for (const o of overrides ?? []) {
-		byCell.set(`${o.match_number}:${o.team_number}`, o.scout_name);
+		const k = `${o.match_number}:${String(o.scout_name ?? '').trim().toLowerCase()}`;
+		if (!ovBy.has(k)) ovBy.set(k, new Set());
+		ovBy.get(k).add(Number(o.team_number));
 	}
+
 	let total = 0;
 	let scouted = 0;
+	let conflicts = 0;
 	for (const m of qmList ?? []) {
-		const taken = new Set();
-		for (const t of teamsIn(m)) {
-			total += 1;
-			const s = byCell.get(`${m.match_number}:${t}`) ?? owner.get(t);
-			if (s && !taken.has(s)) {
-				taken.add(s);
-				scouted += 1;
-			}
+		const playing = new Set(teamsIn(m));
+		total += playing.size;
+		const watched = new Set();
+		for (const [scout, base] of baseOf) {
+			const ov = ovBy.get(`${m.match_number}:${scout.trim().toLowerCase()}`);
+			const effective =
+				ov && ov.size > 0
+					? [...ov].filter((t) => playing.has(t))
+					: base.filter((t) => playing.has(t));
+			if (effective.length === 0) continue;
+			if (effective.length > 1) conflicts += 1;
+			// One person, one robot: whichever they'd watch first.
+			watched.add([...effective].sort((a, b) => a - b)[0]);
 		}
+		scouted += watched.size;
 	}
-	return { scouted, total, pct: total === 0 ? 0 : (scouted / total) * 100 };
+	return { scouted, total, pct: total === 0 ? 0 : (scouted / total) * 100, conflicts };
 }
