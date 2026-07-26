@@ -16,7 +16,7 @@
 
 	let {
 		cached,
-		effectiveTeams,
+		assignedTeams,
 		myUpcoming,
 		myProgress,
 		qmList,
@@ -35,7 +35,7 @@
 		else expanded.add(matchNumber);
 	}
 
-	const mine = $derived(new Set(effectiveTeams ?? []));
+	const mine = $derived(new Set(assignedTeams ?? []));
 	const matchByNumber = $derived(new Map((qmList ?? []).map((m) => [m.match_number, m])));
 
 	/** The six robots in a match, in alliance order, with per-team state. */
@@ -134,8 +134,8 @@
 				{/each}
 			</ul>
 		{/if}
-	{:else if !effectiveTeams.length}
-		<p class="muted small">Add at least one team above to see your matches.</p>
+	{:else if !assignedTeams.length}
+		<p class="muted small">Nothing assigned to you yet — ask your manager, or use All matches.</p>
 	{:else if myUpcoming.length === 0}
 		<p class="muted small">None of your teams appear in the qual schedule.</p>
 	{:else}

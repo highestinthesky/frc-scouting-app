@@ -74,14 +74,15 @@
 	const entryIndex = $derived(buildEntryIndex(entries, session.eventCode));
 	const rollup = $derived(scheduleRollup(qmList, entryIndex));
 
-	// Effective teams the scout is watching = manager-assigned ∪ local extras.
-	const effectiveTeams = $derived(session.effectiveTeams);
+	// The teams this scout is watching. Manager-assigned only — scouts can no
+	// longer add their own, because those additions never reached the manager.
+	const assignedTeams = $derived(session.assignedTeams);
 
 	// Upcoming matches for the scout's assigned teams (already-recorded ones
 	// are kept in the list but shown muted, so the scout has a sense of pace).
 	const myUpcoming = $derived.by(() => {
-		if (!qmList.length || !effectiveTeams.length) return [];
-		const teamSet = new Set(effectiveTeams);
+		if (!qmList.length || !assignedTeams.length) return [];
+		const teamSet = new Set(assignedTeams);
 		const out = [];
 		for (const m of qmList) {
 			const { red, blue } = teamsInMatch(m);
@@ -547,21 +548,6 @@
 
 	// ─── scout actions ─────────────────────────────────────────────────────
 
-	let newTeamInput = $state('');
-
-	async function addLocalTeam() {
-		const n = Number(String(newTeamInput).replace(/[^0-9]/g, ''));
-		if (!Number.isFinite(n) || n <= 0) return;
-		const next = [...(session.localExtraTeams ?? []), n];
-		await session.update({ localExtraTeams: next });
-		newTeamInput = '';
-	}
-
-	async function removeLocalTeam(n) {
-		const next = (session.localExtraTeams ?? []).filter((t) => t !== n);
-		await session.update({ localExtraTeams: next });
-	}
-
 	async function refreshFromServer() {
 		busy = true;
 		err = '';
@@ -1008,14 +994,11 @@
 		{:else}
 			<!-- ── Scout view ───────────────────────────────────────────── -->
 			<MyTeams
-				bind:newTeamInput
-				{effectiveTeams}
+				{assignedTeams}
 				{cached}
 				{qmList}
 				{busy}
 				{now}
-				onAddTeam={addLocalTeam}
-				onRemoveTeam={removeLocalTeam}
 				onRefresh={refreshFromServer}
 			/>
 		{/if}
@@ -1028,7 +1011,7 @@
 		{#if !role.isManager}
 			<UpcomingMatches
 				{cached}
-				{effectiveTeams}
+				{assignedTeams}
 				{myUpcoming}
 				{myProgress}
 				{qmList}

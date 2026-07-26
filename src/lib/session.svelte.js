@@ -8,22 +8,29 @@
 
 import { getSetting, setSetting } from './db.js';
 
+/** Finite team numbers only, deduplicated, ascending. */
+function normaliseTeams(list) {
+	if (!Array.isArray(list)) return [];
+	return [...new Set(list.map(Number).filter(Number.isFinite))].sort((a, b) => a - b);
+}
+
 class Session {
 	eventCode = $state('');
 	scoutName = $state('');
 	/**
-	 * Team numbers this scout is assigned to watch for the event.
-	 * Populated by the manager from the schedule page and pulled via sync.
-	 * Scouts can also add teams locally via `localExtraTeams` if the manager
-	 * hasn't assigned them yet.
+	 * Team numbers this scout is assigned to watch for the event. Deduplicated
+	 * and sorted ascending. The manager owns this list entirely: they set it on
+	 * the schedule page and it arrives here via sync.
+	 *
+	 * Scouts used to be able to add teams to their own device on top of this.
+	 * That was removed — a self-added team was invisible to the manager, so it
+	 * never showed up in coverage, auto-assign planned around a roster that
+	 * didn't match reality, and two people could sit on the same robot while
+	 * another went unwatched. One authoritative list is worth more than the
+	 * flexibility was. A scout who needs to record an unassigned team can still
+	 * type any team number straight into the entry form.
 	 */
 	assignedTeams = $state(/** @type {number[]} */ ([]));
-	/**
-	 * Teams the scout added on their own device. Survives sync pulls — the
-	 * server only owns the manager-assigned list. The effective set of teams
-	 * the scout is watching is union(assignedTeams, localExtraTeams).
-	 */
-	localExtraTeams = $state(/** @type {number[]} */ ([]));
 	/**
 	 * Per-match assignment overrides for the event. Flat list pulled from
 	 * Supabase on each sync tick. Shape: {match_number, scout_name, team_number}.
@@ -59,36 +66,21 @@ class Session {
 		return Boolean(this.eventCode && this.scoutName);
 	}
 
-	/**
-	 * Union of manager-assigned teams and local additions, deduplicated and
-	 * sorted ascending. This is the list downstream code (entry form, schedule
-	 * UI) should use.
-	 */
-	get effectiveTeams() {
-		const set = new Set();
-		for (const t of this.assignedTeams) if (Number.isFinite(t)) set.add(t);
-		for (const t of this.localExtraTeams) if (Number.isFinite(t)) set.add(t);
-		return [...set].sort((a, b) => a - b);
-	}
-
 	async load() {
 		this.eventCode = (await getSetting('eventCode')) ?? '';
 		this.scoutName = (await getSetting('scoutName')) ?? '';
 		const at = await getSetting('assignedTeams');
-		this.assignedTeams = Array.isArray(at) ? at.filter(Number.isFinite) : [];
-		const le = await getSetting('localExtraTeams');
-		this.localExtraTeams = Array.isArray(le) ? le.filter(Number.isFinite) : [];
+		this.assignedTeams = normaliseTeams(at);
 		const ov = await getSetting('overrides');
 		this.overrides = Array.isArray(ov) ? ov : [];
 		this.managerToken = (await getSetting('managerToken')) ?? '';
 		this.tbaApiKey = (await getSetting('tbaApiKey')) ?? '';
 		this.tbaEventKey = (await getSetting('tbaEventKey')) ?? '';
-		// One-time migration cleanup: drop the obsolete pre-assignments setting
-		// so it doesn't sit in IndexedDB forever. Safe to remove this line a
-		// few months after release.
-		const legacyPos = await getSetting('scoutPosition');
-		if (legacyPos !== undefined && legacyPos !== null) {
-			await setSetting('scoutPosition', null);
+		// One-time migration cleanup: drop obsolete settings so they don't sit in
+		// IndexedDB forever. Safe to remove these a few months after release.
+		for (const key of ['scoutPosition', 'localExtraTeams']) {
+			const legacy = await getSetting(key);
+			if (legacy !== undefined && legacy !== null) await setSetting(key, null);
 		}
 		this.loaded = true;
 	}
@@ -103,14 +95,9 @@ class Session {
 			await setSetting('scoutName', patch.scoutName);
 		}
 		if (patch.assignedTeams !== undefined) {
-			const cleaned = (patch.assignedTeams ?? []).filter(Number.isFinite);
+			const cleaned = normaliseTeams(patch.assignedTeams);
 			this.assignedTeams = cleaned;
 			await setSetting('assignedTeams', cleaned);
-		}
-		if (patch.localExtraTeams !== undefined) {
-			const cleaned = (patch.localExtraTeams ?? []).filter(Number.isFinite);
-			this.localExtraTeams = cleaned;
-			await setSetting('localExtraTeams', cleaned);
 		}
 		if (patch.overrides !== undefined) {
 			const cleaned = Array.isArray(patch.overrides) ? patch.overrides : [];

@@ -59,7 +59,7 @@
 	/** {match, teams} for the soonest match where any of my teams plays and
 	 *  hasn't been recorded yet; null if nothing pending. */
 	const nextSuggestion = $derived.by(() => {
-		const teams = session.effectiveTeams;
+		const teams = session.assignedTeams;
 		const overrides = session.overrides ?? [];
 		if (!qmList.length || (!teams.length && !overrides.length)) return null;
 		return nextUnscoutedMatch(qmList, entries, {

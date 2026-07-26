@@ -30,7 +30,7 @@ class RemindersStore {
 
 	/** Auto-generated banners derived from schedule + scout's assigned teams. */
 	get autoList() {
-		return autoReminders(this.qmList, session.effectiveTeams, this.now, 15);
+		return autoReminders(this.qmList, session.assignedTeams, this.now, 15);
 	}
 
 	/** Everything the banner should currently show, after dismissal + target filtering. */

@@ -1,60 +1,34 @@
 <script>
-	// Scout view: the teams this device is watching — manager-assigned plus any
-	// local extras the scout added themselves.
+	// Scout view: the teams the manager has assigned to this device.
+	//
+	// Read-only on purpose. Scouts could once add teams here, but those
+	// additions lived only on their own phone — the manager's coverage board
+	// never saw them, so the roster the manager planned against and the one
+	// scouts were working to could silently disagree.
+	import { base } from '$app/paths';
 	import { session } from '$lib/session.svelte.js';
 	import { relativeTime } from '$lib/format.js';
 
-	let {
-		newTeamInput = $bindable(),
-		effectiveTeams,
-		cached,
-		qmList,
-		busy,
-		now,
-		onAddTeam,
-		onRemoveTeam,
-		onRefresh
-	} = $props();
+	let { assignedTeams, cached, qmList, busy, now, onRefresh } = $props();
 </script>
 
 <section>
 	<h2>Your teams</h2>
 
-	{#if effectiveTeams.length === 0}
+	{#if assignedTeams.length === 0}
 		<p class="muted small">
 			Nothing assigned to <strong>{session.scoutName || '(no name set)'}</strong>.
-			Check the spelling matches what your manager used.
+			Check that your name on <a href="{base}/settings/">Settings</a> matches
+			exactly what your manager typed, then tap Refresh. If it still looks
+			empty, ask them to assign you.
 		</p>
 	{:else}
 		<div class="team-chips">
-			{#each effectiveTeams as t}
-				{@const isLocal = (session.localExtraTeams ?? []).includes(t)}
-				<span class="team-chip" class:local={isLocal}>
-					{t}
-					{#if isLocal}
-						<button
-							type="button"
-							class="chip-x"
-							aria-label="Remove team {t}"
-							onclick={() => onRemoveTeam(t)}
-						>×</button>
-					{/if}
-				</span>
+			{#each assignedTeams as t}
+				<span class="team-chip">{t}</span>
 			{/each}
 		</div>
 	{/if}
-
-	<div class="add-team">
-		<input
-			type="number"
-			bind:value={newTeamInput}
-			placeholder="Add team (e.g. 1234)"
-			inputmode="numeric"
-		/>
-		<button class="secondary-btn" disabled={!newTeamInput} onclick={onAddTeam}>
-			Add
-		</button>
-	</div>
 
 	<div class="actions-row" style="margin-top: 0.6rem;">
 		<button class="secondary-btn" disabled={busy} onclick={onRefresh}>
@@ -81,19 +55,7 @@
 	}
 	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
 	.muted.small { font-size: 0.82rem; }
-	input {
-		font: inherit;
-		padding: 0.55rem 0.7rem;
-		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
-		background: var(--bg-card);
-		color: var(--text-primary);
-	}
-	input:focus {
-		outline: 2px solid var(--accent);
-		outline-offset: 1px;
-		border-color: var(--accent);
-	}
+	.muted a { color: var(--accent); }
 	button.secondary-btn {
 		font: inherit;
 		font-weight: 600;
@@ -139,26 +101,4 @@
 		border-radius: 999px;
 		font-size: 0.9rem;
 	}
-	.team-chip.local {
-		background: var(--bg-subtle);
-		color: var(--text-primary);
-		border-color: var(--border-strong);
-		font-weight: 600;
-	}
-	.chip-x {
-		background: transparent;
-		border: none;
-		color: inherit;
-		font-size: 1rem;
-		line-height: 1;
-		cursor: pointer;
-		padding: 0;
-	}
-	.chip-x:hover { color: var(--danger); }
-	.add-team {
-		display: flex;
-		gap: 0.4rem;
-		align-items: center;
-	}
-	.add-team input { flex: 1 1 0; min-width: 0; }
 </style>

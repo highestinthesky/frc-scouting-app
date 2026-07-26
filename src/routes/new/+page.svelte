@@ -122,7 +122,7 @@
 						.filter(Number.isFinite);
 					const { red, blue } = teamsInMatch(match);
 					const playing = new Set([...red, ...blue].filter(Number.isFinite));
-					const candidates = (ovTeams.length ? ovTeams : session.effectiveTeams)
+					const candidates = (ovTeams.length ? ovTeams : session.assignedTeams)
 						.filter((t) => playing.has(t));
 					const mine = [...new Set(candidates)].sort((a, b) => a - b);
 					if (mine.length === 1) {
@@ -138,7 +138,7 @@
 			//    assigned teams is playing and I haven't entered it yet.
 			//    Per-match overrides (from session.overrides) win over the
 			//    base team list when one applies to the (match, scout) pair.
-			const teams = session.effectiveTeams;
+			const teams = session.assignedTeams;
 			if (qmList.length && (teams.length || session.overrides?.length)) {
 				const next = nextUnscoutedMatch(qmList, all, {
 					assignedTeams: teams,
