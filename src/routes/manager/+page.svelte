@@ -2,20 +2,15 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
-	import { importFile } from '$lib/import.js';
-	import { exportToFile, exportToCsv } from '$lib/export.js';
+	import { exportToCsv } from '$lib/csv.js';
 	import { session } from '$lib/session.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
 
 	let summary = $state(null);
 	let loading = $state(true);
-	let importing = $state(false);
-	let exporting = $state(false);
 	let exportingCsv = $state(false);
-	let importMessage = $state('');
-	let importError = $state('');
 	let exportMessage = $state('');
-	let fileInput = $state();
+	let exportError = $state('');
 
 	// Toolbar
 	let teamQuery = $state('');
@@ -255,69 +250,20 @@
 		if (!loading) refresh();
 	});
 
-	// ─── import / export ───────────────────────────────────────────────────────
-
-	async function handleFiles(e) {
-		const files = [...(e.target.files ?? [])];
-		if (files.length === 0) return;
-		importing = true;
-		importError = '';
-		importMessage = '';
-		let totalInserted = 0;
-		let totalSkipped = 0;
-		const lines = [];
-		try {
-			for (const file of files) {
-				try {
-					const result = await importFile(file);
-					totalInserted += result.inserted;
-					totalSkipped += result.skipped;
-					lines.push(`${file.name}: +${result.inserted}, ${result.skipped} dup(s)`);
-				} catch (err) {
-					lines.push(`${file.name}: ${err.message}`);
-					importError = err.message;
-				}
-			}
-			importMessage = `${totalInserted} new ${totalInserted === 1 ? 'entry' : 'entries'} imported, ${totalSkipped} duplicate${totalSkipped === 1 ? '' : 's'} skipped.\n${lines.join('\n')}`;
-			await refresh();
-		} finally {
-			importing = false;
-			if (fileInput) fileInput.value = '';
-		}
-	}
-
-	async function exportScout() {
-		if (!summary || summary.totalEntries === 0) return;
-		exporting = true;
-		exportMessage = '';
-		importError = '';
-		try {
-			const { filename, count } = await exportToFile({
-				kind: 'manager-export',
-				exportedBy: session.scoutName || 'manager',
-				eventCode: session.eventCode || (summary.events[0] ?? null)
-			});
-			exportMessage = `Exported ${count} entries → ${filename}`;
-		} catch (err) {
-			importError = err.message ?? String(err);
-		} finally {
-			exporting = false;
-		}
-	}
+	// ─── CSV export ────────────────────────────────────────────────────────────
 
 	async function doExportCsv() {
 		if (!summary || summary.totalEntries === 0) return;
 		exportingCsv = true;
 		exportMessage = '';
-		importError = '';
+		exportError = '';
 		try {
 			const { filename, count } = await exportToCsv({
-				exportedBy: session.scoutName || 'manager',
 				eventCode: session.eventCode || (summary.events[0] ?? null)
 			});
 			exportMessage = `Exported ${count} entries → ${filename}`;
 		} catch (err) {
-			importError = err.message ?? String(err);
+			exportError = err.message ?? String(err);
 		} finally {
 			exportingCsv = false;
 		}
@@ -346,19 +292,7 @@
 		<!-- ── Empty state ─────────────────────────────────────────────── -->
 		<div class="empty">
 			<p>No entries yet.</p>
-			<p class="muted">Import <code>.scout</code> files your scouts shared to start analysis.</p>
-			<label class="btn secondary import-btn">
-				<input
-					type="file"
-					accept=".scout,.json,application/json,application/octet-stream"
-					multiple
-					onchange={handleFiles}
-					disabled={importing}
-				/>
-				<span>{importing ? 'Importing…' : 'Import scout files'}</span>
-			</label>
-			{#if importMessage}<pre class="info">{importMessage}</pre>{/if}
-			{#if importError}<p class="error">{importError}</p>{/if}
+			<p class="muted">Scout entries appear here as they sync in.</p>
 		</div>
 
 	{:else}
@@ -387,24 +321,8 @@
 				<option value="defense">Most defense notes</option>
 			</select>
 			<div class="toolbar-btns">
-				<label class="btn secondary import-btn">
-					<input
-						bind:this={fileInput}
-						type="file"
-						accept=".scout,.json,application/json,application/octet-stream"
-						multiple
-						onchange={handleFiles}
-						disabled={importing}
-					/>
-					<span>{importing ? 'Importing…' : 'Import'}</span>
-				</label>
-				<button
-					class="btn primary"
-					onclick={exportScout}
-					disabled={exporting || summary.totalEntries === 0}
-				>
-					{exporting ? 'Exporting…' : 'Export .scout'}
-				</button>
+				<a class="btn secondary" href="{base}/manager/compare/">Compare</a>
+				<a class="btn secondary" href="{base}/manager/picklist/">Picklist</a>
 				<button
 					class="btn csv"
 					onclick={doExportCsv}
@@ -452,9 +370,8 @@
 		</div>
 
 		<!-- ── Messages ────────────────────────────────────────────────── -->
-		{#if importMessage}<pre class="info">{importMessage}</pre>{/if}
 		{#if exportMessage}<p class="info single">{exportMessage}</p>{/if}
-		{#if importError}<p class="error">{importError}</p>{/if}
+		{#if exportError}<p class="error">{exportError}</p>{/if}
 
 		<!-- ── Thin coverage hint ──────────────────────────────────────── -->
 		<!--
@@ -717,12 +634,6 @@
 	.btn.csv:hover { filter: brightness(1.04); }
 	.btn.csv:disabled { opacity: 0.6; cursor: progress; }
 	/* file-input overlay for label-based upload buttons */
-	.import-btn input {
-		position: absolute;
-		inset: 0;
-		opacity: 0;
-		cursor: pointer;
-	}
 
 	/* ── filter chips ─────────────────────────────────────────────── */
 	.chips {

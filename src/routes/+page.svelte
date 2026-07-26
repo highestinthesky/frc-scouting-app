@@ -3,8 +3,6 @@
 	import { base } from '$app/paths';
 	import { listEntries, deleteEntry } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
-	import { exportToFile } from '$lib/export.js';
-	import { importFile } from '$lib/import.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import {
 		getCachedSchedule,
@@ -16,13 +14,6 @@
 
 	let entries = $state([]);
 	let loading = $state(true);
-	let exporting = $state(false);
-	let importing = $state(false);
-	let lastExport = $state('');
-	let lastImport = $state('');
-	let exportError = $state('');
-	let importError = $state('');
-	let fileInput = $state();
 
 	/** Cached qual matches for the current event — populated on mount and
 	 *  refreshed when the sync layer brings new schedule data down. */
@@ -125,51 +116,6 @@
 		await deleteEntry(id);
 		await refresh();
 	}
-
-	async function doExport() {
-		if (entries.length === 0) {
-			exportError = 'Nothing to export yet.';
-			return;
-		}
-		exportError = '';
-		exporting = true;
-		try {
-			const { filename, count } = await exportToFile({
-				kind: 'scout-export',
-				exportedBy: session.scoutName,
-				eventCode: session.eventCode
-			});
-			lastExport = `Exported ${count} entries → ${filename}`;
-		} catch (err) {
-			exportError = err.message ?? String(err);
-		} finally {
-			exporting = false;
-		}
-	}
-
-	async function doImport(e) {
-		const files = [...(e.target.files ?? [])];
-		if (files.length === 0) return;
-		importing = true;
-		importError = '';
-		lastImport = '';
-		let totalInserted = 0;
-		let totalSkipped = 0;
-		try {
-			for (const file of files) {
-				const result = await importFile(file);
-				totalInserted += result.inserted;
-				totalSkipped += result.skipped;
-			}
-			await refresh();
-			lastImport = `Imported ${totalInserted} new entr${totalInserted === 1 ? 'y' : 'ies'} (${totalSkipped} duplicate${totalSkipped === 1 ? '' : 's'} skipped).`;
-		} catch (err) {
-			importError = err.message ?? String(err);
-		} finally {
-			importing = false;
-			if (fileInput) fileInput.value = '';
-		}
-	}
 </script>
 
 <svelte:head>
@@ -212,13 +158,7 @@
 	{:else if entries.length === 0}
 		<div class="empty">
 			<p>No entries yet.</p>
-			<p class="muted">Tap <strong>+ New entry</strong> to scout your first robot, or import a file a teammate shared with you.</p>
-			<label class="import empty-import" aria-label="Import scouting files">
-				<input type="file" accept=".scout,.json,application/json,application/octet-stream" multiple onchange={doImport} disabled={importing} />
-				<span>{importing ? 'Importing…' : 'Import data'}</span>
-			</label>
-			{#if lastImport}<p class="muted small">{lastImport}</p>{/if}
-			{#if importError}<p class="error small">{importError}</p>{/if}
+			<p class="muted">Tap <strong>+ New entry</strong> to scout your first robot.</p>
 		</div>
 
 	{:else}
@@ -229,20 +169,6 @@
 				· <strong>{todayEntries.length}</strong> today
 			{/if}
 		</p>
-
-		<div class="export-bar">
-			<label class="import" aria-label="Import scouting files">
-				<input bind:this={fileInput} type="file" accept=".scout,.json,application/json,application/octet-stream" multiple onchange={doImport} disabled={importing} />
-				<span>{importing ? 'Importing…' : 'Import data'}</span>
-			</label>
-			<button class="export" onclick={doExport} disabled={exporting}>
-				{exporting ? 'Exporting…' : `Export ${entries.length} entries`}
-			</button>
-			{#if lastImport}<small class="muted">{lastImport}</small>{/if}
-			{#if importError}<small class="error">{importError}</small>{/if}
-			{#if lastExport}<small class="muted">{lastExport}</small>{/if}
-			{#if exportError}<small class="error">{exportError}</small>{/if}
-		</div>
 
 		<ul class="entries">
 			{#each entries as e (e.id)}
@@ -307,7 +233,6 @@
 	}
 	h1 { margin: 0; font-size: 1.5rem; }
 	.muted { color: var(--text-faint); }
-	.error { color: var(--danger); }
 	.primary {
 		display: inline-block;
 		padding: 0.55rem 1rem;
@@ -377,47 +302,6 @@
 		color: var(--text-muted);
 	}
 	.pace strong { color: var(--accent); }
-
-	/* ── export bar ───────────────────────────────────────────────── */
-	.export-bar {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		margin-bottom: 1rem;
-	}
-	.export {
-		align-self: flex-start;
-		padding: 0.5rem 0.9rem;
-		background: var(--bg-card);
-		border: 1px solid var(--accent);
-		color: var(--accent);
-		font: inherit;
-		font-weight: 600;
-		border-radius: 0.4rem;
-		cursor: pointer;
-	}
-	.import {
-		position: relative;
-		display: inline-block;
-		align-self: flex-start;
-		padding: 0.5rem 0.9rem;
-		background: var(--bg-card);
-		border: 1px solid var(--border-strong);
-		color: var(--text-primary);
-		font: inherit;
-		font-weight: 600;
-		border-radius: 0.4rem;
-		cursor: pointer;
-	}
-	.import:hover { background: var(--bg-subtle); }
-	.import input {
-		position: absolute;
-		inset: 0;
-		opacity: 0;
-		cursor: pointer;
-	}
-	.export:hover { background: var(--accent-soft); }
-	.export:disabled { opacity: 0.6; cursor: progress; }
 
 	/* ── entry list ───────────────────────────────────────────────── */
 	.empty { margin-top: 3rem; text-align: center; }
@@ -492,8 +376,6 @@
 	.entry p.brokedown { color: var(--danger); font-weight: 600; }
 	.entry p.brokedown strong { color: var(--danger); }
 
-	.empty .empty-import { display: inline-block; margin-top: 1rem; align-self: center; }
-	.empty .small { font-size: 0.85rem; margin-top: 0.5rem; }
 
 	.timestamp {
 		display: block;

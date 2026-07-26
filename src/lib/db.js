@@ -1,7 +1,8 @@
-// Local-only database for the FRC scouting app.
-// Uses Dexie, which is a friendly wrapper around IndexedDB (the browser's
-// built-in database). Everything saved here lives in the user's browser
-// and never leaves the device unless they export a file.
+// Local database for the FRC scouting app.
+//
+// Dexie wraps IndexedDB. This is the write target for every entry — the sync
+// layer pushes rows up to Supabase afterwards, so a scout with no signal can
+// still record a match and have it land when the connection comes back.
 
 import Dexie from 'dexie';
 
@@ -153,8 +154,8 @@ export async function insertRemoteEntry(remoteRow) {
 		])
 		.first();
 	if (byCompound) {
-		// Local row already exists from a file import; just stamp its remoteId
-		// so future sync ticks don't push a duplicate.
+		// Same row already here under a different id — stamp its remoteId so
+		// future sync ticks don't push a duplicate.
 		if (!byCompound.remoteId && remoteRow.remoteId) {
 			await db.entries.update(byCompound.id, { remoteId: remoteRow.remoteId });
 		}
@@ -258,33 +259,3 @@ export async function getMostUsedObservationValuesForTeam(observationKey, teamNu
 		.slice(0, limit);
 }
 
-/**
- * Insert several entries, skipping any that already exist (matched on
- * the compound index of event+match+team+scout+createdAt).
- * Returns { inserted, skipped }.
- */
-export async function bulkInsertEntries(rows) {
-	let inserted = 0;
-	let skipped = 0;
-	for (const row of rows) {
-		const existing = await db.entries
-			.where('[eventCode+matchNumber+teamNumber+scoutName+createdAt]')
-			.equals([
-				row.eventCode,
-				row.matchNumber,
-				row.teamNumber,
-				row.scoutName,
-				row.createdAt
-			])
-			.first();
-		if (existing) {
-			skipped++;
-		} else {
-			// Strip any incoming `id` so Dexie auto-assigns a new local one.
-			const { id: _drop, ...rest } = row;
-			await db.entries.add(rest);
-			inserted++;
-		}
-	}
-	return { inserted, skipped };
-}
