@@ -27,3 +27,6 @@ credentials.md
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Vendored dev skill (hallmark) — reinstall with: npx skills add nutlope/hallmark
+/.claude/skills/hallmark
