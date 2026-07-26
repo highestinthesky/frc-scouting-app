@@ -191,6 +191,66 @@ export async function addOverride(eventCode, { matchNumber, scoutName, teamNumbe
 }
 
 /**
+ * Manager-only: replace every override row for an event in one go.
+ *
+ * Auto-assign emits per-match overrides in bulk — up to a hundred or so on a
+ * large event — and addOverride() is one HTTP round-trip per row. Same
+ * delete-then-insert shape as replaceAssignments().
+ *
+ * This wipes hand-authored overrides along with generated ones. That is
+ * deliberate and matches how auto-assign already overwrites the base team
+ * lists: a run produces one coherent plan rather than a merge of two. The
+ * confirm dialog says so before anything is replaced.
+ *
+ * @param {string} eventCode
+ * @param {{match_number: number, scout_name: string, team_number: number}[]} rows
+ * @param {object} opts
+ * @param {string} opts.managerToken
+ * @returns {Promise<number>} rows inserted
+ */
+export async function replaceOverrides(eventCode, rows, opts) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code) throw new Error('No event code.');
+	const sid = await deriveSessionId(code);
+	if (!sid) throw new Error('Could not derive session id.');
+	const client = createSupabaseClient(sid, { managerToken: opts?.managerToken ?? '' });
+
+	const cleaned = (rows ?? [])
+		.map((r) => ({
+			session_id: sid,
+			event_code: code,
+			match_number: Number(r.match_number),
+			scout_name: String(r.scout_name ?? '').trim(),
+			team_number: Number(r.team_number)
+		}))
+		.filter(
+			(r) =>
+				r.scout_name &&
+				Number.isFinite(r.match_number) &&
+				Number.isFinite(r.team_number) &&
+				r.team_number > 0
+		);
+
+	const { error: delErr } = await client
+		.from('assignment_overrides')
+		.delete()
+		.eq('session_id', sid);
+	if (delErr) throw mapErr(delErr, 'clear overrides');
+
+	if (cleaned.length === 0) return 0;
+	// Chunked: a big event can produce a hundred-plus rows and some hosted
+	// Postgres tiers get unhappy with one very large insert payload.
+	const CHUNK = 200;
+	for (let i = 0; i < cleaned.length; i += CHUNK) {
+		const { error } = await client
+			.from('assignment_overrides')
+			.insert(cleaned.slice(i, i + CHUNK));
+		if (error) throw mapErr(error, 'save overrides');
+	}
+	return cleaned.length;
+}
+
+/**
  * Manager-only: delete an override row by id.
  *
  * @param {string} eventCode
@@ -253,70 +313,9 @@ function mapErr(err, action) {
 
 // ─── smart auto-assign ──────────────────────────────────────────────────────
 //
-// Given the published schedule and a list of scout names, distribute every
-// distinct team playing at the event across the scouts. Two goals, in order:
-//   1. Avoid same-match conflicts — a scout shouldn't be handed two teams that
-//      ever play each other (they can't physically scout both at once).
-//   2. Balance the load — keep each scout's team count as even as possible.
-//
-// Greedy + most-constrained-first: teams that appear in the most matches are
-// the hardest to place, so we place them first, always choosing the
-// least-loaded scout who has no conflict. If every scout would conflict (more
-// teams overlap than scouts can absorb) we fall back to the least-loaded scout
-// and let the existing Coverage-check surface the unavoidable clash.
+// The algorithm lives in ./auto-assign.js, which imports nothing from Svelte or
+// Supabase so it can be unit-tested with plain node
+// (`node src/lib/auto-assign.test.mjs`). Re-exported here so existing callers
+// keep working.
 
-/**
- * @param {object[]} qmList       qual matches (from qualMatches())
- * @param {string[]} scoutNames   non-empty scout names to distribute across
- * @returns {{ assignments: Map<string, number[]>, conflicts: number, teamCount: number }}
- */
-export function autoAssignTeams(qmList, scoutNames) {
-	const names = [...new Set((scoutNames ?? []).map((n) => String(n ?? '').trim()).filter(Boolean))];
-	if (names.length === 0 || !Array.isArray(qmList) || qmList.length === 0) {
-		return { assignments: new Map(), conflicts: 0, teamCount: 0 };
-	}
-
-	// team → Set<match_number> it plays in.
-	const teamMatches = new Map();
-	for (const m of qmList) {
-		const { red, blue } = teamsInMatch(m);
-		for (const t of [...red, ...blue]) {
-			if (!Number.isFinite(t)) continue;
-			const set = teamMatches.get(t) ?? new Set();
-			set.add(m.match_number);
-			teamMatches.set(t, set);
-		}
-	}
-
-	// Most-constrained first (plays in the most matches), then numeric order.
-	const teams = [...teamMatches.keys()].sort((a, b) => {
-		const d = teamMatches.get(b).size - teamMatches.get(a).size;
-		return d !== 0 ? d : a - b;
-	});
-
-	const assigned = new Map(names.map((n) => [n, []]));
-	// Per-scout union of match_numbers already covered, for fast conflict checks.
-	const scoutMatches = new Map(names.map((n) => [n, new Set()]));
-	let conflicts = 0;
-
-	const overlaps = (scout, team) => {
-		const have = scoutMatches.get(scout);
-		for (const mn of teamMatches.get(team)) if (have.has(mn)) return true;
-		return false;
-	};
-
-	for (const team of teams) {
-		// Candidate scouts with no conflict, fewest teams first.
-		const ranked = [...names].sort((a, b) => assigned.get(a).length - assigned.get(b).length);
-		let chosen = ranked.find((n) => !overlaps(n, team));
-		if (!chosen) {
-			chosen = ranked[0]; // unavoidable conflict — give it to the lightest load
-			conflicts += 1;
-		}
-		assigned.get(chosen).push(team);
-		for (const mn of teamMatches.get(team)) scoutMatches.get(chosen).add(mn);
-	}
-
-	for (const [, list] of assigned) list.sort((a, b) => a - b);
-	return { assignments: assigned, conflicts, teamCount: teams.length };
-}
+export { autoAssignTeams, evaluateCoverage } from './auto-assign.js';

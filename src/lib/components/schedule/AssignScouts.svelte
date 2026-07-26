@@ -4,12 +4,22 @@
 	// assignRows is a $state array owned by the route — mutating a row's fields
 	// through the proxy propagates back without an explicit binding.
 
-	let { assignRows, busy, qmList, onAddRow, onRemoveRow, onAutoAssign, onSave } = $props();
+	let {
+		assignRows,
+		busy,
+		qmList,
+		pendingOverrideCount,
+		onAddRow,
+		onRemoveRow,
+		onAutoAssign,
+		onSave
+	} = $props();
 </script>
 
 <section>
 	<h2>Assign scouts</h2>
 	<p class="muted">One row per scout. Saving replaces the whole list.</p>
+
 	{#each assignRows as r, i}
 		<div class="assign-row">
 			<input
@@ -35,10 +45,18 @@
 	{/each}
 	<p class="muted small">
 		Short on time? Add your scouts' names (leave the team lists blank) and
-		tap <strong>Auto-assign</strong> — it spreads every team at the event
-		evenly across them and avoids putting two teams from the same match on
-		one scout. You can edit the result before saving.
+		tap <strong>Auto-assign</strong> — it spreads every team evenly, then adds
+		per-match overrides so every robot on the field has someone watching it.
+		You can edit the result before saving.
 	</p>
+
+	{#if pendingOverrideCount > 0}
+		<p class="muted small pending-note">
+			{pendingOverrideCount} per-match override{pendingOverrideCount === 1 ? '' : 's'}
+			staged — saved along with the assignments.
+		</p>
+	{/if}
+
 	<div class="actions-row">
 		<button class="secondary-btn" onclick={onAddRow}>+ Add scout</button>
 		<button
@@ -54,6 +72,7 @@
 </section>
 
 <style>
+	.pending-note { color: var(--accent); }
 	h2 {
 		margin: 1.5rem 0 0.5rem;
 		font-size: 1rem;

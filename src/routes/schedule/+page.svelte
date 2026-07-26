@@ -21,6 +21,7 @@
 		listOverrides,
 		addOverride,
 		removeOverride,
+		replaceOverrides,
 		autoAssignTeams
 	} from '$lib/assignments.js';
 	import {
@@ -179,9 +180,15 @@
 			baseByScout.set(name, prev);
 		}
 		// Build overrides map: { 'match:scout(lower)' → Set<teams> }
+		//
+		// Staged overrides from an unsaved auto-assign run count here. Otherwise
+		// auto-assign would report full coverage while Coverage check below still
+		// listed the clashes those very overrides resolve — two numbers on one
+		// screen disagreeing about the same plan.
+		const effectiveOverrides = pendingOverrides ?? overrideList;
 		const overrideKey = (m, s) => `${m}:${String(s ?? '').trim().toLowerCase()}`;
 		const overrideMap = new Map();
-		for (const o of overrideList) {
+		for (const o of effectiveOverrides) {
 			const k = overrideKey(o.match_number, o.scout_name);
 			const set = overrideMap.get(k) ?? new Set();
 			set.add(Number(o.team_number));
@@ -394,6 +401,13 @@
 	/** Assignment editor rows. {scout_name, teamsText} so the user can edit
 	 *  the team list as a comma-separated string. We parse to numbers on save. */
 	let assignRows = $state(/** @type {{scout_name: string, teamsText: string}[]} */ ([]));
+
+	/**
+	 * Overrides staged by the last auto-assign run, written on Save. Null means
+	 * "auto-assign hasn't run since the last save", and Save leaves the existing
+	 * overrides alone.
+	 */
+	let pendingOverrides = $state(/** @type {any[]|null} */ (null));
 
 	// ─── mount: load cached schedule, entries, assignments, passphrase state ─
 
@@ -734,21 +748,31 @@
 		const ok = confirm(
 			`Auto-assign every team at ${session.eventCode} across ${names.length} ` +
 				`scout${names.length === 1 ? '' : 's'}?\n\n` +
-				`This overwrites the team lists in the editor below. Nothing is saved ` +
-				`until you tap “Save assignments”.`
+				`This replaces the team lists in the editor AND every per-match override ` +
+				`for this event, so the plan stays internally consistent.\n\n` +
+				`Nothing is saved until you tap “Save assignments”.`
 		);
 		if (!ok) return;
-		const { assignments, conflicts, teamCount } = autoAssignTeams(qmList, names);
-		assignRows = [...assignments.entries()]
+		const plan = autoAssignTeams(qmList, names);
+		assignRows = [...plan.assignments.entries()]
 			.map(([scout_name, teams]) => ({ scout_name, teamsText: teams.join(', ') }))
 			.sort((a, b) => a.scout_name.localeCompare(b.scout_name));
-		msg =
-			conflicts > 0
-				? `Distributed ${teamCount} teams across ${names.length} scouts — ` +
-					`${conflicts} unavoidable same-match overlap${conflicts === 1 ? '' : 's'} ` +
-					`(see Coverage check; resolve with a per-match override). Review, then Save.`
-				: `Distributed ${teamCount} teams across ${names.length} scouts with no ` +
-					`same-match conflicts. Review, then tap Save assignments.`;
+		pendingOverrides = plan.overrides;
+
+		// Report coverage — the share of team-matches somebody is actually
+		// watching — rather than a count of placement clashes. The old number
+		// looked reassuringly small while a fifth of the event went unscouted.
+		const pct = Math.round(plan.coverage.pct);
+		const head =
+			`Distributed ${plan.teamCount} teams across ${plan.scoutCount} ` +
+			`scout${plan.scoutCount === 1 ? '' : 's'} — ${pct}% of team-matches covered`;
+		msg = plan.ceiling.limited
+			? `${head}. Six robots play at once, so ${plan.scoutCount} ` +
+				`scout${plan.scoutCount === 1 ? '' : 's'} can't exceed ` +
+				`${Math.round(plan.ceiling.pct)}% however they're arranged — add more ` +
+				`scouts to go higher. Review, then Save.`
+			: `${head}, using ${plan.overrides.length} per-match ` +
+				`override${plan.overrides.length === 1 ? '' : 's'}. Review, then Save.`;
 	}
 
 	function addAssignRow() {
@@ -782,7 +806,21 @@
 			const inserted = await replaceAssignments(session.eventCode, rows, {
 				managerToken: session.managerToken
 			});
-			msg = `Saved ${inserted} assignment row${inserted === 1 ? '' : 's'}.`;
+
+			// Only touch the overrides table when auto-assign actually staged
+			// something — a plain edit-and-save must not wipe hand-authored
+			// overrides the manager added from the match modal.
+			let overrideNote = '';
+			if (pendingOverrides) {
+				const n = await replaceOverrides(session.eventCode, pendingOverrides, {
+					managerToken: session.managerToken
+				});
+				overrideList = await listOverrides(session.eventCode);
+				pendingOverrides = null;
+				overrideNote = ` and ${n} per-match override${n === 1 ? '' : 's'}`;
+			}
+
+			msg = `Saved ${inserted} assignment row${inserted === 1 ? '' : 's'}${overrideNote}.`;
 		} catch (e) {
 			err = e?.message ?? String(e);
 		} finally {
@@ -852,6 +890,7 @@
 				{assignRows}
 				{busy}
 				{qmList}
+				pendingOverrideCount={pendingOverrides?.length ?? 0}
 				onAddRow={addAssignRow}
 				onRemoveRow={removeAssignRow}
 				onAutoAssign={autoAssign}
