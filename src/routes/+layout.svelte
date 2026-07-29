@@ -85,19 +85,21 @@
 		</div>
 	</header>
 
-	<nav class="tabs">
-		<a href="{base}/" class:active={isActive('/')}>
+	<!-- Bottom-docked on phones, top strip from 40rem up. See design.md
+	     § Three deviations — a scout holds this one-handed. -->
+	<nav class="tabs" aria-label="Main">
+		<a href="{base}/" class:active={isActive('/')} aria-current={isActive('/') ? 'page' : undefined}>
 			Entries
 		</a>
-		<a href="{base}/schedule/" class:active={isActive('/schedule')}>
+		<a href="{base}/schedule/" class:active={isActive('/schedule')} aria-current={isActive('/schedule') ? 'page' : undefined}>
 			Schedule
 		</a>
 		{#if role.isManager}
-			<a href="{base}/manager/" class:active={isActive('/manager')}>
+			<a href="{base}/manager/" class:active={isActive('/manager')} aria-current={isActive('/manager') ? 'page' : undefined}>
 				Manager
 			</a>
 		{/if}
-		<a href="{base}/settings/" class:active={isActive('/settings')}>
+		<a href="{base}/settings/" class:active={isActive('/settings')} aria-current={isActive('/settings') ? 'page' : undefined}>
 			Settings
 		</a>
 	</nav>
@@ -108,6 +110,15 @@
 {/if}
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 * deviations: system fonts (no webfont — venue wifi) · bottom-docked nav
+	 *             on phones (no N1–N13 archetype is thumb-reachable) ·
+	 *             brand purple retained over the genre accents
+	 * pre-emit critique: P5 H4 E4 S5 R5 V4
+	 * contrast: AA pass, both themes, worst case 4.54 (--text-faint)
+	 */
+
 	/* ── Theme variables ───────────────────────────────────────────────
 	   Light is the default. Dark applies whenever the OS prefers dark
 	   *unless* the user explicitly chose light, OR whenever the user
@@ -123,7 +134,7 @@
 		--bg-elev: #ffffff;
 		--text-primary: #1a1a1a;
 		--text-muted: #555;
-		--text-faint: #888;
+		--text-faint: #707070;
 		--border: #e0e0e0;
 		--border-strong: #ccc;
 		--accent: #5f24a2;
@@ -169,6 +180,14 @@
 		--fs-xl: 1.5rem;
 		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
 		--shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+		/* Minimum tap target. 44px is the floor for a thumb on a moving
+		   phone; design.md § Touch targets treats it as non-negotiable. */
+		--tap-min: 2.75rem;
+		--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+		--dur-short: 240ms;
+		/* Height the bottom nav occupies on phones, so pages can reserve it. */
+		--nav-bottom-h: calc(3.25rem + env(safe-area-inset-bottom, 0px));
 	}
 	@media (prefers-color-scheme: dark) {
 		:global(:root:not([data-theme='light'])) {
@@ -178,7 +197,7 @@
 			--bg-elev: #232326;
 			--text-primary: #e8e8e8;
 			--text-muted: #a0a0a3;
-			--text-faint: #6e6e72;
+			--text-faint: #8a8a8a;
 			--border: #2a2a2d;
 			--border-strong: #38383b;
 			--accent: #b18de0;
@@ -209,7 +228,7 @@
 		--bg-elev: #232326;
 		--text-primary: #e8e8e8;
 		--text-muted: #a0a0a3;
-		--text-faint: #6e6e72;
+		--text-faint: #8a8a8a;
 		--border: #2a2a2d;
 		--border-strong: #38383b;
 		--accent: #b18de0;
@@ -248,10 +267,15 @@
 		color: var(--text-faint);
 		font-family: system-ui, -apple-system, sans-serif;
 	}
+	/* The app bar is identity, not navigation — who you are and whether your
+	   work is safe. It stays purple in both themes: it's the one surface
+	   carrying the team's colour, and a scout glancing down should recognise
+	   the app before they read a word of it. */
 	.app-bar {
 		background: #5f24a2;
-		color: white;
-		padding: 0.55rem 1rem;
+		color: #ffffff;
+		padding: var(--space-2) var(--space-4);
+		padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.app-bar-inner {
@@ -259,10 +283,15 @@
 		margin: 0 auto;
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.95rem;
+		gap: var(--space-2);
+		font-size: var(--fs-md);
 	}
-	.event { font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+	.event {
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		font-variant-numeric: tabular-nums;
+	}
 	.sep { opacity: 0.6; }
 	.name { opacity: 0.95; }
 	.role-badge {
@@ -305,27 +334,87 @@
 		border-radius: 999px;
 	}
 
+	/* ── Primary navigation ────────────────────────────────────────────
+	   Phone-first: docked to the bottom of the viewport, where a thumb
+	   reaches without the phone changing hands. A top tab strip is the
+	   furthest point from a resting thumb on a 6" screen, and this app is
+	   used standing up, one-handed, while a match is running.
+
+	   From 40rem the same markup becomes a top strip — on a laptop the
+	   bottom edge is the wrong place and there's no reach problem to solve.
+
+	   Nav stays before <main> in the DOM either way, so tab order and
+	   screen-reader order are unchanged by the visual move. */
 	.tabs {
-		background: var(--bg-card);
-		border-bottom: 1px solid var(--border);
+		position: fixed;
+		inset: auto 0 0 0;
+		z-index: 20;
 		display: flex;
-		justify-content: center;
-		gap: 0.25rem;
-		padding: 0 1rem;
+		justify-content: stretch;
+		background: var(--bg-card);
+		border-top: 1px solid var(--border);
+		padding-bottom: env(safe-area-inset-bottom, 0px);
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.tabs a {
-		padding: 0.65rem 1rem;
+		flex: 1 1 0;
+		min-width: 0;
+		min-height: var(--tap-min);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--space-2) var(--space-1);
 		text-decoration: none;
 		color: var(--text-muted);
 		font-weight: 600;
-		font-size: 0.9rem;
-		border-bottom: 3px solid transparent;
-		margin-bottom: -1px;
+		font-size: var(--fs-sm);
+		/* The active marker rides the top edge here — it points back at the
+		   content, not off the bottom of the screen. */
+		border-top: 3px solid transparent;
+		margin-top: -1px;
+		transition: color var(--dur-short) var(--ease-out);
 	}
 	.tabs a.active {
 		color: var(--accent);
-		border-bottom-color: var(--accent);
+		border-top-color: var(--accent);
+		background: var(--accent-soft);
 	}
 	.tabs a:hover { color: var(--accent); }
+	.tabs a:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+
+	/* Pages reserve the bar's height themselves, via --nav-bottom-h in their
+	   own `main` rule. A :global(main) rule here would look like it handled
+	   it and quietly lose: Svelte scoping makes a page's `main` selector
+	   (0,1,1) which outranks :global(main) at (0,0,1). Better that each page
+	   states the reservation than that the layout pretends to. */
+
+	@media (min-width: 40rem) {
+		.tabs {
+			position: static;
+			justify-content: center;
+			border-top: none;
+			border-bottom: 1px solid var(--border);
+			padding: 0 var(--space-4);
+			padding-bottom: 0;
+		}
+		.tabs a {
+			flex: 0 0 auto;
+			padding: var(--space-3) var(--space-4);
+			border-top: none;
+			border-bottom: 3px solid transparent;
+			margin-top: 0;
+			margin-bottom: -1px;
+		}
+		.tabs a.active {
+			border-bottom-color: var(--accent);
+			background: none;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.tabs a { transition-duration: 0.01ms; }
+	}
 </style>

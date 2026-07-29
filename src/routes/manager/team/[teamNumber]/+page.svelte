@@ -155,7 +155,7 @@
 	main {
 		max-width: 38rem;
 		margin: 1rem auto;
-		padding: 0 1rem 5rem;
+		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {

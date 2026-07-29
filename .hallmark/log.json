@@ -1,0 +1,22 @@
+[
+  {
+    "date": "2026-07-29",
+    "scope": "app",
+    "genre": "modern-minimal",
+    "macrostructure": "Workbench",
+    "theme": "custom (brand purple, system fonts)",
+    "designSystem": "design.md",
+    "axes": { "paperBand": "light+dark pair", "displayStyle": "system-sans", "accentHue": "violet 299°" },
+    "nav": "bottom-docked tab bar under 40rem, top strip above (no N1-N13 archetype fits a thumb-reachable app nav)",
+    "footer": "none (app, not a marketing page)",
+    "enrichment": "none (app pages forbid it)",
+    "deviations": [
+      "system fonts instead of Geist/Space Grotesk - PWA on shared venue wifi",
+      "bottom nav - the fourteen nav archetypes are all top-of-page marketing bars",
+      "brand purple retained over Coral/Cobalt accents"
+    ],
+    "brief": "FRC Scout - scouting PWA for team 3419, phone-first, nine routes",
+    "pagesDone": ["+layout.svelte"],
+    "pagesPending": ["/new", "/edit", "/manager", "/manager/team/[n]", "/manager/compare", "/manager/picklist", "/schedule", "/settings", "/"]
+  }
+]
