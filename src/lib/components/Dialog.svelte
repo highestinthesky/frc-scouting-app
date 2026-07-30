@@ -70,6 +70,17 @@
 	 * contrast: AA pass, both themes
 	 */
 
+	/* A closed <dialog> is hidden by the browser's own
+	   `dialog:not([open]) { display: none }`, which is specificity (0,1,1).
+	   Svelte scopes component styles by appending a hash class, so a plain
+	   `.dlg { display: flex }` here compiles to `.dlg.svelte-xxxx` — (0,2,0),
+	   which OUTRANKS the browser rule. The dialog then renders inline in the
+	   page with its buttons visible, on every route, always.
+	   Hence: state the hidden case explicitly, and only lay out when open. */
+	.dlg:not([open]) {
+		display: none;
+	}
+
 	.dlg {
 		/* Reset the UA's centring box so the card owns its own geometry. */
 		padding: 0;
@@ -79,6 +90,9 @@
 		max-height: none;
 		width: 100%;
 		height: 100%;
+	}
+
+	.dlg[open] {
 		/* Anchored low rather than centred: on a phone this is reachable, and
 		   the buttons land near where the thumb already is. Centred from 40rem,
 		   where there is no reach problem to solve. */
@@ -167,7 +181,7 @@
 	}
 
 	@media (min-width: 40rem) {
-		.dlg { align-items: center; }
+		.dlg[open] { align-items: center; }
 		.card { margin-bottom: var(--space-4); }
 	}
 

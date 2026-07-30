@@ -240,6 +240,23 @@ reimplements one in its own `<style>` block is drifting.
 Still to build, in roughly this order: Button, Card, Badge, Chip, EmptyState,
 PageHeader. Each one deletes duplicated CSS from every page it lands on.
 
+### The scoping trap
+
+Svelte scopes component styles by injecting a hash class into every selector,
+which **silently changes specificity**. `.thing` becomes `.thing.svelte-xxxx` —
+(0,1,0) becomes (0,2,0). This has caused two shipped bugs here:
+
+- `:global(main) { padding-bottom }` in the layout looked like it reserved room
+  for the docked nav. A page's own scoped `main` is (0,1,1) and beat it.
+- `.dlg { display: flex }` outranked the browser's
+  `dialog:not([open]) { display: none }`, so the closed dialog rendered inline
+  on every page with its buttons showing.
+
+Neither appears in the source, in a compiler warning, or in any test that
+doesn't render a browser. `scripts/check_components.mjs` reads the *emitted*
+CSS and asserts against it; it runs in `npm test`. Add a case there when a
+component's styling depends on beating — or losing to — a rule it doesn't own.
+
 ## Variants
 
 ### Studio (desktop-first)
