@@ -36,6 +36,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Unit tests
+        run: npm test
+
+      # Parse every migration against the real PostgreSQL grammar (libpg_query).
+      # A stray quote in a migration is otherwise only discovered by pasting it
+      # into the Supabase SQL editor and watching it fail halfway through,
+      # leaving the database partly migrated.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate SQL
+        run: |
+          pip install pglast
+          npm run check:sql
+
       - name: Build
         env:
           # For a project Pages site (https://highestinthesky.github.io/frc-scouting-app),
