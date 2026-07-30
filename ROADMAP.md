@@ -170,9 +170,11 @@ Two findings from reading the code that changed the design:
 
 1. **`entries` is not in migrations.** Files start at `0002`; the table holding
    every scouting entry, and its RLS policies, exist only in the Supabase
-   dashboard. The repo cannot rebuild the database. Capturing it as `0007` is a
-   prerequisite, not a nice-to-have — the auth work rewrites those exact
-   policies and there is currently no known starting state.
+   dashboard. The repo could not rebuild the database. Now captured as `0001`,
+   idempotent, and safe to run against the live database — it clears every
+   existing policy on the table first, because permissive policies combine with
+   OR and one forgotten dashboard policy would silently defeat a restrictive
+   one. `supabase/verify_entries.sql` reports the live shape beforehand.
 2. **Static hosting rules out the v6 account flow.** Manager-creates-account
    needs `auth.admin.createUser()`, which needs the `service_role` key, which
    can never ship in a client bundle. So: **invite codes, and scouts

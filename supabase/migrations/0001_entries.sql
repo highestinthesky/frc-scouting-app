@@ -91,6 +91,26 @@ CREATE INDEX IF NOT EXISTS entries_session_created_idx
 
 ALTER TABLE public.entries ENABLE ROW LEVEL SECURITY;
 
+-- Drop EVERY existing policy on this table before defining ours, by name,
+-- whatever it happens to be called.
+--
+-- Dropping only our own names is not enough. This table predates migrations,
+-- so it may carry policies created in the dashboard under names like
+-- "Enable read access for all users". Postgres combines permissive policies
+-- with OR, so one forgotten permissive policy sitting next to a restrictive
+-- one silently wins — the table reads as locked down and isn't. Clearing the
+-- set first is what makes this file authoritative rather than additive.
+DO $$
+DECLARE pol record;
+BEGIN
+    FOR pol IN
+        SELECT policyname FROM pg_policies
+         WHERE schemaname = 'public' AND tablename = 'entries'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.entries', pol.policyname);
+    END LOOP;
+END $$;
+
 -- Read: anyone scoped to this event.
 DROP POLICY IF EXISTS entries_session_select ON public.entries;
 CREATE POLICY entries_session_select ON public.entries

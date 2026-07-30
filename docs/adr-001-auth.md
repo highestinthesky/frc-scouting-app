@@ -68,7 +68,7 @@ where that costs nothing.
 ## 2 · Schema
 
 ```sql
--- migration 0008_auth.sql   (0007 reserved for capturing `entries`)
+-- migration 0007_auth.sql
 
 create type public.app_role as enum ('scout', 'manager', 'super');
 
@@ -321,13 +321,16 @@ attention to.
 
 ## 9 · Migration order
 
-1. **`0007_entries.sql` — capture what already exists.** The `entries` table
-   and its policies live only in the Supabase dashboard; migrations start at
-   0002. The repo currently cannot rebuild the database. Dump the live schema
-   into a migration *before* touching policies, or there's no known starting
-   state and no way back.
-2. `0008_auth.sql` — types, `profiles`, `invites`, functions, `submitted_by`.
-3. `0009_policies.sql` — swap every policy to `to authenticated`, replace
+1. **`0001_entries.sql` — done.** The `entries` table and its policies lived
+   only in the Supabase dashboard; migrations started at 0002. Now captured,
+   and written to be idempotent: it drops every existing policy on the table by
+   name — whatever it is called — before creating the known set. That matters
+   because permissive policies combine with OR, so one forgotten dashboard
+   policy would silently defeat a restrictive one. Run `verify_entries.sql`
+   first to check for column drift, which `CREATE TABLE IF NOT EXISTS` cannot
+   fix.
+2. `0007_auth.sql` — types, `profiles`, `invites`, functions, `submitted_by`.
+3. `0008_policies.sql` — swap every policy to `to authenticated`, replace
    `has_manager_token()` with `is_manager()`, drop the passphrase machinery.
 4. Client: `auth.svelte.js`, `/login`, `/register`, `/accounts`, guard in
    `+layout.svelte`.

@@ -56,10 +56,9 @@
 		</div>
 	{/each}
 	<p class="muted small">
-		Short on time? Add your scouts' names (leave the team lists blank) and
-		tap <strong>Auto-assign</strong> — it spreads every team evenly, then adds
-		per-match overrides so every robot on the field has someone watching it.
-		You can edit the result before saving.
+		Tap <strong>Auto-assign</strong> after assigning members to evenly distribute 
+		scouting taks across the team. There should be no schedule conflicts. 
+		You can edit the result before saving. Remember to publish. 
 	</p>
 
 	{#if pendingOverrideCount > 0}
