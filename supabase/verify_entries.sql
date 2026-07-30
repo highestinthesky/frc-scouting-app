@@ -1,69 +1,100 @@
 -- Run this in the Supabase SQL editor BEFORE applying 0001_entries.sql.
---
--- 0001 is idempotent and safe to re-run: it drops every existing policy by
--- name and recreates a known set, and CREATE OR REPLACE handles the helper
--- function. The one thing it cannot fix is column drift — CREATE TABLE IF NOT
--- EXISTS silently no-ops when the table already exists, so if the live shape
--- differs from the file, the file starts lying and nobody notices.
---
--- This script reports the live shape. Compare it against 0001_entries.sql.
 -- Nothing here modifies anything.
-
--- ─── 1 · columns ───────────────────────────────────────────────────────────
--- Expect exactly: id, session_id, event_code, match_number, team_number,
--- alliance_color, scout_name, observations, schema_version, client_id,
--- created_at.
 --
--- Watch for: created_at carrying a DEFAULT (it must not — it is part of the
--- dedupe key, and a default turns a missing value into a silent duplicate
--- instead of a loud error).
-SELECT
-    column_name,
-    data_type,
-    is_nullable,
-    column_default
-FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'entries'
-ORDER BY ordinal_position;
+-- Written as ONE query on purpose. The Supabase SQL editor displays only the
+-- last statement's result set, so a script of six SELECTs silently shows you
+-- the sixth and throws away the rest — which is exactly how you conclude
+-- "there are no policies" when you simply never saw them.
 
--- ─── 2 · policies ──────────────────────────────────────────────────────────
--- Anything here NOT named entries_session_{select,insert,update} was created
--- outside migrations. Permissive policies combine with OR, so a leftover
--- "Enable read access for all users" defeats everything else on the table.
--- 0001 now drops the whole set first, so this is informational — but it is
--- worth seeing what was there.
-SELECT policyname, cmd, permissive, roles, qual, with_check
-FROM pg_policies
-WHERE schemaname = 'public' AND tablename = 'entries'
-ORDER BY policyname;
+SELECT check_name, detail FROM (
 
--- ─── 3 · RLS actually on? ──────────────────────────────────────────────────
--- rowsecurity must be true. A table with policies but RLS disabled is fully
--- open and looks fine in the dashboard.
-SELECT relname, relrowsecurity AS rls_enabled, relforcerowsecurity AS rls_forced
-FROM pg_class
-WHERE oid = 'public.entries'::regclass;
+    -- ── 1 · is RLS actually on? ────────────────────────────────────────────
+    -- The single most important line in this output.
+    --   ENABLED  + 0 policies → nobody can read or write. Locked shut.
+    --   DISABLED + 0 policies → anyone with the anon key can read and write
+    --                           everything. Wide open, and the dashboard
+    --                           looks entirely normal.
+    SELECT 1 AS sort_key,
+           '1 · RLS' AS check_name,
+           CASE WHEN c.relrowsecurity
+                THEN 'ENABLED'
+                ELSE 'DISABLED  <-- table is fully open to the anon key'
+           END AS detail
+    FROM pg_class c WHERE c.oid = 'public.entries'::regclass
 
--- ─── 4 · indexes ───────────────────────────────────────────────────────────
--- The dedupe unique index is load-bearing: the sync layer relies on it raising
--- 23505 and then adopting the existing row's id. Without it, a peer's row and
--- ours both insert and the entry is counted twice.
-SELECT indexname, indexdef
-FROM pg_indexes
-WHERE schemaname = 'public' AND tablename = 'entries'
-ORDER BY indexname;
+    UNION ALL
 
--- ─── 5 · would the dedupe index even build? ────────────────────────────────
--- If rows already violate it, CREATE UNIQUE INDEX fails. Expect zero rows.
-SELECT session_id, event_code, match_number, team_number, scout_name, created_at,
-       count(*) AS duplicates
-FROM public.entries
-GROUP BY 1, 2, 3, 4, 5, 6
-HAVING count(*) > 1;
+    -- ── 2 · policies ───────────────────────────────────────────────────────
+    -- Permissive policies combine with OR, so any leftover dashboard policy
+    -- defeats a restrictive one. 0001 drops the whole set before recreating,
+    -- so this is informational — but worth seeing.
+    SELECT 2,
+           '2 · policy',
+           policyname || '  [' || cmd || ']  ' || COALESCE(qual, '(no using clause)')
+    FROM pg_policies WHERE schemaname = 'public' AND tablename = 'entries'
 
--- ─── 6 · how much is actually in here ──────────────────────────────────────
-SELECT count(*) AS total_entries,
-       count(DISTINCT event_code) AS events,
-       min(created_at) AS oldest,
-       max(created_at) AS newest
-FROM public.entries;
+    UNION ALL
+
+    SELECT 2, '2 · policy', '(none found)'
+    WHERE NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'entries'
+    )
+
+    UNION ALL
+
+    -- ── 3 · columns ────────────────────────────────────────────────────────
+    -- Compare against 0001_entries.sql. CREATE TABLE IF NOT EXISTS cannot fix
+    -- drift — it silently no-ops — so a mismatch here means the migration file
+    -- would start lying about reality.
+    --
+    -- Specifically check: created_at must have NO default. It is part of the
+    -- dedupe unique index, so a default turns a missing value into a silent
+    -- duplicate rather than a loud error.
+    SELECT 3,
+           '3 · column',
+           rpad(column_name, 16) || rpad(data_type, 28) ||
+           'null=' || rpad(is_nullable, 5) ||
+           'default=' || COALESCE(column_default, '(none)')
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'entries'
+
+    UNION ALL
+
+    -- ── 4 · indexes ────────────────────────────────────────────────────────
+    -- The dedupe unique index is load-bearing: the sync layer relies on it
+    -- raising 23505 and then adopting the existing row's id. Without it, a
+    -- peer's copy and ours both insert and the entry counts twice.
+    SELECT 4, '4 · index', indexname || '  ' || indexdef
+    FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'entries'
+
+    UNION ALL
+
+    SELECT 4, '4 · index', '(none found)'
+    WHERE NOT EXISTS (
+        SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'entries'
+    )
+
+    UNION ALL
+
+    -- ── 5 · would the dedupe index build? ──────────────────────────────────
+    SELECT 5, '5 · dedupe blockers',
+           COALESCE((
+               SELECT count(*)::text || ' duplicate group(s) — index will FAIL'
+               FROM (
+                   SELECT 1 FROM public.entries
+                   GROUP BY session_id, event_code, match_number,
+                            team_number, scout_name, created_at
+                   HAVING count(*) > 1
+               ) d
+               HAVING count(*) > 0
+           ), 'none — safe to build')
+
+    UNION ALL
+
+    -- ── 6 · contents ───────────────────────────────────────────────────────
+    SELECT 6, '6 · contents',
+           (SELECT count(*) FROM public.entries)::text || ' rows across ' ||
+           (SELECT count(DISTINCT event_code) FROM public.entries)::text || ' event(s)'
+
+) report
+ORDER BY sort_key, detail;
