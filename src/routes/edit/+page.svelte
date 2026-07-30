@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { dialog } from '$lib/dialog.svelte.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
@@ -109,7 +110,12 @@
 
 	async function removeEntry() {
 		if (!entry) return;
-		const ok = confirm(`Delete entry: Q${entry.matchNumber} · Team ${entry.teamNumber}?`);
+		const ok = await dialog.confirm({
+			title: 'Delete this entry?',
+			body: `Q${entry.matchNumber} · Team ${entry.teamNumber}\n\nIt is removed from this device. A copy already synced to your team stays with them.`,
+			confirmLabel: 'Delete',
+			danger: true
+		});
 		if (!ok) return;
 		await deleteEntry(entry.id);
 		await goto(`${base}/`);

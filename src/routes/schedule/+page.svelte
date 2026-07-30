@@ -45,6 +45,7 @@
 	} from '$lib/reminders.js';
 	import { reminders as reminderStore } from '$lib/reminders.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
+	import { dialog } from '$lib/dialog.svelte.js';
 	import PublishSchedule from '$lib/components/schedule/PublishSchedule.svelte';
 	import ManagerPassphrase from '$lib/components/schedule/ManagerPassphrase.svelte';
 	import AssignScouts from '$lib/components/schedule/AssignScouts.svelte';
@@ -630,11 +631,13 @@
 			const totalCount = cached.matches.length;
 			// Confirm so a stray tap (especially on the wrong event code) can't
 			// silently overwrite everyone's schedule.
-			const ok = confirm(
-				`Publish ${qmCount} qual match${qmCount === 1 ? '' : 'es'} ` +
-					`(${totalCount} total) for ${session.eventCode}?\n\n` +
-					`This replaces the current published schedule. Scouts pull within 30 seconds.`
-			);
+			const ok = await dialog.confirm({
+				title: `Publish ${qmCount} qual match${qmCount === 1 ? '' : 'es'}?`,
+				body:
+					`${totalCount} total, for ${session.eventCode}.\n\n` +
+					`This replaces the current published schedule. Scouts pull the new one within 30 seconds.`,
+				confirmLabel: 'Publish'
+			});
 			if (!ok) return;
 			busy = true;
 			safety = armSafetyTimer();
@@ -778,13 +781,16 @@
 			if (!session.managerToken) {
 				throw new Error('Enter the current passphrase on this device first.');
 			}
-			const ok = confirm(
-				`Reset scheduling for ${session.eventCode}?\n\n` +
-					`This removes the manager passphrase, the published schedule, and all ` +
-					`scout assignments for this event from the server. Scout-collected ` +
-					`entries are NOT touched.\n\n` +
-					`After reset, the next device to set a passphrase becomes the new manager. Continue?`
-			);
+			const ok = await dialog.confirm({
+				title: `Reset scheduling for ${session.eventCode}?`,
+				body:
+					`Removes the manager passphrase, the published schedule and every scout ` +
+					`assignment for this event, from the server.\n\n` +
+					`Scout-collected entries are NOT touched.\n\n` +
+					`Afterwards the next device to set a passphrase becomes the manager.`,
+				confirmLabel: 'Reset scheduling',
+				danger: true
+			});
 			if (!ok) return;
 			busy = true;
 			await resetEventData(session.eventCode, session.managerToken);
@@ -798,7 +804,7 @@
 		}
 	}
 
-	function autoAssign() {
+	async function autoAssign() {
 		err = '';
 		msg = '';
 		const names = assignRows.map((r) => r.scout_name.trim()).filter(Boolean);
@@ -810,13 +816,15 @@
 			err = 'Fetch the schedule from TBA first — auto-assign needs the match list.';
 			return;
 		}
-		const ok = confirm(
-			`Auto-assign every team at ${session.eventCode} across ${names.length} ` +
-				`scout${names.length === 1 ? '' : 's'}?\n\n` +
+		const ok = await dialog.confirm({
+			title: `Auto-assign across ${names.length} scout${names.length === 1 ? '' : 's'}?`,
+			body:
+				`Every team at ${session.eventCode} is redistributed.\n\n` +
 				`This replaces the team lists in the editor AND every per-match override ` +
 				`for this event, so the plan stays internally consistent.\n\n` +
-				`Nothing is saved until you tap “Save assignments”.`
-		);
+				`Nothing is saved until you tap Save assignments.`,
+			confirmLabel: 'Auto-assign'
+		});
 		if (!ok) return;
 		const plan = autoAssignTeams(qmList, names);
 		assignRows = [...plan.assignments.entries()]

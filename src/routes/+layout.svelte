@@ -14,6 +14,7 @@
 	import { reminders } from '$lib/reminders.svelte.js';
 	import SessionSetup from '$lib/components/SessionSetup.svelte';
 	import ReminderBanner from '$lib/components/ReminderBanner.svelte';
+	import Dialog from '$lib/components/Dialog.svelte';
 
 	let { children } = $props();
 
@@ -108,6 +109,10 @@
 
 	{@render children()}
 {/if}
+
+<!-- One instance for the whole app; pages drive it via $lib/dialog.svelte.js.
+     Outside the {#if} so it works before the session has loaded. -->
+<Dialog />
 
 <style>
 	/* Hallmark · genre: modern-minimal · macrostructure: Workbench

@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { dialog } from '$lib/dialog.svelte.js';
 	import { base } from '$app/paths';
 	import { listEntries, deleteEntry } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
@@ -112,7 +113,13 @@
 	// ── actions ────────────────────────────────────────────────────────────────
 
 	async function remove(id, summary) {
-		if (!confirm(`Delete entry: ${summary}?`)) return;
+		const ok = await dialog.confirm({
+			title: 'Delete this entry?',
+			body: `${summary}\n\nIt is removed from this device. A copy already synced to your team stays with them.`,
+			confirmLabel: 'Delete',
+			danger: true
+		});
+		if (!ok) return;
 		await deleteEntry(id);
 		await refresh();
 	}

@@ -62,3 +62,21 @@ function toDate(v) {
 	}
 	return null;
 }
+
+/**
+ * Split a block of copy into paragraphs on blank lines, collapsing incidental
+ * whitespace inside each one.
+ *
+ * Callers write these bodies as multi-line template literals, so the source
+ * carries wraps and indentation that mean nothing to the reader. A single
+ * newline is a wrap; a blank line is a real break.
+ *
+ * @param {string} [body]
+ * @returns {string[]}
+ */
+export function splitParagraphs(body) {
+	return String(body ?? '')
+		.split(/\n{2,}/)
+		.map((p) => p.replace(/\s+/g, ' ').trim())
+		.filter(Boolean);
+}

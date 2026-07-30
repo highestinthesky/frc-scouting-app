@@ -1,5 +1,6 @@
 <script>
 	import { base } from '$app/paths';
+	import { dialog } from '$lib/dialog.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { role } from '$lib/role.svelte.js';
 	import { clearEntries } from '$lib/db.js';
@@ -32,10 +33,15 @@
 	}
 
 	async function clearAll() {
-		const ok = confirm(
-			'Delete every entry stored on this device? This cannot be undone. ' +
-				'Make sure you exported first.'
-		);
+		const ok = await dialog.confirm({
+			title: 'Clear every entry on this device?',
+			body:
+				'This cannot be undone.\n\n' +
+				'Entries already synced to your team are unaffected — this only ' +
+				'empties this phone. Export a CSV first if you want a copy.',
+			confirmLabel: 'Clear entries',
+			danger: true
+		});
 		if (!ok) return;
 		await clearEntries();
 		clearMsg = 'All entries cleared.';

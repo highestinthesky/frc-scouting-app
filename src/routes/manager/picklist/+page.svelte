@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { dialog } from '$lib/dialog.svelte.js';
 	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
 	import { scoreTeams, fmt } from '$lib/metrics.js';
@@ -170,8 +171,14 @@
 		}
 	}
 
-	function clearAll() {
-		if (!confirm('Clear the entire picklist for this event?')) return;
+	async function clearAll() {
+		const ok = await dialog.confirm({
+			title: 'Clear the whole picklist?',
+			body: 'Both the ranked list and the do-not-pick list are emptied. This cannot be undone.',
+			confirmLabel: 'Clear picklist',
+			danger: true
+		});
+		if (!ok) return;
 		primary = [];
 		doNotPick = [];
 	}

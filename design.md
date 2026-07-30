@@ -218,6 +218,28 @@ because a changing number is easier to read when it moves.
 Dark overrides live under `:root[data-theme='dark']` and the
 `prefers-color-scheme` query — see `+layout.svelte`.
 
+## Shared components
+
+Pages consume these rather than restyling the same thing. A page that
+reimplements one in its own `<style>` block is drifting.
+
+- **`Dialog.svelte`** — the only confirm surface. Driven through
+  `$lib/dialog.svelte.js`, mounted once in `+layout.svelte`. Built on the
+  native `<dialog>` element so the focus trap, inert background, Escape
+  handling and backdrop come from the platform rather than from a library this
+  project has no room for. Bottom-anchored under `40rem` so the buttons land
+  near the thumb; centred above it. Cancel is first in the DOM, so a stray
+  Enter hits the safe option. Destructive confirms are outlined in `--danger`
+  and fill only on hover — a delete button should not look like the obvious
+  thing to press.
+
+  `window.confirm()` is banned. It blocks the main thread, ignores this file
+  entirely, and in an installed iOS PWA renders with the origin in the title,
+  which reads as a phishing prompt.
+
+Still to build, in roughly this order: Button, Card, Badge, Chip, EmptyState,
+PageHeader. Each one deletes duplicated CSS from every page it lands on.
+
 ## Variants
 
 ### Studio (desktop-first)
