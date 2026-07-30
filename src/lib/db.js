@@ -5,6 +5,7 @@
 // still record a match and have it land when the connection comes back.
 
 import Dexie from 'dexie';
+import { SCHEMA_VERSION } from './form-config.js';
 
 export const db = new Dexie('frc-scout');
 
@@ -40,6 +41,11 @@ export async function addEntry(entry) {
 	return db.entries.add({
 		...entry,
 		createdAt: new Date().toISOString(),
+		// Stamp the form shape this entry was recorded under, at record time.
+		// Without it the sync layer has to guess, and a guess is wrong in the
+		// one case the field exists for: telling a metric that was never
+		// collected apart from one a scout recorded as zero. See metrics.js.
+		schemaVersion: SCHEMA_VERSION,
 		clientId,
 		remoteId: null
 	});

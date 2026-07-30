@@ -21,6 +21,7 @@ import {
 	markEntrySynced,
 	insertRemoteEntry
 } from './db.js';
+import { SCHEMA_VERSION } from './form-config.js';
 import { pullScheduleIfStale } from './tba.js';
 import { pullAndApplyForScout } from './assignments.js';
 import { reminders } from './reminders.svelte.js';
@@ -216,7 +217,12 @@ async function pushOutbox() {
 			alliance_color: local.allianceColor,
 			scout_name: local.scoutName,
 			observations: local.observations ?? {},
-			schema_version: 2,
+			// Stamp the version the row was actually recorded under. This was
+			// hardcoded to 2 and drifted when the counter fields bumped it to 3,
+			// so every synced entry claimed to predate metrics it contained.
+			// Prefer the entry's own stamp; fall back to the current shape for
+			// rows written before db.js started recording one.
+			schema_version: local.schemaVersion ?? SCHEMA_VERSION,
 			client_id: local.clientId ?? cachedClientId,
 			created_at: local.createdAt
 		};
@@ -270,6 +276,9 @@ async function pullInbox() {
 				allianceColor: remoteRow.alliance_color,
 				scoutName: remoteRow.scout_name,
 				observations: remoteRow.observations ?? {},
+				// Carry the peer's stamp rather than re-deriving it. Their entry
+				// may predate a field this device already has.
+				schemaVersion: remoteRow.schema_version ?? null,
 				createdAt: remoteRow.created_at,
 				clientId: remoteRow.client_id
 			});
