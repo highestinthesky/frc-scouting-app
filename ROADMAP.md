@@ -90,124 +90,159 @@ existed contribute nothing to its sample rather than dragging the mean to zero.
 
 ## The v6 plan — sequenced
 
-From the v6 upgrade doc, reordered by dependency and cost. Next competition is
-months away, so this is built properly rather than rushed.
+From the v6 upgrade doc plus the follow-up decisions, reordered by dependency
+and cost. Next competition is months away, so this is built properly.
 
-Three answers shaped it: login must enforce roles **server-side** (which is the
-only one of the four stated reasons that genuinely needs real auth), Manager
-Studio starts as a fixed Insights page rather than a builder, and there is
-runway.
+### Four decisions that shaped it
 
-### The load-bearing decision: layer auth on top of event codes, don't replace them
+1. **Real accounts, with server-side role enforcement.** That is the only one of
+   the stated reasons for login that a shared password can't deliver — hiding UI
+   is not enforcement.
+2. **Offline-first relaxes for login, not for recording.** See below.
+3. **Manager Studio is a desktop surface.** Managers bring laptops. It gets a
+   sidebar, denser layout, and a higher breakpoint floor. Schedule stays in the
+   main app, because publishing and assigning happen at the venue, possibly on a
+   phone.
+4. **Playoff match scouting is out; alliance selection is in.** This is the
+   biggest cost saving in the plan — see § Alliance selection, not playoffs.
 
-The v6 doc treats login as a replacement for the current event-code model. It
-shouldn't be. The two answer different questions and are orthogonal:
+### Auth layers on top of event codes; it does not replace them
 
-- **Event code** answers *which event is this data for*. Deriving `session_id`
-  from a hashed code partitions data cleanly and is genuinely good design.
-- **Auth** answers *who are you and what may you do*.
+The v6 doc treats login as a replacement for the event-code model. It shouldn't
+be. The two answer different questions:
 
-So `session_id` stays as the event dimension. Auth adds `submitted_by uuid`
-for accountability and a role check for writes. That keeps the sharing model
-that already works, keeps the migration small, and avoids rewriting every RLS
-policy from scratch.
+- **Event code** — *which event is this data for.* Hashing it into a
+  `session_id` partitions data cleanly and is good design. It stays.
+- **Auth** — *who are you, and what may you do.* Adds `submitted_by uuid` for
+  accountability and a role check for writes.
 
-**Recording must never depend on auth.** The IndexedDB write path stays
-auth-free: a scout with an expired token, or no signal at all, still records.
-Only *sync* needs a valid token, and it retries. Login happens before leaving
-the school; that is an operational rule to document, not a hope.
+Keeping both preserves the sharing model that works and keeps the migration
+small, instead of rewriting every RLS policy from scratch.
+
+### The offline rule, stated precisely
+
+Logging in may require network. **Recording may not.**
+
+"If they can log in, they have wifi" holds at the moment of login. The failure
+it misses is forty minutes later: access tokens expire in about an hour and
+refresh in the background. A scout in a dead corner when the refresh fires must
+not be bounced to a login screen holding unsaved work — that is a worse failure
+than the one this app has today.
+
+Three rules, all client-side:
+
+- The IndexedDB write path never checks auth. A scout records regardless of
+  token state.
+- A failed token refresh **never** logs the user out. Keep the local session,
+  surface sync as stale, retry on reconnect.
+- Long refresh-token lifetime, so a weekend event is covered by one login.
+
+Operationally: log in before leaving the school. Worth putting in the app's
+own empty state, not just in this file.
 
 ### Phase 0 — cheap, independent, unblocks the rest
 
-1. **Native dialogs.** Replace the 7 `confirm()`/`alert()` sites across 5
-   files with an in-app dialog component. Blocking browser dialogs look alien
-   in an iOS PWA. The Accounts page needs this component anyway for delete
-   confirmations, so it comes first.
-2. **Minimal-delta auto-assign.** Today re-running it after a scout drops out
+None of these depend on auth, so they can land immediately.
+
+1. **Native dialogs.** Replace the 7 `confirm()`/`alert()` sites across 5 files
+   with one in-app dialog component. Blocking browser dialogs look alien in an
+   iOS PWA, and Accounts needs this component anyway for delete confirmations.
+2. **Minimal-delta auto-assign.** Today, re-running after a scout drops out
    redistributes all ~40 teams and hands everyone a new list mid-event. Pin
-   existing assignments, rebalance only what's necessary. A constraint on the
-   DSATUR pass in `lib/auto-assign.js`.
+   existing assignments and rebalance only what's necessary — a constraint on
+   the DSATUR pass in `lib/auto-assign.js`, not a rewrite.
 3. **Sync UPDATE path.** Known data-loss bug: the sync layer is INSERT-only, so
    an `/edit` change never reaches its cloud row. Needs an UPDATE keyed on
-   `remoteId`. Fix before edits get used in anger.
-4. **Picklist cloud sync.** A `picklists` table gated by `has_manager_token()`.
-   Promoted from "conditional" — alliance selection is the moment the app
-   exists for, and a local-only picklist dies with the phone holding it.
+   `remoteId`.
 
-### Phase 1 — match identity and playoffs (the spine)
+### Phase 1 — auth, roles, accounts
 
-The v6 note *"the app is not ready for playoffs"* is the highest-value line in
-that document and structurally true. `qualMatches()` filters
-`comp_level === 'qm'` at the source, and everything downstream is built on the
-result.
-
-The real cost is not a page, it's **match identity**. A playoff match is
-identified by `(comp_level, set_number, match_number)`, not a bare number. The
-app keys on the bare number everywhere: `entryIndex` uses
-`` `${match_number}:${team}` ``, overrides key on `match_number`, coverage keys
-on `match_number`.
-
-1. Introduce `matchKey(m)` and migrate every consumer onto it.
-2. `allMatches()` / `playoffMatches()` alongside `qualMatches()`.
-3. `comp_level` + `set_number` on entries. `SCHEMA_VERSION` bump, migration
-   defaulting existing rows to `qm`.
-4. Extend the coverage, assignment and auto-assign paths.
-5. Tests before UI — this is the change most likely to corrupt data silently.
-
-Do this **before** the remaining redesign work. It touches every data path, and
-doing it afterwards means editing every file twice.
-
-### Phase 2 — auth, roles, accounts
+First, because everything downstream should be gated by roles rather than
+retrofitted later. Anything built before auth gets its RLS written twice.
 
 One Supabase project, not two. Supabase already separates `auth.users` from the
-public schema — that *is* the separation the v6 doc asks for, and splitting into
-two projects would make it impossible to join a user to their data and would
-remove RLS as the enforcement layer.
+public schema — that *is* the separation the v6 doc asks for.
 
-1. Supabase Auth. `profiles` table: `id` → `auth.users`, first/last name,
-   username, `role` enum (`scout` / `manager` / `super`), `activated_at`.
-2. Role checks as a `SECURITY DEFINER` function, so policies read the role from
-   Postgres rather than trusting a client header. This is what "enforced
-   server-side" actually means: a scout cannot publish a schedule even with a
-   hand-crafted request.
-3. Session persisted locally, long refresh window. Boot and record with an
-   expired access token; sync retries.
-4. `/login`, `/register`, `/accounts`. Registration flow per the v6 doc, with
-   two changes: **usernames are `first.last`, not `hz123`** — random digits are
-   unmemorable, unpredictable, and the doc doesn't handle collisions — and
-   temp-password delivery is manual (manager reads it out), because email at a
-   venue is the same network problem wearing a different hat.
-5. Migration for existing entries: backfill `submitted_by` as null, treat null
-   as "pre-auth", don't delete anything.
+1. `profiles`: `id` → `auth.users`, first/last name, `username`, `role` enum
+   (`scout` / `manager` / `super`), `activated_at`.
+2. **Username uniqueness is a database guarantee, not a UI one.** Scouts pick
+   their own name, so:
+
+   ```sql
+   username text not null,
+   constraint username_shape check (username ~ '^[a-z0-9._-]{3,24}$'),
+   -- case-insensitive uniqueness without requiring the citext extension
+   create unique index profiles_username_lower on profiles (lower(username));
+   ```
+
+   The form does a debounced availability check for the sake of the user, but
+   that check is a courtesy — it has a race window between read and insert. The
+   unique index is the guarantee; the client handles Postgres `23505` by showing
+   "that one's taken". Case-insensitive so `HaolunZ` and `haolunz` can't both
+   exist, which is a confusion vector rather than a security one.
+3. Role checks in a `SECURITY DEFINER` function so policies read the role from
+   Postgres. This is what "server-side" has to mean: a scout cannot publish a
+   schedule even with a hand-crafted request.
+4. `/login`, `/register`, `/accounts`. Temp-password delivery is manual — a
+   manager reads it out — because email at a venue is the same network problem
+   wearing a different hat.
+5. Migration: backfill `submitted_by` as null and treat null as "pre-auth".
+   Delete nothing.
+
+### Phase 2 — alliance selection, not playoffs
+
+Dropping playoff match scouting removes the most expensive item in the earlier
+plan. Playoff matches are identified by `(comp_level, set_number, match_number)`
+rather than a bare number, and this app keys on the bare number everywhere —
+`entryIndex`, overrides, coverage. Supporting them was a match-identity
+refactor touching every data path. Not doing it is worth several days.
+
+**The deliberate boundary:** the app helps you *pick* an alliance and then goes
+quiet once elims start. That is the right trade — selection is where scouting
+data has leverage; by the time elims begin the picking is done. Recorded here so
+it isn't re-litigated as an oversight.
+
+1. **Picklist cloud sync.** A `picklists` table gated by role. Promoted from
+   "conditional": selection is the moment the app exists for, and a local-only
+   picklist dies with the phone holding it.
+2. **Mark teams already picked.** TBA publishes alliances as selection proceeds
+   (`/event/{key}/alliances`). Grey out taken teams in the picklist so nobody
+   burns a pick on an unavailable robot. TBA's latency during selection is
+   unreliable, so a manual strike-through is the fallback, not the polish.
+3. Whatever `/compare` needs to answer "these two are left, which do we want".
 
 ### Phase 3 — information architecture, then redesign
 
-The v6 doc's page reorganisation is a genuine improvement, and it invalidates
-redesigning the current routes first. Do the moves, then run hallmark once per
-page at its new address.
+The v6 reorganisation is a real improvement, and it invalidates redesigning the
+current routes first. Move, then run hallmark once per page at its new address.
 
 | New | From |
 |---|---|
 | `/login`, `/register` | new |
 | `/home` | `/` — greeting, next match, reminders, directory |
 | `/scouting` | `/schedule` + `/new` + `/edit` |
-| `/insights` | `/manager`, `+ /team/[n]`, `/compare`, `/picklist` |
+| `/insights` | `/manager`, `/team/[n]`, `/compare`, `/picklist` |
 | `/accounts` | new |
+| `/studio/*` | new — desktop surface, own layout (Phase 4) |
 | `/settings` | unchanged |
 
-Each page reads `design.md` and stamps `designed-as-app`. `design.md` gets an
-Insights variant if that surface needs a denser register — **amended in the
-file, not overridden per page.**
+### Phase 4 — Studio and Insights
 
-### Phase 4 — Insights
+Studio is **desktop-first** and gets a documented variant in `design.md` — not a
+free-for-all second design system. It shares the tokens, type scale and accent;
+it differs on nav (left sidebar, not the tab bar), density, and breakpoint
+floor. Boundaries stated in the file so the two surfaces stay recognisably one
+product.
 
-Four to six charts chosen for alliance selection, hand-rolled like
-`Sparkline.svelte`. No charting library, no DnD library, no new runtime
-dependencies.
+It is a route group (`/studio/*` with its own `+layout.svelte`), **not a
+separate app in a new tab.** A new tab buys nothing and costs session and state
+coherence; a route group gives it its own chrome for free.
 
+Insights ships as four to six fixed charts chosen for alliance selection,
+hand-rolled like `Sparkline.svelte`. No charting library, no DnD library.
 Revisit a drag-and-drop builder only if the fixed set demonstrably fails a real
-selection. During selection a manager has about five minutes; they need a
-ranked list and two or three known comparisons, not a canvas.
+selection — during selection a manager has about five minutes and reaches for a
+ranked list, not a canvas.
 
 ## Smaller items, still open
 
@@ -273,23 +308,28 @@ Recorded so these don't get re-proposed.
   maintain. But the real objection is product: during alliance selection you
   have about five minutes and you reach for a ranked list, not a canvas. Fixed
   charts first; revisit only on evidence.
-- **`hz123`-style usernames.** Random digits are unmemorable and unpredictable
-  by the person who has to type them, and the v6 doc doesn't handle collisions.
-  `first.last` instead.
+- **Auto-generated `hz123` usernames.** Superseded: scouts pick their own.
+  Random digits are unmemorable and unpredictable by the person who has to type
+  them. Uniqueness comes from a unique index on `lower(username)`, not from
+  entropy — see Phase 1.
 - **Google Sheets API.** CSV export exists and Sheets imports CSV. The API wants
   OAuth, a Cloud project and token refresh, and breaks the static-no-server
   model. A ten-second manual upload wins until it demonstrably doesn't.
-- **"Completely new futuristic vibe" for Manager Studio as a free-for-all.**
-  Two design systems in one product means two to maintain and an app that feels
-  like two apps. If that surface needs its own register it becomes a documented
-  variant in `design.md` with stated boundaries.
-- **Opening Manager Studio in a new tab.** A desktop pattern. If it's a
-  laptop-in-the-stands tool, say so explicitly and give it desktop constraints;
-  don't inherit them by accident.
+- **A free-for-all second design system for Studio.** Studio does get its own
+  register — desktop-first, sidebar, denser — but as a documented variant in
+  `design.md`, sharing tokens, type scale and accent. Two unrelated systems in
+  one product means two to maintain and an app that feels like two apps.
+- **Opening Studio in a new tab.** A route group (`/studio/*` with its own
+  layout) gives it separate chrome without costing session and state coherence.
+  A new tab buys nothing here.
+- **Playoff match scouting.** Deferred deliberately, not forgotten — see
+  Phase 2 for the boundary and the reasoning.
 
-### Open question carried forward
+### Answered: Studio is a desktop surface
 
-Is Insights / Manager Studio a **phone** surface or a **laptop-in-the-stands**
-surface? The v6 doc implies laptop (left sidebar, new tab) but never says it.
-It's the one surface with a legitimate case for escaping phone-first, and the
-answer changes its layout constraints completely. Decide before Phase 4.
+Managers bring laptops, so Studio drops phone-first and gets a sidebar, denser
+layout and a higher breakpoint floor. Schedule stays in the main app — a manager
+may need to publish or reassign from a phone on the floor.
+
+This is the only surface allowed to escape phone-first, and the permission is
+specific to it. `design.md` records it as a variant with stated boundaries.

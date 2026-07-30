@@ -218,6 +218,35 @@ because a changing number is easier to read when it moves.
 Dark overrides live under `:root[data-theme='dark']` and the
 `prefers-color-scheme` query — see `+layout.svelte`.
 
+## Variants
+
+### Studio (desktop-first)
+
+`/studio/*` is the manager's laptop surface. It is the **only** surface allowed
+to escape phone-first, and the permission is specific to it.
+
+**Shares** — every colour token, the type scale, weights and tracking, the accent
+and its placement rule, the CTA voice, the card surface, motion stance.
+
+**Differs on:**
+
+- **Nav** — a left sidebar, not the bottom tab bar. Studio has more
+  destinations than a thumb-reachable bar can carry.
+- **Breakpoint floor** — designed at 1024px and up. It should stay legible
+  narrower, but it is not optimised for a phone and does not pretend to be.
+- **Density** — tighter row rhythm and smaller type steps are permitted, because
+  the reader is seated with a mouse rather than standing in a gym.
+- **Touch targets** — the 44px floor relaxes to 32px for pointer-only controls
+  inside Studio. It still applies to anything that can be reached on a tablet.
+
+**Does not differ on:** the accent, the fonts, the CTA voice, or the enrichment
+ban. "Futuristic" is delivered through density, layout and data, not through a
+second palette or a glow. Two unrelated systems in one product means two to
+maintain and an app that feels like two apps.
+
+Schedule stays in the main app. A manager may need to publish or reassign from a
+phone on the venue floor.
+
 ## Amending this file
 
 If a page needs something this system doesn't allow, **amend here first**, then
