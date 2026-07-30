@@ -157,37 +157,46 @@ None of these depend on auth, so they can land immediately.
 
 ### Phase 1 — auth, roles, accounts
 
+**Full spec: [`docs/adr-001-auth.md`](docs/adr-001-auth.md).** Summary here; the
+ADR carries the schema, policies, RPC and migration order.
+
 First, because everything downstream should be gated by roles rather than
-retrofitted later. Anything built before auth gets its RLS written twice.
+retrofitted. Anything built before auth gets its RLS written twice.
 
-One Supabase project, not two. Supabase already separates `auth.users` from the
-public schema — that *is* the separation the v6 doc asks for.
+One Supabase project. Supabase already separates `auth.users` from the public
+schema — that *is* the separation the v6 doc asks for.
 
-1. `profiles`: `id` → `auth.users`, first/last name, `username`, `role` enum
-   (`scout` / `manager` / `super`), `activated_at`.
-2. **Username uniqueness is a database guarantee, not a UI one.** Scouts pick
-   their own name, so:
+Two findings from reading the code that changed the design:
 
-   ```sql
-   username text not null,
-   constraint username_shape check (username ~ '^[a-z0-9._-]{3,24}$'),
-   -- case-insensitive uniqueness without requiring the citext extension
-   create unique index profiles_username_lower on profiles (lower(username));
-   ```
+1. **`entries` is not in migrations.** Files start at `0002`; the table holding
+   every scouting entry, and its RLS policies, exist only in the Supabase
+   dashboard. The repo cannot rebuild the database. Capturing it as `0007` is a
+   prerequisite, not a nice-to-have — the auth work rewrites those exact
+   policies and there is currently no known starting state.
+2. **Static hosting rules out the v6 account flow.** Manager-creates-account
+   needs `auth.admin.createUser()`, which needs the `service_role` key, which
+   can never ship in a client bundle. So: **invite codes, and scouts
+   self-register.** That removes temp-password generation, delivery, the
+   activation flag and the forced first-login change — the "has this person
+   signed up" signal becomes `invites.redeemed_at`.
 
-   The form does a debounced availability check for the sake of the user, but
-   that check is a courtesy — it has a race window between read and insert. The
-   unique index is the guarantee; the client handles Postgres `23505` by showing
-   "that one's taken". Case-insensitive so `HaolunZ` and `haolunz` can't both
-   exist, which is a confusion vector rather than a security one.
-3. Role checks in a `SECURITY DEFINER` function so policies read the role from
-   Postgres. This is what "server-side" has to mean: a scout cannot publish a
-   schedule even with a hand-crafted request.
-4. `/login`, `/register`, `/accounts`. Temp-password delivery is manual — a
-   manager reads it out — because email at a venue is the same network problem
-   wearing a different hat.
-5. Migration: backfill `submitted_by` as null and treat null as "pre-auth".
-   Delete nothing.
+The rest:
+
+- Username uniqueness is a unique index on `lower(username)` plus a shape
+  CHECK. The form's availability check is a courtesy with a read-to-insert race;
+  the index is the guarantee.
+- Login derives the auth email from the username (`user@scout.invalid`), so
+  there's no lookup table and no roster leak. Usernames become immutable.
+- Roles via a `SECURITY DEFINER` function with `search_path = ''`.
+- `session_id` stays as the event partition but stops being the security
+  boundary; `to authenticated` becomes it, which closes the public-event-code
+  hole.
+- `has_manager_token()` and the passphrase flow get deleted. Two parallel
+  authorisation systems is how you get a hole in one.
+- Password recovery is the weak point: optional `recovery_email`, else the
+  manager revokes and re-invites. First piece of server-side code in the project
+  would be an Edge Function for proper resets — worth resisting until it
+  actually bites twice.
 
 ### Phase 2 — alliance selection, not playoffs
 
