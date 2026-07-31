@@ -216,6 +216,98 @@ for (const [nT, plays] of [[36, 12], [48, 12], [60, 10]]) {
 	ok('empty input is 0%, not NaN', evaluateCoverage([], new Map()).pct === 0);
 }
 
+// ─── incremental runs: keep what's in place ───────────────────────────────
+//
+// Re-running auto-assign mid-event used to redistribute everything. One scout
+// goes home and all forty teams change hands, so every remaining scout is
+// handed a new list between matches. Passing `current` keeps the plan and
+// moves only what has to move.
+{
+	const qm = schedule(48, 12);
+	const base = autoAssignTeams(qm, names(9));
+	const owner = (r) => {
+		const m = new Map();
+		for (const [s, list] of r.assignments) for (const t of list) m.set(t, s);
+		return m;
+	};
+	const before = owner(base);
+	const movedFrom = (r) =>
+		[...owner(r)].filter(([t, s]) => before.has(t) && before.get(t) !== s).length;
+
+	ok('a fresh run reports itself as not incremental', base.churn.incremental === false);
+
+	{
+		const r = autoAssignTeams(qm, names(9), { current: base.assignments });
+		ok('re-running with no roster change moves nothing',
+			movedFrom(r) === 0, `${movedFrom(r)} teams moved`);
+		ok('...and says so', r.churn.moved === 0 && r.churn.kept === r.teamCount);
+		ok('...and is flagged incremental', r.churn.incremental === true);
+	}
+
+	{
+		// One scout leaves. Only their teams should move.
+		const roster = names(9).slice(0, 8);
+		const gone = autoAssignTeams(qm, roster, { current: base.assignments });
+		const naive = autoAssignTeams(qm, roster);
+		const orphaned = base.assignments.get('Scout8').length;
+
+		ok('a departing scout moves only their own teams',
+			movedFrom(gone) === orphaned,
+			`${movedFrom(gone)} moved, ${orphaned} were theirs`);
+		ok('which is far less churn than a fresh run',
+			movedFrom(gone) < movedFrom(naive) / 3,
+			`incremental ${movedFrom(gone)} vs fresh ${movedFrom(naive)}`);
+		ok('and coverage is not sacrificed for stability',
+			gone.coverage.pct === 100, `got ${gone.coverage.pct.toFixed(1)}%`);
+		ok('and nobody is double-booked', gone.coverage.conflicts === 0);
+		ok('the departed scout holds nothing', !gone.assignments.has('Scout8'));
+	}
+
+	{
+		// A scout arrives. They should be given work off the others, and the
+		// others should keep most of theirs.
+		const roster = [...names(9), 'Scout9'];
+		const r = autoAssignTeams(qm, roster, { current: base.assignments });
+		ok('an arriving scout is given teams', (r.assignments.get('Scout9') ?? []).length > 0);
+		ok('taking work off others, not reshuffling everyone',
+			movedFrom(r) <= Math.ceil(48 / 10) + 1, `${movedFrom(r)} moved`);
+		ok('load stays balanced after an arrival', (() => {
+			const n = [...r.assignments.values()].map((l) => l.length);
+			return Math.max(...n) - Math.min(...n) <= 1;
+		})(), JSON.stringify([...r.assignments.values()].map((l) => l.length)));
+		ok('coverage still full', r.coverage.pct === 100);
+	}
+
+	{
+		// Stale input must not corrupt the plan.
+		const withGhosts = new Map(base.assignments);
+		withGhosts.set('Ghost', [1000, 1001]);          // a scout no longer on the roster
+		withGhosts.set('Scout0', [...base.assignments.get('Scout0'), 999999]); // a team not at this event
+		const r = autoAssignTeams(qm, names(9), { current: withGhosts });
+		ok('a team held by a departed scout is reassigned, not lost', (() => {
+			const all = new Set();
+			for (const [, l] of r.assignments) for (const t of l) all.add(t);
+			return all.size === r.teamCount;
+		})());
+		ok('a team that does not play here is dropped', (() => {
+			for (const [, l] of r.assignments) if (l.includes(999999)) return false;
+			return true;
+		})());
+		ok('coverage survives stale input', r.coverage.pct === 100);
+	}
+
+	{
+		// An empty `current` is the same as no `current`.
+		const r = autoAssignTeams(qm, names(9), { current: new Map() });
+		ok('an empty current is treated as a fresh run', r.churn.incremental === false);
+		ok('a plain object works as well as a Map', (() => {
+			const asObj = Object.fromEntries(base.assignments);
+			const x = autoAssignTeams(qm, names(9), { current: asObj });
+			return x.churn.incremental === true && x.churn.moved === 0;
+		})());
+	}
+}
+
 // ─── degenerate input ─────────────────────────────────────────────────────
 {
 	ok('no scouts returns empty', autoAssignTeams(schedule(36, 12), []).teamCount === 0);

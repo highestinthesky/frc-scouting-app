@@ -41,6 +41,7 @@ Last updated: 2026-07-29.
 - **UI copy trimmed** across every route.
 - **In-app confirm dialog** replacing `window.confirm()` at all seven sites.
 - **Sync UPDATE path** — edits now reach the cloud and propagate to teammates.
+- **Minimal-delta auto-assign** — re-running mid-event moves only what must move.
 - **`/schedule` split into ten components** under `src/lib/components/schedule/`.
   State stays in the route; CSS co-located verbatim per component.
 - **Auto-assign rewritten as graph colouring.** Every match is a 6-team clique,
@@ -149,10 +150,12 @@ None of these depend on auth, so they can land immediately.
 1. **Native dialogs.** Replace the 7 `confirm()`/`alert()` sites across 5 files
    with one in-app dialog component. Blocking browser dialogs look alien in an
    iOS PWA, and Accounts needs this component anyway for delete confirmations.
-2. **Minimal-delta auto-assign.** Today, re-running after a scout drops out
-   redistributes all ~40 teams and hands everyone a new list mid-event. Pin
-   existing assignments and rebalance only what's necessary — a constraint on
-   the DSATUR pass in `lib/auto-assign.js`, not a rewrite.
+2. ~~**Minimal-delta auto-assign.**~~ Done. Re-running after a scout dropped
+   out redistributed all ~40 teams and handed everyone a new list mid-event.
+   Passing the current assignments keeps them: on a 48-team event a departing
+   scout now moves 5 teams instead of 33, an arriving scout 4 instead of 36,
+   and re-running with no roster change moves nothing at all. Coverage stays at
+   100% and nobody is double-booked.
 3. ~~**Sync UPDATE path.**~~ Done. The layer was INSERT-only, so an `/edit`
    change never reached its cloud row. Fixing the push half alone would have
    been worse than leaving it: the pull watermarked on `created_at`, which does

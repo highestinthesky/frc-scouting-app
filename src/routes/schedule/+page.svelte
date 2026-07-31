@@ -804,6 +804,14 @@
 		}
 	}
 
+	/** Parse a "1234, 5678" editor cell into team numbers. */
+	function parseTeams(text) {
+		return (text || '')
+			.split(/[\s,]+/)
+			.map((x) => Number(x.replace(/[^0-9]/g, '')))
+			.filter((n) => Number.isFinite(n) && n > 0);
+	}
+
 	async function autoAssign() {
 		err = '';
 		msg = '';
@@ -816,17 +824,38 @@
 			err = 'Fetch the schedule from TBA first — auto-assign needs the match list.';
 			return;
 		}
+
+		// Hand the algorithm what's already in the editor. With it, scouts keep
+		// the teams they already have and only what must move, moves — a scout
+		// going home should not mean everyone else gets a new list between
+		// matches. Without it (first run, all cells blank) it plans from scratch.
+		const current = new Map();
+		for (const r of assignRows) {
+			const name = r.scout_name.trim();
+			const teams = parseTeams(r.teamsText);
+			if (name && teams.length) current.set(name, teams);
+		}
+
+		const preview = autoAssignTeams(qmList, names, { current, generateOverrides: false });
 		const ok = await dialog.confirm({
-			title: `Auto-assign across ${names.length} scout${names.length === 1 ? '' : 's'}?`,
-			body:
-				`Every team at ${session.eventCode} is redistributed.\n\n` +
-				`This replaces the team lists in the editor AND every per-match override ` +
-				`for this event, so the plan stays internally consistent.\n\n` +
-				`Nothing is saved until you tap Save assignments.`,
-			confirmLabel: 'Auto-assign'
+			title: preview.churn.incremental
+				? `Rebalance across ${names.length} scout${names.length === 1 ? '' : 's'}?`
+				: `Auto-assign across ${names.length} scout${names.length === 1 ? '' : 's'}?`,
+			body: preview.churn.incremental
+				? `${preview.churn.moved} of ${preview.teamCount} teams change hands; ` +
+					`${preview.churn.kept} stay where they are.\n\n` +
+					`Every per-match override for this event is replaced so the plan stays ` +
+					`internally consistent.\n\n` +
+					`Nothing is saved until you tap Save assignments.`
+				: `Every team at ${session.eventCode} is distributed across the scouts above.\n\n` +
+					`This replaces the team lists in the editor AND every per-match override ` +
+					`for this event.\n\n` +
+					`Nothing is saved until you tap Save assignments.`,
+			confirmLabel: preview.churn.incremental ? 'Rebalance' : 'Auto-assign'
 		});
 		if (!ok) return;
-		const plan = autoAssignTeams(qmList, names);
+
+		const plan = autoAssignTeams(qmList, names, { current });
 		assignRows = [...plan.assignments.entries()]
 			.map(([scout_name, teams]) => ({ scout_name, teamsText: teams.join(', ') }))
 			.sort((a, b) => a.scout_name.localeCompare(b.scout_name));
@@ -836,16 +865,18 @@
 		// watching — rather than a count of placement clashes. The old number
 		// looked reassuringly small while a fifth of the event went unscouted.
 		const pct = Math.round(plan.coverage.pct);
-		const head =
-			`Distributed ${plan.teamCount} teams across ${plan.scoutCount} ` +
-			`scout${plan.scoutCount === 1 ? '' : 's'} — ${pct}% of team-matches covered`;
+		const moved = plan.churn.incremental
+			? `${plan.churn.moved} team${plan.churn.moved === 1 ? '' : 's'} moved, ` +
+				`${plan.churn.kept} unchanged — `
+			: `Distributed ${plan.teamCount} teams across ${plan.scoutCount} ` +
+				`scout${plan.scoutCount === 1 ? '' : 's'} — `;
 		msg = plan.ceiling.limited
-			? `${head}. Six robots play at once, so ${plan.scoutCount} ` +
-				`scout${plan.scoutCount === 1 ? '' : 's'} can't exceed ` +
+			? `${moved}${pct}% of team-matches covered. Six robots play at once, so ` +
+				`${plan.scoutCount} scout${plan.scoutCount === 1 ? '' : 's'} can't exceed ` +
 				`${Math.round(plan.ceiling.pct)}% however they're arranged — add more ` +
 				`scouts to go higher. Review, then Save.`
-			: `${head}, using ${plan.overrides.length} per-match ` +
-				`override${plan.overrides.length === 1 ? '' : 's'}. Review, then Save.`;
+			: `${moved}${pct}% of team-matches covered, using ${plan.overrides.length} ` +
+				`per-match override${plan.overrides.length === 1 ? '' : 's'}. Review, then Save.`;
 	}
 
 	function addAssignRow() {
@@ -869,11 +900,7 @@
 			for (const r of assignRows) {
 				const name = r.scout_name.trim();
 				if (!name) continue;
-				const teams = (r.teamsText || '')
-					.split(/[\s,]+/)
-					.map((s) => Number(s.replace(/[^0-9]/g, '')))
-					.filter((n) => Number.isFinite(n) && n > 0);
-				const dedup = [...new Set(teams)];
+				const dedup = [...new Set(parseTeams(r.teamsText))];
 				for (const t of dedup) rows.push({ scout_name: name, team_number: t });
 			}
 			const inserted = await replaceAssignments(session.eventCode, rows, {

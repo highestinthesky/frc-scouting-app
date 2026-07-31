@@ -52,7 +52,12 @@ function teamsIn(m) {
  *
  * @param {object[]} qmList      qual matches (from qualMatches())
  * @param {string[]} scoutNames  non-empty scout names
- * @param {{generateOverrides?: boolean}} [opts]
+ * @param {{
+ *   generateOverrides?: boolean,
+ *   current?: Map<string, number[]>|Record<string, number[]>
+ * }} [opts]  `current` = the assignments already in place. Supplying it makes
+ *            the run incremental: existing scouts keep their teams and only
+ *            what must move, moves.
  * @returns {{
  *   assignments: Map<string, number[]>,
  *   overrides: {match_number: number, scout_name: string, team_number: number}[],
@@ -60,7 +65,8 @@ function teamsIn(m) {
  *   scoutCount: number,
  *   baseClashes: number,
  *   coverage: {scouted: number, total: number, pct: number},
- *   ceiling: {pct: number, limited: boolean}
+ *   ceiling: {pct: number, limited: boolean},
+ *   churn: {moved: number, kept: number, incremental: boolean}
  * }}
  */
 export function autoAssignTeams(qmList, scoutNames, opts = {}) {
@@ -75,7 +81,8 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 		scoutCount: names.length,
 		baseClashes: 0,
 		coverage: { scouted: 0, total: 0, pct: 0 },
-		ceiling: { pct: 0, limited: false }
+		ceiling: { pct: 0, limited: false },
+		churn: { moved: 0, kept: 0, incremental: false }
 	};
 	if (names.length === 0 || !Array.isArray(qmList) || qmList.length === 0) return empty;
 
@@ -95,7 +102,32 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 	}
 	const teams = [...adj.keys()];
 
-	// ── pass 1: DSATUR colouring, balanced ────────────────────────────────
+	// ── who holds what already ────────────────────────────────────────────
+	//
+	// Re-running auto-assign mid-event used to redistribute everything: one
+	// scout goes home and all forty teams change hands, so every remaining
+	// scout gets a new list between matches. That is worse than the gap it
+	// closes. When the caller passes the current assignments, keep them and
+	// move only what has to move.
+	const held = new Map();
+	if (opts.current) {
+		const entries =
+			opts.current instanceof Map ? [...opts.current] : Object.entries(opts.current ?? {});
+		const playing = new Set(teams);
+		for (const [rawName, list] of entries) {
+			const scout = String(rawName ?? '').trim();
+			// A scout who has left keeps nothing — their teams become orphans.
+			if (!names.includes(scout)) continue;
+			for (const t of list ?? []) {
+				const team = Number(t);
+				// A team that no longer plays here is not carried forward.
+				if (playing.has(team) && !held.has(team)) held.set(team, scout);
+			}
+		}
+	}
+	const incremental = held.size > 0;
+
+	// ── pass 1: assignment ────────────────────────────────────────────────
 	/** team → scout */
 	const owner = new Map();
 	const load = new Map(names.map((n) => [n, 0]));
@@ -107,16 +139,39 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 		for (const mn of teamMatches.get(team)) if (busyIn.get(scout).has(mn)) c += 1;
 		return c;
 	};
+	const give = (team, scout) => {
+		owner.set(team, scout);
+		load.set(scout, load.get(scout) + 1);
+		for (const mn of teamMatches.get(team)) busyIn.get(scout).add(mn);
+	};
+
+	// Seed from what is already in place, then shed only from scouts carrying
+	// more than their share. Fair share is a ceiling, not a target: taking a
+	// team off someone who is merely at the average would be churn for its own
+	// sake.
+	const cap = Math.ceil(teams.length / names.length);
+	if (incremental) {
+		const byScout = new Map(names.map((n) => [n, []]));
+		for (const [team, scout] of held) byScout.get(scout).push(team);
+		for (const [scout, list] of byScout) {
+			// Keep the teams that clash least with each other, so shedding also
+			// improves this scout's own coverage rather than picking at random.
+			list.sort((a, b) => a - b);
+			for (const team of list.slice(0, cap)) give(team, scout);
+		}
+	}
+
+	const unplaced = teams.filter((t) => !owner.has(t));
 
 	let baseClashes = 0;
-	for (let step = 0; step < teams.length; step++) {
-		// Highest saturation first (most distinct scouts already among its
-		// opponents), breaking ties on degree, then team number so a given
-		// schedule always produces the same assignment.
+	for (let step = 0; step < unplaced.length; step++) {
+		// DSATUR: highest saturation first (most distinct scouts already among
+		// its opponents), tie-broken on degree, then team number so a given
+		// schedule always produces the same plan.
 		let pickTeam = null;
 		let bestSat = -1;
 		let bestDeg = -1;
-		for (const t of teams) {
+		for (const t of unplaced) {
 			if (owner.has(t)) continue;
 			const sat = new Set();
 			for (const nb of adj.get(t)) if (owner.has(nb)) sat.add(owner.get(nb));
@@ -131,6 +186,7 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 				bestDeg = deg;
 			}
 		}
+		if (pickTeam === null) break;
 
 		// Lightest workload first, then fewest new clashes.
 		//
@@ -149,9 +205,57 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 		);
 		const scout = ranked[0];
 		baseClashes += clashCount(scout, pickTeam);
-		owner.set(pickTeam, scout);
-		load.set(scout, load.get(scout) + 1);
-		for (const mn of teamMatches.get(pickTeam)) busyIn.get(scout).add(mn);
+		give(pickTeam, scout);
+	}
+
+	// ── balance pass ──────────────────────────────────────────────────────
+	//
+	// Shedding down to the ceiling is the minimum-churn move, but it can leave
+	// a gap: nine scouts holding five teams each and a tenth who just arrived
+	// holding three, because only three teams were over the ceiling to shed.
+	// Closing that costs one transfer per step, which is cheap compared to
+	// letting one person carry 40% less than everyone else all weekend.
+	//
+	// Moves the single team that clashes most with its current holder's
+	// remaining set, so each transfer also improves that scout's own coverage
+	// rather than picking arbitrarily.
+	{
+		const listFor = (scout) => teams.filter((t) => owner.get(t) === scout);
+		// Bounded: every iteration strictly reduces the spread, and the loop
+		// guard is belt and braces against a pathological input.
+		for (let guard = 0; guard < teams.length; guard++) {
+			const sorted = [...names].sort((a, b) => load.get(a) - load.get(b) || a.localeCompare(b));
+			const lightest = sorted[0];
+			const heaviest = sorted[sorted.length - 1];
+			if (load.get(heaviest) - load.get(lightest) <= 1) break;
+
+			const candidates = listFor(heaviest);
+			if (candidates.length === 0) break;
+			// Which of their teams costs them the most to keep?
+			let move = candidates[0];
+			let worst = -1;
+			for (const t of candidates) {
+				let overlap = 0;
+				for (const other of candidates) {
+					if (other === t) continue;
+					for (const mn of teamMatches.get(t)) if (teamMatches.get(other).has(mn)) overlap += 1;
+				}
+				if (overlap > worst || (overlap === worst && t < move)) {
+					worst = overlap;
+					move = t;
+				}
+			}
+
+			owner.delete(move);
+			load.set(heaviest, load.get(heaviest) - 1);
+			// busyIn is a union across the scout's teams, so it can't be undone
+			// incrementally — rebuild this one scout's set from what they hold.
+			const rebuilt = new Set();
+			for (const t of listFor(heaviest)) for (const mn of teamMatches.get(t)) rebuilt.add(mn);
+			busyIn.set(heaviest, rebuilt);
+
+			give(move, lightest);
+		}
 	}
 
 	// ── pass 2: per-match repair via overrides ────────────────────────────
@@ -228,6 +332,11 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 	const coverage = evaluateCoverage(qmList, assignments, overrides);
 	const ceilingPct = (Math.min(names.length, 6) / 6) * 100;
 
+	// How disruptive was this run? A manager re-running mid-event cares about
+	// exactly one number: how many scouts are about to be handed a new list.
+	let kept = 0;
+	for (const [team, scout] of held) if (owner.get(team) === scout) kept += 1;
+
 	return {
 		assignments,
 		overrides,
@@ -235,7 +344,8 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 		scoutCount: names.length,
 		baseClashes,
 		coverage,
-		ceiling: { pct: ceilingPct, limited: names.length < 6 }
+		ceiling: { pct: ceilingPct, limited: names.length < 6 },
+		churn: { moved: teams.length - kept, kept, incremental }
 	};
 }
 
