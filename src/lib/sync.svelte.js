@@ -19,7 +19,9 @@ import {
 	getOrCreateClientId,
 	getUnsyncedEntries,
 	markEntrySynced,
-	insertRemoteEntry
+	insertRemoteEntry,
+	applyRemoteUpdate,
+	getEntryByRemoteId
 } from './db.js';
 import { SCHEMA_VERSION } from './form-config.js';
 import { pullScheduleIfStale } from './tba.js';
@@ -226,22 +228,24 @@ async function pushOutbox() {
 			client_id: local.clientId ?? cachedClientId,
 			created_at: local.createdAt
 		};
+
+		// A row we've already pushed and since edited takes the UPDATE path.
+		// Without this branch the edit never left the device: the cloud row
+		// kept its original values and every teammate stayed wrong, while the
+		// editor's own screen showed the change saved and synced.
+		if (local.remoteId) {
+			const ok = await pushUpdate(client, local, row);
+			if (ok) await markEntrySynced(local.id, local.remoteId);
+			continue;
+		}
+
 		const { data, error } = await client.from('entries').insert(row).select('id').single();
 		if (error) {
-			// Postgres unique_violation — server already has this row (peer
-			// pushed it via file round-trip, or our previous tick raced the
-			// round-trip). Adopt the existing remote id and move on.
+			// Postgres unique_violation — server already has this row (a peer
+			// pushed it, or our previous tick raced the round-trip). Adopt the
+			// existing remote id and move on.
 			if (error.code === '23505') {
-				const { data: found } = await client
-					.from('entries')
-					.select('id')
-					.eq('session_id', sid)
-					.eq('event_code', local.eventCode)
-					.eq('match_number', local.matchNumber)
-					.eq('team_number', local.teamNumber)
-					.eq('scout_name', local.scoutName)
-					.eq('created_at', local.createdAt)
-					.maybeSingle();
+				const found = await findRemoteTwin(client, sid, local);
 				if (found?.id) {
 					await markEntrySynced(local.id, found.id);
 					continue;
@@ -254,38 +258,123 @@ async function pushOutbox() {
 	syncState.pendingCount = 0;
 }
 
+/**
+ * Push an edit to an existing cloud row. Returns true when the local row can
+ * be marked clean.
+ *
+ * Two cases that must not spin forever, because a row left dirty is retried
+ * every 3 seconds for the rest of the event:
+ *
+ *   - The remote row is gone (someone cleared the event). Fall back to an
+ *     INSERT so the entry survives rather than silently evaporating.
+ *   - The edit collides with a different existing row on the dedupe key —
+ *     the user edited this entry into a duplicate of another. Surface it and
+ *     stop retrying; a loop would hide the problem behind a spinner.
+ */
+async function pushUpdate(client, local, row) {
+	const { data, error } = await client
+		.from('entries')
+		.update(row)
+		.eq('id', local.remoteId)
+		.select('id');
+
+	if (error) {
+		if (error.code === '23505') {
+			syncState.error =
+				`Q${local.matchNumber} · Team ${local.teamNumber} now matches another entry ` +
+				`for the same scout and time, so it can't be saved to the cloud. ` +
+				`Change the match or team number, or delete the duplicate.`;
+			// Clean, deliberately: retrying cannot succeed, and a permanently
+			// dirty row would re-raise this every tick.
+			return true;
+		}
+		throw error;
+	}
+
+	if (!data || data.length === 0) {
+		// No row matched the id. It was deleted server-side; re-insert.
+		const { data: ins, error: insErr } = await client
+			.from('entries')
+			.insert(row)
+			.select('id')
+			.single();
+		if (insErr) {
+			if (insErr.code === '23505') {
+				const twin = await findRemoteTwin(client, row.session_id, local);
+				if (twin?.id) {
+					await markEntrySynced(local.id, twin.id);
+					return false;
+				}
+			}
+			throw insErr;
+		}
+		await markEntrySynced(local.id, ins.id);
+		return false;
+	}
+	return true;
+}
+
+/** The remote row matching our dedupe key, if the server already has one. */
+async function findRemoteTwin(client, sid, local) {
+	const { data } = await client
+		.from('entries')
+		.select('id')
+		.eq('session_id', sid)
+		.eq('event_code', local.eventCode)
+		.eq('match_number', local.matchNumber)
+		.eq('team_number', local.teamNumber)
+		.eq('scout_name', local.scoutName)
+		.eq('created_at', local.createdAt)
+		.maybeSingle();
+	return data;
+}
+
 async function pullInbox() {
 	const client = clientFor(syncState.sessionId);
+	// Watermark on updated_at, not created_at. created_at never moves, so an
+	// edited row sorts below every watermark and is never returned again —
+	// a peer's correction would be invisible forever. updated_at is set
+	// server-side by a trigger (migration 0007), so it is consistent across
+	// devices whose clocks are not.
 	let q = client
 		.from('entries')
 		.select('*')
 		.eq('session_id', syncState.sessionId)
-		.order('created_at', { ascending: true });
-	if (lastSeenAt) q = q.gt('created_at', lastSeenAt);
+		.order('updated_at', { ascending: true });
+	if (lastSeenAt) q = q.gt('updated_at', lastSeenAt);
 	const { data, error } = await q;
 	if (error) throw error;
 	for (const remoteRow of data ?? []) {
-		// Our own writes echo back; insertRemoteEntry's compound-dedupe
-		// would skip them, but bypassing the lookup is faster.
+		const fields = {
+			eventCode: remoteRow.event_code,
+			matchNumber: remoteRow.match_number,
+			teamNumber: remoteRow.team_number,
+			allianceColor: remoteRow.alliance_color,
+			scoutName: remoteRow.scout_name,
+			observations: remoteRow.observations ?? {},
+			// Carry the peer's stamp rather than re-deriving it. Their entry
+			// may predate a field this device already has.
+			schemaVersion: remoteRow.schema_version ?? null,
+			createdAt: remoteRow.created_at,
+			clientId: remoteRow.client_id
+		};
+
+		// Our own writes echo back. Skip them — but only after the watermark
+		// advances below, or we would re-fetch them on every tick.
 		if (remoteRow.client_id !== cachedClientId) {
-			const { inserted } = await insertRemoteEntry({
-				remoteId: remoteRow.id,
-				eventCode: remoteRow.event_code,
-				matchNumber: remoteRow.match_number,
-				teamNumber: remoteRow.team_number,
-				allianceColor: remoteRow.alliance_color,
-				scoutName: remoteRow.scout_name,
-				observations: remoteRow.observations ?? {},
-				// Carry the peer's stamp rather than re-deriving it. Their entry
-				// may predate a field this device already has.
-				schemaVersion: remoteRow.schema_version ?? null,
-				createdAt: remoteRow.created_at,
-				clientId: remoteRow.client_id
-			});
-			if (inserted) syncState.inboundChanges += 1;
+			// Do we already hold this row? If so it is an edit, not an arrival.
+			const existing = await getEntryByRemoteId(remoteRow.id);
+			if (existing) {
+				const applied = await applyRemoteUpdate(existing.id, fields);
+				if (applied) syncState.inboundChanges += 1;
+			} else {
+				const { inserted } = await insertRemoteEntry({ remoteId: remoteRow.id, ...fields });
+				if (inserted) syncState.inboundChanges += 1;
+			}
 		}
-		if (!lastSeenAt || remoteRow.created_at > lastSeenAt) {
-			lastSeenAt = remoteRow.created_at;
+
+		if (!lastSeenAt || remoteRow.updated_at > lastSeenAt) {
+			lastSeenAt = remoteRow.updated_at;
 		}
 	}
 }

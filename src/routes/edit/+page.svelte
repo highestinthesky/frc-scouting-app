@@ -85,13 +85,12 @@
 			for (const f of OBSERVATION_FIELDS) observations[f.key] = values[f.key] ?? '';
 
 			// Patch only the user-editable fields. createdAt, eventCode, scoutName,
-			// clientId, and remoteId are left as they were on the original row so
-			// dedupe/sync continue to identify it.
+			// clientId and remoteId stay as they were so dedupe and sync continue
+			// to identify the row.
 			//
-			// Caveat: the wireless sync layer is INSERT-only today; cloud rows
-			// won't reflect this edit until a re-import. Fixing that needs a
-			// dedicated UPDATE path on the sync side, deferred until edit
-			// behavior is exercised at a real event.
+			// updateEntry() flags the row pendingSync, and the sync layer pushes
+			// it as an UPDATE against its existing cloud row. Teammates pick the
+			// change up on their next pull.
 			await updateEntry(entry.id, {
 				matchNumber: Number(values.matchNumber),
 				teamNumber: Number(values.teamNumber),

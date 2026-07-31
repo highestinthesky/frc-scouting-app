@@ -39,6 +39,8 @@ Last updated: 2026-07-29.
   cards with sparklines on the team page; numeric rows with leader highlighting
   on `/manager/compare`; weighted composite scoring on `/manager/picklist`.
 - **UI copy trimmed** across every route.
+- **In-app confirm dialog** replacing `window.confirm()` at all seven sites.
+- **Sync UPDATE path** — edits now reach the cloud and propagate to teammates.
 - **`/schedule` split into ten components** under `src/lib/components/schedule/`.
   State stays in the route; CSS co-located verbatim per component.
 - **Auto-assign rewritten as graph colouring.** Every match is a 6-team clique,
@@ -151,9 +153,13 @@ None of these depend on auth, so they can land immediately.
    redistributes all ~40 teams and hands everyone a new list mid-event. Pin
    existing assignments and rebalance only what's necessary — a constraint on
    the DSATUR pass in `lib/auto-assign.js`, not a rewrite.
-3. **Sync UPDATE path.** Known data-loss bug: the sync layer is INSERT-only, so
-   an `/edit` change never reaches its cloud row. Needs an UPDATE keyed on
-   `remoteId`.
+3. ~~**Sync UPDATE path.**~~ Done. The layer was INSERT-only, so an `/edit`
+   change never reached its cloud row. Fixing the push half alone would have
+   been worse than leaving it: the pull watermarked on `created_at`, which does
+   not move on edit, so a teammate could never receive the correction while the
+   editing device showed it saved and synced. Both halves now work —
+   `updated_at` (migration 0007, set by trigger) is the watermark, and a local
+   row with unpushed edits is never overwritten by a peer.
 
 ### Phase 1 — auth, roles, accounts
 

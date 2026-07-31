@@ -6,6 +6,7 @@
 
 import Dexie from 'dexie';
 import { SCHEMA_VERSION } from './form-config.js';
+import { shouldApplyRemote } from './sync-rules.js';
 
 export const db = new Dexie('frc-scout');
 
@@ -102,17 +103,52 @@ export async function getOrCreateClientId() {
 }
 
 /**
- * Entries waiting to be pushed to Supabase. We don't have a Dexie index
- * on `remoteId`, but at scouting volume (a few hundred rows tops) a full
- * scan with a filter is plenty fast.
+ * Entries waiting to be pushed to Supabase — never sent, or edited since.
+ *
+ * The `pendingSync` half is the fix for a data-loss bug: this used to filter
+ * on `!remoteId` alone, so once a row had synced it could never be pushed
+ * again. An edit on /edit changed the local copy, the cloud row kept the old
+ * values forever, and nothing surfaced the disagreement.
+ *
+ * No Dexie index on either field, but at scouting volume (a few hundred rows)
+ * a full scan is plenty fast.
  */
 export async function getUnsyncedEntries() {
-	return db.entries.filter((e) => !e.remoteId).toArray();
+	return db.entries.filter((e) => !e.remoteId || e.pendingSync).toArray();
 }
 
-/** Mark a local entry as successfully pushed by stamping its remote UUID. */
+/**
+ * Mark a local entry as successfully pushed: stamp the remote UUID and clear
+ * the dirty flag. Clearing matters — a row left dirty is retried on every
+ * 3-second tick forever.
+ */
 export async function markEntrySynced(localId, remoteId) {
-	return db.entries.update(localId, { remoteId });
+	return db.entries.update(localId, { remoteId, pendingSync: false });
+}
+
+/**
+ * Apply a peer's version of a row we already hold locally.
+ *
+ * Refuses to overwrite a local row with unpushed edits: our own change is the
+ * one the user can see and is waiting on, and clobbering it would look like
+ * the app silently undid their work. Ours wins and gets pushed on the next
+ * tick, which is last-write-wins with a bias toward the person watching.
+ *
+ * @param {number} localId
+ * @param {object} fields
+ * @returns {Promise<boolean>} true if the local row was changed
+ */
+export async function applyRemoteUpdate(localId, fields) {
+	const local = await db.entries.get(localId);
+	if (!shouldApplyRemote(local, fields)) return false;
+	await db.entries.update(localId, fields);
+	return true;
+}
+
+/** The local row holding a given remote UUID, or undefined. */
+export async function getEntryByRemoteId(remoteId) {
+	if (!remoteId) return undefined;
+	return db.entries.filter((e) => e.remoteId === remoteId).first();
 }
 
 /** Fetch a single entry by its local id. Returns undefined if not found. */
@@ -133,7 +169,10 @@ export async function getEntry(id) {
  * @returns {Promise<number>} number of rows updated (0 = not found, 1 = ok)
  */
 export async function updateEntry(id, patch) {
-	return db.entries.update(id, patch);
+	// Always flag the row for re-push. Leaving this to callers is how the
+	// original bug survived: /edit patched the row and the sync layer had no
+	// way to know it had changed.
+	return db.entries.update(id, { ...patch, pendingSync: true });
 }
 
 /**

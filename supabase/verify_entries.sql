@@ -30,7 +30,10 @@ WITH expected(column_name, data_type, is_nullable, column_default) AS (
         ('observations',   'jsonb',                       'NO',  '''{}''::jsonb'),
         ('schema_version', 'integer',                     'NO',  NULL),
         ('client_id',      'text',                        'YES', NULL),
-        ('created_at',     'timestamp with time zone',    'NO',  NULL)
+        ('created_at',     'timestamp with time zone',    'NO',  NULL),
+        -- Server-set watermark for the incremental pull. Unlike created_at
+        -- this one SHOULD have a default; it is not part of the dedupe key.
+        ('updated_at',     'timestamp with time zone',    'NO',  'now()')
 ),
 actual AS (
     SELECT column_name, data_type, is_nullable, column_default

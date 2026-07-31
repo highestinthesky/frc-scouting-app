@@ -79,7 +79,8 @@ still parses fine.
 | `migrations/0004_reminders.sql` | manager-authored reminders |
 | `migrations/0005_assignment_overrides.sql` | per-match scout overrides |
 | `migrations/0006_tba_event_key.sql` | TBA key decoupled from the sync code |
+| `migrations/0007_entry_updated_at.sql` | edit watermark, so corrections reach teammates |
 | `verify_entries.sql` | drift assertions, read-only |
 
-Planned next: `0007_auth.sql` and `0008_policies.sql` — see
+Planned next: `0008_auth.sql` and `0009_policies.sql` — see
 [`../docs/adr-001-auth.md`](../docs/adr-001-auth.md).
