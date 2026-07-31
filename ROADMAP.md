@@ -94,6 +94,58 @@ existed contribute nothing to its sample rather than dragging the mean to zero.
 
 ---
 
+## Where we are on v6
+
+Measured 2026-07-30. Percentages are of *scope*, not effort — Phase 1 and 3 are
+the big ones and both are barely begun.
+
+| Phase | | Status |
+|---|---|---|
+| **0** Cheap wins | dialogs · minimal-delta auto-assign · sync UPDATE · picklist sync | **75%** |
+| **1** Auth, roles, accounts | spec written, nothing built | **5%** |
+| **2** Alliance selection | not started | **0%** |
+| **3** IA + redesign | layout + 1 of 9 pages | **15%** |
+| **4** Studio + Insights | not started | **0%** |
+
+### Done
+
+- **Native dialogs.** Zero `confirm()` calls remain. `Dialog.svelte` +
+  `dialog.svelte.js`.
+- **Minimal-delta auto-assign.** A departing scout moves 5 teams instead of 33.
+- **Sync UPDATE.** Edits reach the cloud and propagate. *Blocked on you running
+  migration 0007 — the client queries `updated_at` and errors until then.*
+- **Design system foundations.** `design.md`, tokens, docked nav, AA contrast
+  fixed, `Button.svelte`, `/settings` migrated.
+- **Database under version control.** `entries` captured as 0001, drift
+  assertions, CI gates on tests + SQL parsing.
+
+### Not done, in dependency order
+
+1. **Picklist cloud sync** — the last Phase 0 item. A local-only picklist dies
+   with the phone holding it, and selection is what the app is for.
+2. **Auth** — `docs/adr-001-auth.md` is a complete spec; no code exists.
+   Migrations `0008`/`0009`, `auth.svelte.js`, `/login`, `/register`,
+   `/accounts`. The largest single chunk in the plan.
+3. **Alliance selection** — picklist sync plus marking teams already taken
+   from TBA's alliances endpoint. `tba.js` does not touch that endpoint yet.
+4. **IA + redesign** — 8 of 9 pages unmigrated, carrying **1,528 lines** of
+   per-page CSS between them. `/manager` alone is 429.
+5. **Studio + Insights** — desktop route group, fixed charts.
+
+### The redesign is deliberately stalled
+
+One page of nine is migrated, and that is on purpose: Phase 3 renames and
+merges most routes, so redesigning them now means designing them twice.
+`/settings` was done because it is the one route the reorganisation leaves
+alone.
+
+**Treat the current structure as a baseplate.** The nine routes, the
+`/manager/*` nesting and the component layout under `src/lib/components/` are
+all v0.5 shapes and none of them are load-bearing for v6. The reorganisation
+should be as aggressive as the target IA needs — the constraints that actually
+bind are `design.md`, the sync invariants, and the metrics blank-vs-zero rule.
+Nothing else is precious.
+
 ## The v6 plan — sequenced
 
 From the v6 upgrade doc plus the follow-up decisions, reordered by dependency
