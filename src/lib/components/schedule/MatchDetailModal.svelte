@@ -6,6 +6,7 @@
 	// The route used {@const} here; as a component these have to be $derived,
 	// since {@const} is only legal inside a block.
 	import { teamStatus } from '$lib/coverage.js';
+	import Button from '$lib/components/Button.svelte';
 	import { timeOfDay } from '$lib/format.js';
 
 	let {
@@ -131,18 +132,23 @@
 							{/each}
 						</select>
 					</label>
-					<button
-						type="button"
-						class="primary mb-add"
-						disabled={busy || !draft.scout || !draft.team}
-						onclick={() => onSaveOverride(m.match_number)}
-					>Add override</button>
+					<!-- Wrapped rather than styled through a class prop: a parent's
+					     scoped selector cannot reach a child component's element,
+					     and Svelte does not warn about it because it can see the
+					     class in the markup. -->
+					<div class="mb-add">
+						<Button
+							variant="primary"
+							disabled={busy || !draft.scout || !draft.team}
+							onclick={() => onSaveOverride(m.match_number)}
+						>Add override</Button>
+					</div>
 				</div>
 			</section>
 		</div>
 
 		<footer class="modal-foot">
-			<button type="button" class="secondary-btn" onclick={onClose}>Done</button>
+			<Button onclick={onClose}>Done</Button>
 		</footer>
 	</div>
 </div>
@@ -157,31 +163,6 @@
 	}
 	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
 	.muted.small { font-size: 0.82rem; }
-	button.primary,
-	button.secondary-btn {
-		font: inherit;
-		font-weight: 600;
-		padding: 0.55rem 1rem;
-		border-radius: 0.4rem;
-		cursor: pointer;
-		border: 1px solid transparent;
-	}
-	button.primary {
-		background: var(--accent);
-		color: var(--on-accent);
-		border: none;
-	}
-	button.primary:disabled {
-		opacity: 0.55;
-		cursor: not-allowed;
-	}
-	button.secondary-btn {
-		background: var(--bg-card);
-		color: var(--text-primary);
-		border: 1px solid var(--border-strong);
-	}
-	button.secondary-btn:hover { background: var(--bg-subtle); }
-	button.secondary-btn:disabled { opacity: 0.6; cursor: progress; }
 	.ov-pill {
 		display: inline-block;
 		padding: 0 0.4rem;
@@ -388,7 +369,6 @@
 	.mb-add {
 		grid-column: 1 / -1;
 		justify-self: start;
-		padding: 0.45rem 0.9rem;
 	}
 	.modal-foot {
 		padding: 0.65rem 1rem;

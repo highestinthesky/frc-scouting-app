@@ -5,6 +5,7 @@
 	// through the proxy propagates back without an explicit binding.
 
 	import { relativeTime } from '$lib/format.js';
+	import Button from '$lib/components/Button.svelte';
 
 	let {
 		assignRows,
@@ -69,16 +70,15 @@
 	{/if}
 
 	<div class="actions-row">
-		<button class="secondary-btn" onclick={onAddRow}>+ Add scout</button>
-		<button
-			class="secondary-btn"
+		<Button onclick={onAddRow}>+ Add scout</Button>
+		<Button
 			disabled={busy || !qmList.length}
 			onclick={onAutoAssign}
 			title={qmList.length ? '' : 'Fetch the schedule from TBA first'}
-		>✨ Auto-assign</button>
-		<button class="primary" disabled={busy} onclick={onSave}>
+		>✨ Auto-assign</Button>
+		<Button variant="primary" disabled={busy} onclick={onSave}>
 			{busy ? 'Saving…' : 'Save assignments'}
-		</button>
+		</Button>
 	</div>
 </section>
 
@@ -129,31 +129,6 @@
 		outline-offset: 1px;
 		border-color: var(--accent);
 	}
-	button.primary,
-	button.secondary-btn {
-		font: inherit;
-		font-weight: 600;
-		padding: 0.55rem 1rem;
-		border-radius: 0.4rem;
-		cursor: pointer;
-		border: 1px solid transparent;
-	}
-	button.primary {
-		background: var(--accent);
-		color: var(--on-accent);
-		border: none;
-	}
-	button.primary:disabled {
-		opacity: 0.55;
-		cursor: not-allowed;
-	}
-	button.secondary-btn {
-		background: var(--bg-card);
-		color: var(--text-primary);
-		border: 1px solid var(--border-strong);
-	}
-	button.secondary-btn:hover { background: var(--bg-subtle); }
-	button.secondary-btn:disabled { opacity: 0.6; cursor: progress; }
 	.actions-row {
 		display: flex;
 		gap: 0.5rem;

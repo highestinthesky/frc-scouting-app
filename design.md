@@ -237,7 +237,18 @@ reimplements one in its own `<style>` block is drifting.
   entirely, and in an installed iOS PWA renders with the origin in the title,
   which reads as a phishing prompt.
 
-Still to build, in roughly this order: Button, Card, Badge, Chip, EmptyState,
+- **`Button.svelte`** — the CTA voice, in one place. Three variants:
+  `primary` (filled accent, one per screen region), `secondary` (outlined, and
+  the default because most buttons are not the primary action), `danger`
+  (outlined, filling only on hover). 44px floor via `var(--tap-min)`.
+  `type="button"` by default, since the HTML default of `submit` inside a form
+  is a bug that only appears when someone presses Enter.
+
+  Not every button belongs here. A ✕ in a modal header, a match-number chip, a
+  remove-row × — those are page furniture with their own shape, and routing
+  them through a variant prop would turn this into a dumping ground.
+
+Still to build, in roughly this order: Card, Badge, Chip, EmptyState,
 PageHeader. Each one deletes duplicated CSS from every page it lands on.
 
 ### The scoping trap
@@ -252,10 +263,23 @@ which **silently changes specificity**. `.thing` becomes `.thing.svelte-xxxx` �
   `dialog:not([open]) { display: none }`, so the closed dialog rendered inline
   on every page with its buttons showing.
 
-Neither appears in the source, in a compiler warning, or in any test that
+There is a third form, and it is the worst of the three because the compiler
+stays silent:
+
+- `<Button class="mb-add" />` with `.mb-add {}` in the parent's `<style>`.
+  Svelte scopes the parent's selector with the *parent's* hash, while the
+  element the child renders carries the *child's*. They never match. And
+  unlike an unused selector, nothing warns — the compiler can see the class
+  right there in the markup.
+
+  **Style a wrapper the parent owns.** Never reach into a child through a
+  class prop.
+
+None of these appear in the source, in a compiler warning, or in any test that
 doesn't render a browser. `scripts/check_components.mjs` reads the *emitted*
-CSS and asserts against it; it runs in `npm test`. Add a case there when a
-component's styling depends on beating — or losing to — a rule it doesn't own.
+CSS and asserts against it; it runs in `npm test`, and it catches all three.
+Add a case there when a component's styling depends on beating — or losing
+to — a rule it doesn't own.
 
 ## Variants
 

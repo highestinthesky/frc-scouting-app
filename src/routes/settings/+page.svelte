@@ -1,5 +1,6 @@
 <script>
 	import { base } from '$app/paths';
+	import Button from '$lib/components/Button.svelte';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { role } from '$lib/role.svelte.js';
@@ -98,9 +99,9 @@
 				<input bind:value={scoutName} autocomplete="name" />
 			</label>
 
-			<button type="submit" class="primary" disabled={saving}>
+			<Button variant="primary" type="submit" disabled={saving}>
 				{saving ? 'Saving…' : 'Save'}
-			</button>
+			</Button>
 			{#if savedMsg}<small class="muted ok">{savedMsg}</small>{/if}
 		</form>
 	</section>
@@ -119,13 +120,11 @@
 			{statusLabel()}{#if syncState.pendingCount > 0} · {syncState.pendingCount} pending{/if}
 		</p>
 		<div class="sync-actions">
-			<button
-				class="primary"
+			<Button
+				variant="primary"
 				onclick={resync}
 				disabled={!session.eventCode || syncState.status === 'offline'}
-			>
-				Sync now
-			</button>
+			>Sync now</Button>
 			{#if syncState.lastSyncedAt}
 				<small class="muted">Last sync: {new Date(syncState.lastSyncedAt).toLocaleTimeString()}</small>
 			{/if}
@@ -156,7 +155,7 @@
 	<section>
 		<h2>Danger zone</h2>
 		<p class="muted">Wipes every entry on this device. Synced copies are unaffected.</p>
-		<button class="danger" onclick={clearAll}>Clear all entries</button>
+		<Button variant="danger" onclick={clearAll}>Clear all entries</Button>
 		{#if clearMsg}<small class="muted ok">{clearMsg}</small>{/if}
 	</section>
 </main>
@@ -241,23 +240,6 @@
 		outline-offset: 1px;
 		border-color: var(--accent);
 	}
-	button.primary,
-	button.danger {
-		font: inherit;
-		font-weight: 600;
-		padding: 0.6rem 1rem;
-		border-radius: 0.4rem;
-		cursor: pointer;
-		border: 1px solid transparent;
-	}
-	button.primary { background: var(--accent); color: white; border: none; }
-	button.primary:disabled { opacity: 0.6; cursor: progress; }
-	button.danger {
-		background: var(--bg-card);
-		color: var(--danger);
-		border: 1px solid var(--danger);
-	}
-	button.danger:hover { background: var(--danger-bg); }
 
 	.status {
 		font-size: 0.9rem;
@@ -278,11 +260,6 @@
 		align-items: center;
 		flex-wrap: wrap;
 		margin-top: 0.5rem;
-	}
-	.sync-actions button.primary:disabled {
-		background: var(--border-strong);
-		color: var(--text-muted);
-		cursor: not-allowed;
 	}
 
 	.theme-row {

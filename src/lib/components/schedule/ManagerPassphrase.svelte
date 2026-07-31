@@ -2,6 +2,7 @@
 	// Manager passphrase: set, verify, rotate, forget, and the event reset.
 	// Three states — never set, set and known on this device, set but unknown.
 	import { session } from '$lib/session.svelte.js';
+	import Button from '$lib/components/Button.svelte';
 
 	let {
 		pwInput = $bindable(),
@@ -37,19 +38,17 @@
 			<span class="label">Confirm</span>
 			<input type="password" bind:value={pwInput2} autocomplete="new-password" />
 		</label>
-		<button class="primary" disabled={busy || !pwInput} onclick={onSet}>
-			Set passphrase
-		</button>
+		<Button variant="primary" disabled={busy || !pwInput} onclick={onSet}>Set passphrase</Button>
 	{:else if passphraseLocallyKnown}
 		<p class="muted small ok-inline">
 			✓ Passphrase active on this device. You can publish and edit
 			assignments.
 		</p>
 		<div class="actions-row">
-			<button class="secondary-btn" onclick={onForget}>Forget on this device</button>
-			<button class="secondary-btn danger-btn" onclick={onReset} disabled={busy}>
+			<Button onclick={onForget}>Forget on this device</Button>
+			<Button variant="danger" onclick={onReset} disabled={busy}>
 				Reset scheduling for this event
-			</button>
+			</Button>
 		</div>
 
 		<details class="rotate-block">
@@ -66,9 +65,7 @@
 				<span class="label">Confirm</span>
 				<input type="password" bind:value={rotateNew2} autocomplete="new-password" />
 			</label>
-			<button class="primary" disabled={busy || !rotateNew} onclick={onRotate}>
-				Rotate
-			</button>
+			<Button variant="primary" disabled={busy || !rotateNew} onclick={onRotate}>Rotate</Button>
 		</details>
 	{:else}
 		<p class="muted small">
@@ -79,9 +76,7 @@
 			<span class="label">Passphrase</span>
 			<input type="password" bind:value={verifyInput} autocomplete="current-password" />
 		</label>
-		<button class="primary" disabled={busy || !verifyInput} onclick={onVerify}>
-			Verify
-		</button>
+		<Button variant="primary" disabled={busy || !verifyInput} onclick={onVerify}>Verify</Button>
 
 		<details class="forgot-block" bind:open={showForgotHelp}>
 			<summary>Forgot the passphrase?</summary>
@@ -138,42 +133,12 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 		outline-offset: 1px;
 		border-color: var(--accent);
 	}
-	button.primary,
-	button.secondary-btn {
-		font: inherit;
-		font-weight: 600;
-		padding: 0.55rem 1rem;
-		border-radius: 0.4rem;
-		cursor: pointer;
-		border: 1px solid transparent;
-	}
-	button.primary {
-		background: var(--accent);
-		color: var(--on-accent);
-		border: none;
-	}
-	button.primary:disabled {
-		opacity: 0.55;
-		cursor: not-allowed;
-	}
-	button.secondary-btn {
-		background: var(--bg-card);
-		color: var(--text-primary);
-		border: 1px solid var(--border-strong);
-	}
-	button.secondary-btn:hover { background: var(--bg-subtle); }
-	button.secondary-btn:disabled { opacity: 0.6; cursor: progress; }
 	.actions-row {
 		display: flex;
 		gap: 0.5rem;
 		flex-wrap: wrap;
 		margin-top: 0.4rem;
 	}
-	.danger-btn {
-		color: var(--danger);
-		border-color: var(--danger);
-	}
-	.danger-btn:hover { background: var(--danger-bg); }
 	.rotate-block, .forgot-block {
 		margin-top: 0.75rem;
 		padding: 0.5rem 0.75rem;

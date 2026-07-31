@@ -19,13 +19,20 @@
 //
 // Both are obvious in the emitted CSS. So read the emitted CSS.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.dirname(here);
 const { compile } = await import(path.join(root, 'node_modules/svelte/src/compiler/index.js'));
+
+/** Every file under a directory, recursively. */
+function readdirRecursive(dir) {
+	return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+		e.isDirectory() ? readdirRecursive(path.join(dir, e.name)) : [path.join(dir, e.name)]
+	);
+}
 
 let pass = 0;
 let fail = 0;
@@ -94,6 +101,33 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 	);
 }
 
+// ─── Button ────────────────────────────────────────────────────────────────
+{
+	const r = rules('src/lib/components/Button.svelte');
+
+	ok(
+		'Button: keeps the tap-target floor',
+		r.some((x) => /var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')),
+		'design.md treats 44px as non-negotiable'
+	);
+
+	for (const variant of ['primary', 'secondary', 'danger']) {
+		ok(
+			`Button: ${variant} variant is defined`,
+			r.some((x) => new RegExp(`\\.${variant}\\b`).test(unscoped(x.selector)))
+		);
+	}
+
+	// design.md: a destructive button should not look like the obvious thing to
+	// press, so it is outlined at rest and fills only on hover.
+	const dangerRest = r.find((x) => unscoped(x.selector).trim() === '.danger');
+	ok(
+		'Button: danger is outlined at rest, not filled',
+		dangerRest && valueOf(dangerRest.body, 'background') === 'var(--bg-card)',
+		`danger background is ${dangerRest ? valueOf(dangerRest.body, 'background') : '(rule missing)'}`
+	);
+}
+
 // ─── Layout ────────────────────────────────────────────────────────────────
 {
 	const r = rules('src/routes/+layout.svelte');
@@ -117,6 +151,42 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 				/\.tabs a/.test(unscoped(x.selector)) &&
 				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
 		)
+	);
+}
+
+// ─── a parent must not style a child component through a class prop ────────
+//
+// `<Button class="mb-add" />` with `.mb-add {}` in the parent's <style> looks
+// correct and does nothing. Svelte scopes the parent's selector with the
+// PARENT's hash, while the element the child renders carries the CHILD's — so
+// they never match. And unlike an unused selector, the compiler does not warn,
+// because it can see the class right there in the markup.
+//
+// The fix is a wrapper element the parent does own. Found this the moment
+// Button.svelte landed; it had already silently broken two layouts.
+{
+	const files = readdirRecursive(path.join(root, 'src')).filter((f) => f.endsWith('.svelte'));
+	const offenders = [];
+	for (const abs of files) {
+		const src = readFileSync(abs, 'utf8');
+		const sm = /<style>([\s\S]*?)<\/style>/.exec(src);
+		if (!sm) continue;
+		const css = sm[1].replace(/\/\*[\s\S]*?\*\//g, '');
+		const localClasses = new Set([...css.matchAll(/\.([A-Za-z][\w-]*)/g)].map((m) => m[1]));
+		const markup = src.slice(0, sm.index);
+		// Components are capitalised; plain elements are not.
+		for (const m of markup.matchAll(/<([A-Z]\w+)\b[^>]*?\bclass="([^"]*)"/gs)) {
+			for (const cls of m[2].split(/\s+/)) {
+				if (localClasses.has(cls)) {
+					offenders.push(`${path.relative(root, abs)}: <${m[1]} class="${cls}"> — .${cls} is styled here and cannot reach it`);
+				}
+			}
+		}
+	}
+	ok(
+		'no parent styles a child component through a class prop',
+		offenders.length === 0,
+		offenders.join('\n        ')
 	);
 }
 

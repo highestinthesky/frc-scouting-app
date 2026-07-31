@@ -3,6 +3,7 @@
 	// scouts can pull it. The TBA event key is deliberately separate from the
 	// team's sync event code — blank falls back to the code.
 	import { session } from '$lib/session.svelte.js';
+	import Button from '$lib/components/Button.svelte';
 	import { relativeTime } from '$lib/format.js';
 
 	let {
@@ -60,19 +61,13 @@
 	</label>
 
 	<div class="actions-row">
-		<button class="primary" disabled={busy || !tbaApiKey} onclick={onFetch}>
+		<Button variant="primary" disabled={busy || !tbaApiKey} onclick={onFetch}>
 			{busy ? '…' : '1. Fetch from TBA'}
-		</button>
-		<button
-			class="primary"
-			disabled={busy || !cached}
-			onclick={onPublish}
-		>
+		</Button>
+		<Button variant="primary" disabled={busy || !cached} onclick={onPublish}>
 			{busy ? '…' : '2. Publish to teammates'}
-		</button>
-		<button class="secondary-btn" disabled={busy || !cached} onclick={onClearCache}>
-			Clear local cache
-		</button>
+		</Button>
+		<Button disabled={busy || !cached} onclick={onClearCache}>Clear local cache</Button>
 	</div>
 
 	{#if cached}
@@ -134,31 +129,6 @@
 		outline-offset: 1px;
 		border-color: var(--accent);
 	}
-	button.primary,
-	button.secondary-btn {
-		font: inherit;
-		font-weight: 600;
-		padding: 0.55rem 1rem;
-		border-radius: 0.4rem;
-		cursor: pointer;
-		border: 1px solid transparent;
-	}
-	button.primary {
-		background: var(--accent);
-		color: var(--on-accent);
-		border: none;
-	}
-	button.primary:disabled {
-		opacity: 0.55;
-		cursor: not-allowed;
-	}
-	button.secondary-btn {
-		background: var(--bg-card);
-		color: var(--text-primary);
-		border: 1px solid var(--border-strong);
-	}
-	button.secondary-btn:hover { background: var(--bg-subtle); }
-	button.secondary-btn:disabled { opacity: 0.6; cursor: progress; }
 	.actions-row {
 		display: flex;
 		gap: 0.5rem;

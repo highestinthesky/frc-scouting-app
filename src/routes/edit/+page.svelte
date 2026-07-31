@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import Button from '$lib/components/Button.svelte';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -166,11 +167,15 @@
 			{/if}
 
 			<div class="actions">
-				<button type="button" class="danger" onclick={removeEntry}>Delete</button>
+				<!-- Wrapper carries the margin: a parent cannot style a child
+				     component's element through a class prop. -->
+				<div class="push-left">
+					<Button variant="danger" onclick={removeEntry}>Delete</Button>
+				</div>
 				<a href="{base}/" class="cancel">Cancel</a>
-				<button type="submit" class="primary" disabled={saving}>
+				<Button variant="primary" type="submit" disabled={saving}>
 					{saving ? 'Saving…' : 'Save changes'}
-				</button>
+				</Button>
 			</div>
 
 			<p class="hint muted">
@@ -239,23 +244,7 @@
 		text-decoration: none;
 		padding: 0.5rem 0.75rem;
 	}
-	.actions button {
-		font: inherit;
-		font-weight: 600;
-		padding: 0.7rem 1.2rem;
-		border-radius: 0.4rem;
-		cursor: pointer;
-		border: 1px solid transparent;
-	}
-	.actions button.primary { background: var(--accent); color: white; border: none; }
-	.actions button.primary:disabled { opacity: 0.6; cursor: progress; }
-	.actions button.danger {
-		background: var(--bg-card);
-		color: var(--danger);
-		border-color: var(--danger);
-		margin-right: auto;
-	}
-	.actions button.danger:hover { background: var(--danger-bg); }
+	.push-left { margin-right: auto; }
 	.hint {
 		margin-top: 1rem;
 		font-size: 0.85rem;

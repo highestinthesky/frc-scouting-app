@@ -1,4 +1,5 @@
 <script>
+	import Button from '$lib/components/Button.svelte';
 	// Manager: compose a reminder (broadcast or to one scout) and manage the
 	// ones already out there. The banner itself lives in the layout.
 
@@ -49,9 +50,15 @@
 			/>
 		</label>
 
-		<button class="primary" disabled={busy || !reminderText.trim()} onclick={onSend}>
-			{busy ? '…' : 'Send reminder'}
-		</button>
+		<!-- Wrapped because a parent cannot style a child component's element:
+		     Svelte scopes .send to THIS component, while the button carries
+		     Button.svelte's hash. Positioning the wrapper avoids reaching in
+		     with :global(). -->
+		<div class="send">
+			<Button variant="primary" disabled={busy || !reminderText.trim()} onclick={onSend}>
+				{busy ? '…' : 'Send reminder'}
+			</Button>
+		</div>
 	</div>
 
 	{#if recentReminders.length > 0}
@@ -107,23 +114,6 @@
 		outline-offset: 1px;
 		border-color: var(--accent);
 	}
-	button.primary {
-		font: inherit;
-		font-weight: 600;
-		padding: 0.55rem 1rem;
-		border-radius: 0.4rem;
-		cursor: pointer;
-		border: 1px solid transparent;
-	}
-	button.primary {
-		background: var(--accent);
-		color: var(--on-accent);
-		border: none;
-	}
-	button.primary:disabled {
-		opacity: 0.55;
-		cursor: not-allowed;
-	}
 	/* ── manager: send reminder ─────────────────────────────────── */
 	.reminder-form {
 		display: grid;
@@ -141,7 +131,7 @@
 		background: var(--bg-card);
 		color: var(--text-primary);
 	}
-	.reminder-form .primary { grid-column: 1 / -1; justify-self: start; }
+	.send { grid-column: 1 / -1; justify-self: start; }
 	.reminder-active-head {
 		margin: 1rem 0 0.4rem;
 		font-size: 0.85rem;

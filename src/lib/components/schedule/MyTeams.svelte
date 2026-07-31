@@ -6,6 +6,7 @@
 	// never saw them, so the roster the manager planned against and the one
 	// scouts were working to could silently disagree.
 	import { base } from '$app/paths';
+	import Button from '$lib/components/Button.svelte';
 	import { session } from '$lib/session.svelte.js';
 	import { relativeTime } from '$lib/format.js';
 
@@ -31,9 +32,9 @@
 	{/if}
 
 	<div class="actions-row" style="margin-top: 0.6rem;">
-		<button class="secondary-btn" disabled={busy} onclick={onRefresh}>
+		<Button disabled={busy} onclick={onRefresh}>
 			{busy ? '…' : 'Refresh from manager'}
-		</button>
+		</Button>
 	</div>
 
 	{#if cached}
@@ -56,21 +57,6 @@
 	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
 	.muted.small { font-size: 0.82rem; }
 	.muted a { color: var(--accent); }
-	button.secondary-btn {
-		font: inherit;
-		font-weight: 600;
-		padding: 0.55rem 1rem;
-		border-radius: 0.4rem;
-		cursor: pointer;
-		border: 1px solid transparent;
-	}
-	button.secondary-btn {
-		background: var(--bg-card);
-		color: var(--text-primary);
-		border: 1px solid var(--border-strong);
-	}
-	button.secondary-btn:hover { background: var(--bg-subtle); }
-	button.secondary-btn:disabled { opacity: 0.6; cursor: progress; }
 	.actions-row {
 		display: flex;
 		gap: 0.5rem;
