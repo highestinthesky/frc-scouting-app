@@ -70,15 +70,43 @@ export function createSupabaseClient(sessionId, opts = {}) {
 	if (opts.managerToken) headers['x-manager-token'] = opts.managerToken;
 	return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 		auth: {
-			// We don't use Supabase auth — the derived session id is our only
-			// scoping primitive. Disable refresh and persistence so the SDK
-			// doesn't write spurious data into IndexedDB.
-			autoRefreshToken: false,
-			persistSession: false,
-			detectSessionInUrl: false
+			// Reads the shared session from storage so requests carry the
+			// signed-in user's token, but does NOT drive the refresh loop —
+			// only the auth client below does that. Several clients each
+			// refreshing the same token would race each other.
+			...AUTH_STORAGE,
+			autoRefreshToken: false
 		},
 		global: { headers }
 	});
+}
+
+// ─── auth ──────────────────────────────────────────────────────────────────
+//
+// One storage key, shared by every client, so the per-event data clients pick
+// up whatever session the auth client established.
+
+const AUTH_STORAGE = {
+	persistSession: true,
+	detectSessionInUrl: false,
+	storageKey: 'frc-scout-auth'
+};
+
+/** @type {import('@supabase/supabase-js').SupabaseClient | null} */
+let authClient = null;
+
+/**
+ * The one client that owns the auth session and its refresh loop. Also the
+ * client for RPCs that aren't scoped to an event — redeem_invite,
+ * create_invite — and for reading profiles.
+ */
+export function getAuthClient() {
+	if (!authClient) {
+		authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+			auth: { ...AUTH_STORAGE, autoRefreshToken: true }
+		});
+	}
+	return authClient;
 }
 
 // ─── client-side passphrase hashing ────────────────────────────────────────

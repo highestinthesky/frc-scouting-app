@@ -102,7 +102,7 @@ the big ones and both are barely begun.
 | Phase | | Status |
 |---|---|---|
 | **0** Cheap wins | dialogs · minimal-delta auto-assign · sync UPDATE · picklist sync | **75%** |
-| **1** Auth, roles, accounts | spec written, nothing built | **5%** |
+| **1** Auth, roles, accounts | built and additive; cutover pending | **70%** |
 | **2** Alliance selection | not started | **0%** |
 | **3** IA + redesign | layout + 1 of 9 pages | **15%** |
 | **4** Studio + Insights | not started | **0%** |
@@ -123,9 +123,11 @@ the big ones and both are barely begun.
 
 1. **Picklist cloud sync** — the last Phase 0 item. A local-only picklist dies
    with the phone holding it, and selection is what the app is for.
-2. **Auth** — `docs/adr-001-auth.md` is a complete spec; no code exists.
-   Migrations `0008`/`0009`, `auth.svelte.js`, `/login`, `/register`,
-   `/accounts`. The largest single chunk in the plan.
+2. **Auth cutover** — everything is built (`0008`, `auth.svelte.js`, `/login`,
+   `/register`, `/accounts`) and deliberately inert: `AUTH_ENFORCED` is false
+   and no policy requires an account. What remains is migration `0009`, the
+   flag, and giving everyone an account first. That is a hard cutover and
+   belongs between seasons.
 3. **Alliance selection** — picklist sync plus marking teams already taken
    from TBA's alliances endpoint. `tba.js` does not touch that endpoint yet.
 4. **IA + redesign** — 8 of 9 pages unmigrated, carrying **1,528 lines** of

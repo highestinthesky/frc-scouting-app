@@ -197,6 +197,27 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 	);
 }
 
+// ─── Auth pages ────────────────────────────────────────────────────────────
+for (const page of ['login', 'register', 'accounts']) {
+	const r = rules(`src/routes/${page}/+page.svelte`);
+	ok(
+		`/${page}: inputs and selects meet the tap floor`,
+		r.some(
+			(x) =>
+				/^(input|select)/.test(unscoped(x.selector)) &&
+				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
+		),
+		'a login field is the first thing anyone touches'
+	);
+	const rawSpacing = r.flatMap((x) =>
+		['padding', 'margin', 'gap']
+			.map((prop) => [prop, valueOf(x.body, prop)])
+			.filter(([, v]) => v && /\d*\.?\d+rem/.test(v))
+			.map(([prop, v]) => `${unscoped(x.selector)} { ${prop}: ${v} }`)
+	);
+	ok(`/${page}: spacing comes from tokens`, rawSpacing.length === 0, rawSpacing.join('\n        '));
+}
+
 // ─── a parent must not style a child component through a class prop ────────
 //
 // `<Button class="mb-add" />` with `.mb-add {}` in the parent's <style> looks

@@ -8,7 +8,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"test": "node src/lib/metrics.test.mjs && node src/lib/auto-assign.test.mjs && node src/lib/dialog.test.mjs && node src/lib/sync-rules.test.mjs && node scripts/check_components.mjs",
+		"test": "node src/lib/metrics.test.mjs && node src/lib/auto-assign.test.mjs && node src/lib/dialog.test.mjs && node src/lib/sync-rules.test.mjs && node src/lib/auth.test.mjs && node scripts/check_components.mjs",
 		"check:sql": "python3 scripts/check_sql.py"
 	},
 	"devDependencies": {

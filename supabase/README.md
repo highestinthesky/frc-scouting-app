@@ -80,7 +80,26 @@ still parses fine.
 | `migrations/0005_assignment_overrides.sql` | per-match scout overrides |
 | `migrations/0006_tba_event_key.sql` | TBA key decoupled from the sync code |
 | `migrations/0007_entry_updated_at.sql` | edit watermark, so corrections reach teammates |
+| `migrations/0008_auth.sql` | accounts, roles, invites — **additive**, nothing enforced yet |
 | `verify_entries.sql` | drift assertions, read-only |
 
-Planned next: `0008_auth.sql` and `0009_policies.sql` — see
+Planned next: `0009_policies.sql`, the cutover — swaps every policy to
+`to authenticated`, replaces `has_manager_token()` with `is_manager()`, and
+deletes the passphrase machinery. See
 [`../docs/adr-001-auth.md`](../docs/adr-001-auth.md).
+
+## The auth cutover, when you get to it
+
+0008 is additive on purpose: accounts exist and work, and nothing requires
+one. Two things flip together, and neither alone is safe:
+
+1. `AUTH_ENFORCED = true` in `src/lib/auth.svelte.js`
+2. Migration `0009`
+
+Flipping the flag without 0009 locks the UI while leaving the data open.
+Applying 0009 without the flag locks the data while the UI still offers the
+old path. `src/lib/auth.test.mjs` asserts the flag is still false, so the
+tripwire fires when someone changes it.
+
+Before either: every person needs an account, and one super user has to exist.
+The bootstrap steps are at the bottom of `0008_auth.sql`.

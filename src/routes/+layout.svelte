@@ -1,6 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import favicon from '$lib/assets/favicon.svg';
 	import { session } from '$lib/session.svelte.js';
@@ -12,6 +13,7 @@
 		setEventCode as syncSetEventCode
 	} from '$lib/sync.svelte.js';
 	import { reminders } from '$lib/reminders.svelte.js';
+	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
 	import SessionSetup from '$lib/components/SessionSetup.svelte';
 	import ReminderBanner from '$lib/components/ReminderBanner.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
@@ -19,9 +21,38 @@
 	let { children } = $props();
 
 	onMount(async () => {
-		await Promise.all([session.load(), role.load(), theme.load()]);
+		await Promise.all([session.load(), role.load(), theme.load(), auth.init()]);
 		await syncInit();
 		await reminders.init();
+	});
+
+	// ── route guarding ──────────────────────────────────────────────────────
+	//
+	// Accounts are additive right now: migration 0008 creates them, but no
+	// policy requires one yet. So this redirects when someone is signed OUT and
+	// accounts exist to sign in to — it does not yet lock the app.
+	//
+	// Note what is being asked: "has this device ever signed in", not "is the
+	// token valid this second". Validity is the sync layer's problem. Guarding
+	// on validity is how a scout in a dead corner gets bounced to a login
+	// screen mid-match, which is the failure this whole design avoids.
+	const PUBLIC_ROUTES = ['/login', '/register'];
+	const onPublicRoute = $derived(PUBLIC_ROUTES.some((r) => isActive(r)));
+
+	$effect(() => {
+		if (auth.loading) return;
+		// Signed in and sitting on /login: always bounce them home.
+		if (auth.signedIn && onPublicRoute) {
+			goto(`${base}/`, { replaceState: true });
+			return;
+		}
+		// Signed out: only redirect once accounts are actually required. While
+		// AUTH_ENFORCED is false the app works exactly as it did, and /login is
+		// reachable but optional — that is what lets accounts be tested before
+		// anyone depends on them.
+		if (AUTH_ENFORCED && !auth.signedIn && !onPublicRoute) {
+			goto(`${base}/login/`, { replaceState: true });
+		}
 	});
 
 	// Re-scope the sync layer whenever the user changes their event code in
@@ -67,8 +98,25 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if !session.loaded || !role.loaded}
+{#if !session.loaded || !role.loaded || auth.loading}
 	<p class="boot">Loading…</p>
+{:else if onPublicRoute}
+	{@render children()}
+{:else if AUTH_ENFORCED && auth.orphaned}
+	<!-- Signed in, but no profile: the invite was never redeemed, or a manager
+	     revoked access. Say so plainly rather than showing an empty app. -->
+	<main class="gate">
+		<h1>No access</h1>
+		<p>
+			This account isn't part of a team yet. If a manager gave you an invite
+			code, finish signing up. If your access was revoked, ask them to invite
+			you again.
+		</p>
+		<div class="gate-actions">
+			<a class="gate-link" href="{base}/register/">Enter an invite code</a>
+			<button type="button" class="gate-out" onclick={() => auth.signOut()}>Sign out</button>
+		</div>
+	</main>
 {:else if !session.isConfigured}
 	<SessionSetup />
 {:else}
@@ -80,8 +128,8 @@
 			<span class="sync-dot {syncDot.className}" title={syncDot.title} aria-label={syncDot.title}>
 				{#if syncState.pendingCount > 0}<span class="pending-count">{syncState.pendingCount}</span>{/if}
 			</span>
-			<span class="role-badge" class:manager={role.isManager}>
-				{role.value}
+			<span class="role-badge" class:manager={auth.isManager}>
+				{auth.role ?? role.value}
 			</span>
 		</div>
 	</header>
@@ -95,7 +143,7 @@
 		<a href="{base}/schedule/" class:active={isActive('/schedule')} aria-current={isActive('/schedule') ? 'page' : undefined}>
 			Schedule
 		</a>
-		{#if role.isManager}
+		{#if auth.isManager || role.isManager}
 			<a href="{base}/manager/" class:active={isActive('/manager')} aria-current={isActive('/manager') ? 'page' : undefined}>
 				Manager
 			</a>
@@ -266,6 +314,35 @@
 		color: var(--text-primary);
 		background: var(--bg-card);
 	}
+	/* ── access gate ────────────────────────────────────────────────────── */
+	.gate {
+		max-width: 26rem;
+		margin: var(--space-6) auto;
+		padding: 0 var(--space-4);
+		font-family: system-ui, -apple-system, sans-serif;
+	}
+	.gate h1 { margin: 0 0 var(--space-3); font-size: var(--fs-xl); letter-spacing: -0.02em; }
+	.gate p { color: var(--text-muted); line-height: 1.5; margin: 0 0 var(--space-5); }
+	.gate-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+	.gate-link,
+	.gate-out {
+		font: inherit;
+		font-weight: 600;
+		min-height: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		padding: var(--space-2) var(--space-4);
+		border-radius: var(--radius-md);
+		cursor: pointer;
+		text-decoration: none;
+	}
+	.gate-link { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); }
+	.gate-out {
+		background: var(--bg-card);
+		color: var(--text-primary);
+		border: 1px solid var(--border-strong);
+	}
+
 	.boot {
 		text-align: center;
 		margin-top: 4rem;

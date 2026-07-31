@@ -7,6 +7,7 @@
 	import { clearEntries } from '$lib/db.js';
 	import { syncState, resync } from '$lib/sync.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
+	import { auth } from '$lib/auth.svelte.js';
 
 	let eventCode = $state(session.eventCode);
 	let scoutName = $state(session.scoutName);
@@ -31,6 +32,19 @@
 
 	async function setRole(newRole) {
 		await role.set(newRole);
+	}
+
+	async function signOut() {
+		const ok = await dialog.confirm({
+			title: 'Sign out of this device?',
+			body:
+				'Entries already recorded stay on the phone and sync when you sign ' +
+				'back in.\n\nSign in again before your next event — the app needs a ' +
+				'connection for that, and a venue is a poor place to discover it.',
+			confirmLabel: 'Sign out'
+		});
+		if (!ok) return;
+		await auth.signOut();
 	}
 
 	async function clearAll() {
@@ -67,6 +81,28 @@
 		<a class="back" href="{base}/" aria-label="Back">←</a>
 		<h1>Settings</h1>
 	</header>
+
+	<section>
+		<h2>Account</h2>
+		{#if auth.signedIn && auth.profile}
+			<p class="acct">
+				<strong>{auth.displayName}</strong>
+				<span class="uname">{auth.profile.username}</span>
+				<span class="tag">{auth.profile.role}</span>
+			</p>
+			<div class="acct-actions">
+				{#if auth.isManager}
+					<a class="acct-link" href="{base}/accounts/">Manage accounts</a>
+				{/if}
+				<Button onclick={signOut}>Sign out</Button>
+			</div>
+		{:else}
+			<p class="muted">
+				Not signed in. <a href="{base}/login/">Sign in</a> or
+				<a href="{base}/register/">create an account</a> with an invite code.
+			</p>
+		{/if}
+	</section>
 
 	<section>
 		<h2 id="role-label">Role</h2>
@@ -319,6 +355,39 @@
 		border: 1px solid var(--warning-border);
 	}
 	.status.error { background: var(--danger-bg); color: var(--danger); }
+	.acct {
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+		margin: 0 0 var(--space-3);
+	}
+	.uname { color: var(--text-faint); font-size: var(--fs-sm); }
+	.tag {
+		font-size: var(--fs-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		font-weight: 700;
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-pill);
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	.acct-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+	.acct-link {
+		font-weight: 600;
+		min-height: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		padding: var(--space-2) var(--space-4);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--text-primary);
+		text-decoration: none;
+	}
+	.acct-link:hover { background: var(--bg-subtle); }
+
 	.sync-actions {
 		display: flex;
 		gap: var(--space-3);
