@@ -154,6 +154,49 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 	);
 }
 
+// ─── Settings ──────────────────────────────────────────────────────────────
+//
+// The first page migrated onto the system. These assertions grow one block per
+// page as the rest follow, because the 44px floor is the rule most likely to
+// be quietly broken by a visual pass — a smaller control looks better in a
+// screenshot and fails under a thumb.
+{
+	const r = rules('src/routes/settings/+page.svelte');
+	const floors = (sel) =>
+		r.some(
+			(x) =>
+				unscoped(x.selector).split(',').some((p) => p.trim().includes(sel)) &&
+				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
+		);
+
+	ok('Settings: role picker meets the tap floor', floors('.roles button'));
+	ok('Settings: theme picker meets the tap floor', floors('.theme-btn'));
+	ok('Settings: text inputs meet the tap floor', floors('input'));
+	ok(
+		'Settings: the back link is tappable, not just a glyph',
+		r.some(
+			(x) =>
+				unscoped(x.selector).includes('.back') &&
+				/var\(--tap-min\)/.test(valueOf(x.body, 'min-width') ?? '')
+		),
+		'a 1.5rem arrow is the most-tapped control on a sub-page and the smallest'
+	);
+
+	// design.md: spacing comes from named tokens. Widths are not spacing and
+	// are allowed to be literal.
+	const rawSpacing = r.flatMap((x) =>
+		['padding', 'margin', 'gap', 'margin-top', 'margin-bottom']
+			.map((prop) => [prop, valueOf(x.body, prop)])
+			.filter(([, v]) => v && /\d*\.?\d+rem/.test(v))
+			.map(([prop, v]) => `${unscoped(x.selector)} { ${prop}: ${v} }`)
+	);
+	ok(
+		'Settings: spacing comes from tokens, not raw rem',
+		rawSpacing.length === 0,
+		rawSpacing.join('\n        ')
+	);
+}
+
 // ─── a parent must not style a child component through a class prop ────────
 //
 // `<Button class="mb-add" />` with `.mb-add {}` in the parent's <style> looks

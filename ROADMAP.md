@@ -42,6 +42,9 @@ Last updated: 2026-07-29.
 - **In-app confirm dialog** replacing `window.confirm()` at all seven sites.
 - **Sync UPDATE path** — edits now reach the cloud and propagate to teammates.
 - **Minimal-delta auto-assign** — re-running mid-event moves only what must move.
+- **`Button.svelte`** — one CTA voice, replacing 194 lines of duplicated CSS.
+- **`/settings` migrated** onto the design system: tokens, 44px targets, and
+  both option pickers given proper radiogroup semantics.
 - **`/schedule` split into ten components** under `src/lib/components/schedule/`.
   State stays in the route; CSS co-located verbatim per component.
 - **Auto-assign rewritten as graph colouring.** Every match is a 6-team clique,

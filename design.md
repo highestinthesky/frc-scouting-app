@@ -248,8 +248,31 @@ reimplements one in its own `<style>` block is drifting.
   remove-row × — those are page furniture with their own shape, and routing
   them through a variant prop would turn this into a dumping ground.
 
-Still to build, in roughly this order: Card, Badge, Chip, EmptyState,
-PageHeader. Each one deletes duplicated CSS from every page it lands on.
+### Why there is no Card or PageHeader component
+
+Extracting them was attempted and abandoned on evidence. The copies have
+**drifted**: `.muted` has four different definitions across 18 uses, `h2` five
+across 16, `.page-head` six across 8, `main` five across 9. Some of that drift
+is deliberate — `main` is 32rem on form pages and 60rem on the compare table,
+which is correct — and some is accidental, like `.muted` at 0.90 / 0.92 / 0.95rem.
+
+Consolidating blind would silently change the type scale on five pages with no
+way to see the result. That is a per-page design decision, so it happens during
+each page's migration, not as one mechanical refactor. `Button.svelte` was
+different: sixteen buttons, one voice, and the duplication was genuine.
+
+### Migration status
+
+| Surface | |
+|---|---|
+| `+layout.svelte` | done — tokens, docked nav, contrast fixed |
+| `Dialog.svelte` | done |
+| `Button.svelte` | done |
+| `/settings` | done — the first full page |
+| everything else | pending, and mostly waiting on the Phase 3 route moves |
+
+A page counts as migrated when its spacing comes from tokens, its buttons come
+from `Button.svelte`, and every interactive control clears 44px.
 
 ### The scoping trap
 

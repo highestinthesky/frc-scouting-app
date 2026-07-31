@@ -69,13 +69,28 @@
 	</header>
 
 	<section>
-		<h2>Role</h2>
-		<div class="roles">
-			<button class:selected={role.isScout} onclick={() => setRole('scout')}>
+		<h2 id="role-label">Role</h2>
+		<!-- A group of mutually-exclusive options is a radiogroup, not a row of
+		     buttons. Without this a screen reader reads two unrelated buttons
+		     and never says which one is active. -->
+		<div class="roles" role="radiogroup" aria-labelledby="role-label">
+			<button
+				type="button"
+				role="radio"
+				aria-checked={role.isScout}
+				class:selected={role.isScout}
+				onclick={() => setRole('scout')}
+			>
 				<strong>Scout</strong>
 				<small>Records matches.</small>
 			</button>
-			<button class:selected={role.isManager} onclick={() => setRole('manager')}>
+			<button
+				type="button"
+				role="radio"
+				aria-checked={role.isManager}
+				class:selected={role.isManager}
+				onclick={() => setRole('manager')}
+			>
 				<strong>Manager</strong>
 				<small>Records matches, plus analysis and scheduling.</small>
 			</button>
@@ -132,23 +147,18 @@
 	</section>
 
 	<section>
-		<h2>Appearance</h2>
-		<div class="theme-row">
-			<button
-				class="theme-btn"
-				class:selected={theme.value === 'system'}
-				onclick={() => theme.set('system')}
-			>System</button>
-			<button
-				class="theme-btn"
-				class:selected={theme.value === 'light'}
-				onclick={() => theme.set('light')}
-			>Light</button>
-			<button
-				class="theme-btn"
-				class:selected={theme.value === 'dark'}
-				onclick={() => theme.set('dark')}
-			>Dark</button>
+		<h2 id="theme-label">Appearance</h2>
+		<div class="theme-row" role="radiogroup" aria-labelledby="theme-label">
+			{#each [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']] as [value, label] (value)}
+				<button
+					type="button"
+					role="radio"
+					aria-checked={theme.value === value}
+					class="theme-btn"
+					class:selected={theme.value === value}
+					onclick={() => theme.set(value)}
+				>{label}</button>
+			{/each}
 		</div>
 	</section>
 
@@ -161,79 +171,125 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 * The first full page migrated onto the system. Raw rem values replaced
+	 * with named tokens, both pickers given the 44px floor, and the CTA voice
+	 * delegated to Button.svelte.
+	 */
+
 	main {
+		/* Narrower than the data pages: this is forms and prose, and a long
+		   measure is harder to scan than a short one. */
 		max-width: 32rem;
-		margin: 1rem auto;
+		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		margin: 1rem 0 1rem;
+		gap: var(--space-3);
+		margin: var(--space-4) 0;
 	}
 	.back {
-		font-size: 1.5rem;
+		font-size: var(--fs-xl);
 		text-decoration: none;
 		color: var(--accent);
-		padding: 0.25rem 0.5rem;
+		/* A back arrow is the most-tapped control on a sub-page and was the
+		   smallest thing on it. */
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 	}
-	h1 { margin: 0; font-size: 1.5rem; }
+	h1 {
+		margin: 0;
+		font-size: var(--fs-xl);
+		letter-spacing: -0.02em;
+	}
 	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+		margin: var(--space-5) 0 var(--space-2);
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.muted { color: var(--text-faint); font-size: 0.9rem; margin: 0 0 0.6rem; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.muted a { color: var(--accent); }
-	.ok { color: var(--accent); margin-left: 0.5rem; }
-	.help { color: var(--text-faint); font-size: 0.82rem; }
+	.ok { color: var(--accent); margin-left: var(--space-2); }
+	.help { color: var(--text-faint); font-size: var(--fs-xs); }
 
-	.roles {
+	/* ── choice groups ──────────────────────────────────────────────────
+	   Role and Appearance are the same control at two densities: a row of
+	   mutually-exclusive options. Shared geometry, different content. */
+	.roles,
+	.theme-row {
 		display: flex;
-		gap: 0.6rem;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
-	.roles button {
+	.roles button,
+	.theme-btn {
 		flex: 1 1 0;
-		min-width: 12rem;
-		text-align: left;
-		padding: 0.85rem 1rem;
+		min-height: var(--tap-min);
 		background: var(--bg-card);
 		color: var(--text-primary);
 		border: 2px solid var(--border-strong);
-		border-radius: 0.5rem;
+		border-radius: var(--radius-md);
 		cursor: pointer;
 		font: inherit;
+		transition: border-color var(--dur-short) var(--ease-out);
 	}
-	.roles button.selected {
+	.roles button:focus-visible,
+	.theme-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	/* Selected is carried by border AND background AND text colour, not colour
+	   alone — the same rule the alliance colours follow. */
+	.roles button.selected,
+	.theme-btn.selected {
 		border-color: var(--accent);
 		background: var(--accent-soft);
 		color: var(--accent);
 	}
-	.roles button strong { display: block; font-size: 1rem; }
+
+	.roles button {
+		min-width: 12rem;
+		text-align: left;
+		padding: var(--space-3) var(--space-4);
+		border-radius: var(--radius-lg);
+	}
+	.roles button strong { display: block; font-size: var(--fs-md); }
 	.roles button small {
 		display: block;
 		color: var(--text-muted);
-		font-size: 0.85rem;
-		margin-top: 0.2rem;
+		font-size: var(--fs-sm);
+		margin-top: var(--space-1);
 	}
 
+	.theme-btn {
+		min-width: 6rem;
+		padding: var(--space-2) var(--space-3);
+		font-weight: 600;
+	}
+
+	/* ── form ───────────────────────────────────────────────────────────── */
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
-		margin-bottom: 1rem;
+		gap: var(--space-1);
+		margin-bottom: var(--space-4);
 	}
-	.label { font-weight: 600; font-size: 0.95rem; }
+	.label { font-weight: 600; font-size: var(--fs-md); }
 	input {
 		font: inherit;
-		padding: 0.6rem 0.7rem;
+		min-height: var(--tap-min);
+		padding: var(--space-2) var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 	}
 	input:focus {
 		outline: 2px solid var(--accent);
@@ -241,47 +297,38 @@
 		border-color: var(--accent);
 	}
 
+	/* ── sync status ────────────────────────────────────────────────────── */
 	.status {
-		font-size: 0.9rem;
+		font-size: var(--fs-md);
 		font-weight: 600;
-		padding: 0.4rem 0.7rem;
-		border-radius: 0.4rem;
+		padding: var(--space-1) var(--space-3);
+		border-radius: var(--radius-md);
 		display: inline-block;
-		margin-bottom: 0.4rem;
+		margin-bottom: var(--space-1);
 	}
-	.status.idle { background: var(--bg-subtle); color: var(--text-muted); }
-	.status.connected { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
-	.status.connecting { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+	.status.idle,
 	.status.offline { background: var(--bg-subtle); color: var(--text-muted); }
+	.status.connected {
+		background: var(--success-bg);
+		color: var(--success);
+		border: 1px solid var(--success-border);
+	}
+	.status.connecting {
+		background: var(--warning-bg);
+		color: var(--warning);
+		border: 1px solid var(--warning-border);
+	}
 	.status.error { background: var(--danger-bg); color: var(--danger); }
 	.sync-actions {
 		display: flex;
-		gap: 0.6rem;
+		gap: var(--space-3);
 		align-items: center;
 		flex-wrap: wrap;
-		margin-top: 0.5rem;
+		margin-top: var(--space-2);
 	}
 
-	.theme-row {
-		display: flex;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-	.theme-btn {
-		flex: 1 1 0;
-		min-width: 6rem;
-		padding: 0.6rem 0.85rem;
-		background: var(--bg-card);
-		color: var(--text-primary);
-		border: 2px solid var(--border-strong);
-		border-radius: 0.4rem;
-		cursor: pointer;
-		font: inherit;
-		font-weight: 600;
-	}
-	.theme-btn.selected {
-		border-color: var(--accent);
-		background: var(--accent-soft);
-		color: var(--accent);
+	@media (prefers-reduced-motion: reduce) {
+		.roles button,
+		.theme-btn { transition-duration: 0.01ms; }
 	}
 </style>
