@@ -8,6 +8,32 @@
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<meta name="apple-mobile-web-app-title" content="FRC Scout" />
+		<script>
+			/* Resolve the theme before the first paint.
+			 *
+			 * The stylesheet has ONE dark block, keyed on data-theme="dark", so
+			 * something has to translate "system" into an explicit value. Doing
+			 * it here rather than in a prefers-color-scheme media query means the
+			 * dark palette is written down once and cannot drift.
+			 *
+			 * The real setting lives in IndexedDB, which is async and therefore
+			 * useless before paint. localStorage carries a mirror written by
+			 * theme.svelte.js purely so this script has something synchronous to
+			 * read; if it is missing or stale, the OS preference is a safe
+			 * default and the layout corrects the attribute on hydration.
+			 */
+			(function () {
+				try {
+					var t = localStorage.getItem('theme');
+					if (t !== 'light' && t !== 'dark') {
+						t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+					}
+					document.documentElement.setAttribute('data-theme', t);
+				} catch (e) {
+					/* private mode, storage disabled — light is the safe default */
+				}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

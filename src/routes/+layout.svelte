@@ -62,14 +62,28 @@
 		if (session.loaded) syncSetEventCode(session.eventCode);
 	});
 
-	// Apply theme by setting `data-theme` on the document root. "system" leaves
-	// the attribute unset and lets the prefers-color-scheme media query handle
-	// it; explicit light/dark wins over system preference.
+	// Apply the theme by writing an EXPLICIT data-theme on the document root —
+	// "dark" or "light", never absent. The stylesheet has a single dark block
+	// keyed on that attribute, so "system" has to be resolved here rather than
+	// by a second copy of the palette inside a prefers-color-scheme query.
+	//
+	// While the setting is "system" this also has to follow the OS, since the
+	// user can flip it with the app open and no media query is watching for us
+	// any more.
 	$effect(() => {
 		if (typeof document === 'undefined' || !theme.loaded) return;
 		const root = document.documentElement;
-		if (theme.value === 'system') root.removeAttribute('data-theme');
-		else root.setAttribute('data-theme', theme.value);
+
+		if (theme.value !== 'system') {
+			root.setAttribute('data-theme', theme.value);
+			return;
+		}
+
+		const mq = window.matchMedia('(prefers-color-scheme: dark)');
+		const apply = () => root.setAttribute('data-theme', mq.matches ? 'dark' : 'light');
+		apply();
+		mq.addEventListener('change', apply);
+		return () => mq.removeEventListener('change', apply);
 	});
 
 	function isActive(path) {
@@ -189,13 +203,20 @@
 		--text-muted: #555;
 		--text-faint: #707070;
 		--border: #e0e0e0;
-		--border-strong: #ccc;
+		/* Was #ccc — 1.61:1 on a card. An input's border is the only thing
+		   that says "input", which WCAG 1.4.11 puts at 3:1. Now 3.23 / 3.10. */
+		--border-strong: #8f8f8f;
 		--accent: #5f24a2;
 		--accent-hover: #4e1c87;
 		--accent-soft: #f4ebfa;
 		--on-accent: #ffffff;
 		--alliance-red: #c0392b;
 		--alliance-blue: #2c5cb0;
+		/* Ink for text sitting ON an alliance fill. Light mode's alliances are
+		   dark, so white reads (5.44 / 6.43). Dark mode lightens them to
+		   #f1746a / #6fa8ec, where white collapses to 2.82 / 2.47 — both well
+		   under AA. Flipping the ink instead of the fill keeps red red. */
+		--on-alliance: #ffffff;
 		--danger: #c0392b;
 		--danger-bg: #fdecea;
 		--success: #047857;
@@ -241,39 +262,32 @@
 		--dur-short: 240ms;
 		/* Height the bottom nav occupies on phones, so pages can reserve it. */
 		--nav-bottom-h: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+
+		/* App-bar palette. Deliberately NOT redefined in the dark block: the bar
+		   is identity, not a surface, and stays team purple in both themes. The
+		   status dots sit on that fixed purple, so they are fixed too — a token
+		   that flipped with the theme would be wrong against an unflipping
+		   background. Named rather than inlined so the set is visible in one
+		   place instead of scattered through six rules. */
+		--bar-bg: #5f24a2;
+		--bar-ink: #ffffff;
+		--bar-chip-bg: rgba(255, 255, 255, 0.18);
+		--bar-badge-bg: #ffb000;
+		--bar-badge-ink: #5f24a2;
+		--dot-ok: #4ade80;
+		--dot-pending: #facc15;
+		--dot-offline: #999999;
+		--dot-err: #f87171;
+		--dot-idle: rgba(255, 255, 255, 0.35);
+		--pending-ink: #442222;
 	}
-	@media (prefers-color-scheme: dark) {
-		:global(:root:not([data-theme='light'])) {
-			--bg-page: #0e0e10;
-			--bg-card: #1a1a1c;
-			--bg-subtle: #1f1f22;
-			--bg-elev: #232326;
-			--text-primary: #e8e8e8;
-			--text-muted: #a0a0a3;
-			--text-faint: #8a8a8a;
-			--border: #2a2a2d;
-			--border-strong: #38383b;
-			--accent: #b18de0;
-			--accent-hover: #c5a8eb;
-			--accent-soft: #2a1e3d;
-			--alliance-red: #f1746a;
-			--alliance-blue: #6fa8ec;
-			--danger: #f7857a;
-			--danger-bg: #3a1a18;
-			--success: #6ee7b7;
-			--success-bg: #0f2a23;
-			--success-border: #1d5a45;
-			--warning: #fcd34d;
-			--warning-bg: #2a200a;
-			--warning-border: #5a4318;
-			--banner-info-bg: #2a1e3d;
-			--banner-info-border: #4a3a6e;
-			--banner-red-bg: #3a1a18;
-			--banner-red-border: #5a2a22;
-			--banner-blue-bg: #16233a;
-			--banner-blue-border: #2c4a7a;
-		}
-	}
+	/* Dark palette — defined ONCE. There used to be a second copy inside an
+	   @media (prefers-color-scheme: dark) block, and the two had already
+	   drifted: --on-alliance existed in one and not the other, so a scout on
+	   OS-level dark got white text on a light-blue pill while a scout who
+	   picked dark in Settings got the correct ink. "system" is now resolved to
+	   an explicit data-theme in JS (and pre-paint in app.html), which makes
+	   one block sufficient. */
 	:global(:root[data-theme='dark']) {
 		--bg-page: #0e0e10;
 		--bg-card: #1a1a1c;
@@ -283,12 +297,18 @@
 		--text-muted: #a0a0a3;
 		--text-faint: #8a8a8a;
 		--border: #2a2a2d;
-		--border-strong: #38383b;
+		--border-strong: #6a6a70; /* was #38383b at 1.49:1; now 3.23 / 3.59 */
 		--accent: #b18de0;
 		--accent-hover: #c5a8eb;
 		--accent-soft: #2a1e3d;
+		/* Dark mode lightens the accent, so the ink on top has to darken with
+		   it. White was 2.71:1 on --accent and 2.06:1 on --accent-hover — every
+		   primary button in the app, unreadable, in the theme people use in a
+		   dark gym. #1a1a1c gives 6.42 / 8.42. */
+		--on-accent: #1a1a1c;
 		--alliance-red: #f1746a;
 		--alliance-blue: #6fa8ec;
+		--on-alliance: #101014; /* 6.73 on red, 7.67 on blue */
 		--danger: #f7857a;
 		--danger-bg: #3a1a18;
 		--success: #6ee7b7;
@@ -343,9 +363,11 @@
 		border: 1px solid var(--border-strong);
 	}
 
+	/* Full-screen boot state — a deliberate optical centre, not spacing on the
+	   scale, so it is written as a multiple of the largest token. */
 	.boot {
 		text-align: center;
-		margin-top: 4rem;
+		margin-top: calc(2 * var(--space-6));
 		color: var(--text-faint);
 		font-family: system-ui, -apple-system, sans-serif;
 	}
@@ -354,8 +376,8 @@
 	   carrying the team's colour, and a scout glancing down should recognise
 	   the app before they read a word of it. */
 	.app-bar {
-		background: #5f24a2;
-		color: #ffffff;
+		background: var(--bar-bg);
+		color: var(--bar-ink);
 		padding: var(--space-2) var(--space-4);
 		padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
 		font-family: system-ui, -apple-system, sans-serif;
@@ -377,16 +399,16 @@
 	.sep { opacity: 0.6; }
 	.name { opacity: 0.95; }
 	.role-badge {
-		background: rgba(255, 255, 255, 0.18);
-		padding: 0.15rem 0.55rem;
-		border-radius: 999px;
-		font-size: 0.75rem;
+		background: var(--bar-chip-bg);
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-pill);
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 	}
 	.role-badge.manager {
-		background: #ffb000;
-		color: #5f24a2; /* fixed dark purple on the static yellow chip — adapts poorly to dark mode otherwise */
+		background: var(--bar-badge-bg);
+		color: var(--bar-badge-ink);
 		font-weight: 700;
 	}
 
@@ -394,26 +416,26 @@
 		margin-left: auto;
 		display: inline-flex;
 		align-items: center;
-		gap: 0.3rem;
+		gap: var(--space-1);
 		width: 0.7rem;
 		height: 0.7rem;
 		border-radius: 50%;
-		background: #999;
+		background: var(--dot-offline);
 	}
-	.sync-dot.ok { background: #4ade80; }
-	.sync-dot.pending { background: #facc15; }
-	.sync-dot.offline { background: #999; }
-	.sync-dot.err { background: #f87171; }
-	.sync-dot.idle { background: rgba(255, 255, 255, 0.35); }
+	.sync-dot.ok { background: var(--dot-ok); }
+	.sync-dot.pending { background: var(--dot-pending); }
+	.sync-dot.offline { background: var(--dot-offline); }
+	.sync-dot.err { background: var(--dot-err); }
+	.sync-dot.idle { background: var(--dot-idle); }
 	.pending-count {
 		position: absolute;
 		transform: translate(0.6rem, -0.4rem);
-		background: #facc15;
-		color: #422;
-		font-size: 0.65rem;
+		background: var(--dot-pending);
+		color: var(--pending-ink);
+		font-size: var(--fs-xs);
 		font-weight: 700;
-		padding: 0 0.3rem;
-		border-radius: 999px;
+		padding: 0 var(--space-1);
+		border-radius: var(--radius-pill);
 	}
 
 	/* ── Primary navigation ────────────────────────────────────────────
