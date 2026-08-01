@@ -77,7 +77,7 @@
 	);
 
 	function homeBannerHref() {
-		if (!nextSuggestion) return `${base}/new/`;
+		if (!nextSuggestion) return `${base}/scouting/new/`;
 		const { match, teams } = nextSuggestion;
 		// If only one of my teams is in the match, pre-fill that team + the
 		// schedule-correct alliance. Otherwise route to /new and let the
@@ -90,9 +90,9 @@
 				team: String(t),
 				...(color ? { color } : {})
 			});
-			return `${base}/new/?${qp.toString()}`;
+			return `${base}/scouting/new/?${qp.toString()}`;
 		}
-		return `${base}/new/`;
+		return `${base}/scouting/new/`;
 	}
 
 	// ── live entry counter ─────────────────────────────────────────────────────
@@ -132,7 +132,7 @@
 <main>
 	<div class="top">
 		<h1>Entries</h1>
-		<a class="primary" href="{base}/new/">+ New entry</a>
+		<a class="primary" href="{base}/scouting/new/">+ New entry</a>
 	</div>
 
 	{#if nextSuggestion}
@@ -182,7 +182,7 @@
 				<li class="entry" data-color={e.allianceColor}>
 					<div class="row">
 						<!-- Tapping the identity area navigates to the edit page -->
-						<a class="entry-link" href="{base}/edit/?id={e.id}" aria-label="Edit entry Q{e.matchNumber} · Team {e.teamNumber}">
+						<a class="entry-link" href="{base}/scouting/edit/?id={e.id}" aria-label="Edit entry Q{e.matchNumber} · Team {e.teamNumber}">
 							<span class="match">Q{e.matchNumber}</span>
 							<span class="team">Team {e.teamNumber}</span>
 							<span class="alliance">{e.allianceColor}</span>

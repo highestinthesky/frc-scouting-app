@@ -23,7 +23,7 @@
 		if (!Number.isFinite(r?.match_number) || r.match_number <= 0) return null;
 		const qp = new URLSearchParams({ match: String(r.match_number) });
 		if (Number.isFinite(r.team) && r.team > 0) qp.set('team', String(r.team));
-		return `${base}/new/?${qp.toString()}`;
+		return `${base}/scouting/new/?${qp.toString()}`;
 	}
 </script>
 

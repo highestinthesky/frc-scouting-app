@@ -269,7 +269,9 @@ different: sixteen buttons, one voice, and the duplication was genuine.
 | `Dialog.svelte` | done |
 | `Button.svelte` | done |
 | `/settings` | done — the first full page |
-| everything else | pending, and mostly waiting on the Phase 3 route moves |
+| `/login`, `/register`, `/accounts` | done — built on the system from the start |
+| everything else | pending. The route moves are finished, so each page is now
+  at its final address and gets restyled once. |
 
 A page counts as migrated when its spacing comes from tokens, its buttons come
 from `Button.svelte`, and every interactive control clears 44px.

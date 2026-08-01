@@ -161,7 +161,7 @@
 		<h2>Schedule</h2>
 		<p class="muted">
 			Assignments and match schedule live on the
-			<a href="{base}/schedule/">Schedule</a> tab.
+			<a href="{base}/scouting/">Schedule</a> tab.
 		</p>
 	</section>
 

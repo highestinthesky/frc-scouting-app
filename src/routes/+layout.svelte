@@ -74,8 +74,8 @@
 
 	function isActive(path) {
 		// Compare against pathname with the deploy base stripped, so a single
-		// /manager check works whether we're at "/manager" (dev) or
-		// "/frc-scouting-app/manager" (GitHub Pages).
+		// /insights check works whether we're at "/insights" (dev) or
+		// "/frc-scouting-app/insights" (GitHub Pages).
 		const full = page.url.pathname;
 		const p = base && full.startsWith(base) ? full.slice(base.length) || '/' : full;
 		if (path === '/') return p === '/' || p === '';
@@ -138,14 +138,14 @@
 	     § Three deviations — a scout holds this one-handed. -->
 	<nav class="tabs" aria-label="Main">
 		<a href="{base}/" class:active={isActive('/')} aria-current={isActive('/') ? 'page' : undefined}>
-			Entries
+			Home
 		</a>
-		<a href="{base}/schedule/" class:active={isActive('/schedule')} aria-current={isActive('/schedule') ? 'page' : undefined}>
-			Schedule
+		<a href="{base}/scouting/" class:active={isActive('/scouting')} aria-current={isActive('/scouting') ? 'page' : undefined}>
+			Scouting
 		</a>
 		{#if auth.isManager || role.isManager}
-			<a href="{base}/manager/" class:active={isActive('/manager')} aria-current={isActive('/manager') ? 'page' : undefined}>
-				Manager
+			<a href="{base}/insights/" class:active={isActive('/insights')} aria-current={isActive('/insights') ? 'page' : undefined}>
+				Insights
 			</a>
 		{/if}
 		<a href="{base}/settings/" class:active={isActive('/settings')} aria-current={isActive('/settings') ? 'page' : undefined}>

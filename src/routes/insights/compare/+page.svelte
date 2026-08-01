@@ -107,7 +107,7 @@
 
 <main>
 	<header class="page-head">
-		<a class="back" href="{base}/manager/" aria-label="Back to manager">←</a>
+		<a class="back" href="{base}/insights/" aria-label="Back to manager">←</a>
 		<h1>Compare teams</h1>
 	</header>
 
@@ -233,7 +233,7 @@
 
 						<dt>Full match log</dt>
 						<dd>
-							<a href="{base}/manager/team/{t.teamNumber}/">Open team page →</a>
+							<a href="{base}/insights/team/{t.teamNumber}/">Open team page →</a>
 						</dd>
 					</dl>
 				</section>

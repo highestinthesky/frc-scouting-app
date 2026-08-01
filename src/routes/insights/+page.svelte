@@ -353,8 +353,8 @@
 				<option value="defense">Most defense notes</option>
 			</select>
 			<div class="toolbar-btns">
-				<a class="btn secondary" href="{base}/manager/compare/">Compare</a>
-				<a class="btn secondary" href="{base}/manager/picklist/">Picklist</a>
+				<a class="btn secondary" href="{base}/insights/compare/">Compare</a>
+				<a class="btn secondary" href="{base}/insights/picklist/">Picklist</a>
 				<button
 					class="btn csv"
 					onclick={doExportCsv}
@@ -505,7 +505,7 @@
 						<!-- ── Expanded body ──────────────────────────────────── -->
 						{#if isOpen}
 							<div class="full-view-row">
-								<a class="full-view-link" href="{base}/manager/team/{t.teamNumber}/">Full match log →</a>
+								<a class="full-view-link" href="{base}/insights/team/{t.teamNumber}/">Full match log →</a>
 							</div>
 							{#if t.uniqueStrengths?.length > 0}
 								<div class="paths-block strengths-block">

@@ -937,7 +937,7 @@
 			team: String(row.team),
 			color: row.color
 		});
-		return `${base}/new/?${params.toString()}`;
+		return `${base}/scouting/new/?${params.toString()}`;
 	}
 </script>
 

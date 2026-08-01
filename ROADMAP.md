@@ -104,7 +104,7 @@ the big ones and both are barely begun.
 | **0** Cheap wins | dialogs · minimal-delta auto-assign · sync UPDATE · picklist sync | **75%** |
 | **1** Auth, roles, accounts | built and additive; cutover pending | **70%** |
 | **2** Alliance selection | not started | **0%** |
-| **3** IA + redesign | layout + 1 of 9 pages | **15%** |
+| **3** IA + redesign | routes moved; 1 of 9 pages restyled | **35%** |
 | **4** Studio + Insights | not started | **0%** |
 
 ### Done
@@ -130,8 +130,9 @@ the big ones and both are barely begun.
    belongs between seasons.
 3. **Alliance selection** — picklist sync plus marking teams already taken
    from TBA's alliances endpoint. `tba.js` does not touch that endpoint yet.
-4. **IA + redesign** — 8 of 9 pages unmigrated, carrying **1,528 lines** of
-   per-page CSS between them. `/manager` alone is 429.
+4. **Redesign** — the route moves are done; 8 pages still carry **1,528 lines**
+   of per-page CSS between them, `/insights` alone 429. Each page is now at its
+   final address, so restyling it happens once.
 5. **Studio + Insights** — desktop route group, fixed charts.
 
 ### The redesign is deliberately stalled
@@ -295,13 +296,21 @@ current routes first. Move, then run hallmark once per page at its new address.
 
 | New | From |
 |---|---|
-| `/login`, `/register` | new |
-| `/home` | `/` — greeting, next match, reminders, directory |
-| `/scouting` | `/schedule` + `/new` + `/edit` |
-| `/insights` | `/manager`, `/team/[n]`, `/compare`, `/picklist` |
-| `/accounts` | new |
-| `/studio/*` | new — desktop surface, own layout (Phase 4) |
+| `/login`, `/register` | new — **done** |
+| `/accounts` | new — **done** |
+| `/` | home. Stays at the root: naming it `/home` would need a redirect and buy nothing |
+| `/scouting` | was `/schedule` — **done** |
+| `/scouting/new`, `/scouting/edit` | were `/new`, `/edit` — **done** |
+| `/insights` | was `/manager` — **done** |
+| `/insights/team/[n]`, `/insights/compare`, `/insights/picklist` | were under `/manager` — **done** |
 | `/settings` | unchanged |
+| `/studio/*` | new — desktop surface, own layout (Phase 4) |
+
+Grouped rather than merged: `/new` and `/edit` became children of `/scouting`
+instead of collapsing into one page. The v6 doc asks for scouts to see the
+schedule and fill forms "here", and a parent route delivers that without a
+mega-page that does three jobs — which is the shape `/schedule` was already in
+when it had to be split.
 
 ### Phase 4 — Studio and Insights
 
