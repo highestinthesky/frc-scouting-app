@@ -87,25 +87,25 @@
 
 <style>
 	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+		margin: var(--space-5) 0 var(--space-2);
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
-		margin-bottom: 0.85rem;
+		gap: var(--space-1);
+		margin-bottom: var(--space-4);
 	}
-	.label { font-weight: 600; font-size: 0.95rem; }
+	.label { font-weight: 600; font-size: var(--fs-md); }
 	input {
 		font: inherit;
-		padding: 0.55rem 0.7rem;
+		padding: var(--space-2) var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		color: var(--text-primary);
 	}
@@ -118,23 +118,23 @@
 	.reminder-form {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		align-items: end;
 	}
 	.reminder-form .field { margin-bottom: 0; }
 	.reminder-form .reminder-msg { grid-column: 1 / -1; }
 	.reminder-form select {
 		font: inherit;
-		padding: 0.55rem 0.7rem;
+		padding: var(--space-2) var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		color: var(--text-primary);
 	}
 	.send { grid-column: 1 / -1; justify-self: start; }
 	.reminder-active-head {
-		margin: 1rem 0 0.4rem;
-		font-size: 0.85rem;
+		margin: var(--space-4) 0 var(--space-2);
+		font-size: var(--fs-sm);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--text-muted);
@@ -145,29 +145,29 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
+		gap: var(--space-1);
 	}
 	.reminder-row {
 		display: flex;
 		align-items: baseline;
-		gap: 0.5rem;
-		padding: 0.4rem 0.6rem;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
 		background: var(--bg-card);
 		border: 1px solid var(--border);
-		border-radius: 0.35rem;
-		font-size: 0.85rem;
+		border-radius: var(--radius-md);
+		font-size: var(--fs-sm);
 	}
-	.rr-body { flex: 1 1 0; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: baseline; }
-	.rr-target { color: var(--text-muted); font-size: 0.78rem; }
+	.rr-body { flex: 1 1 0; display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: baseline; }
+	.rr-target { color: var(--text-muted); font-size: var(--fs-xs); }
 	.rr-match { font-weight: 700; color: var(--accent); }
 	.rr-msg { color: var(--text-primary); }
 	.rr-x {
 		background: transparent;
 		border: none;
-		font-size: 1rem;
+		font-size: var(--fs-md);
 		color: var(--text-faint);
 		cursor: pointer;
-		padding: 0 0.3rem;
+		padding: 0 var(--space-1);
 	}
 	.rr-x:hover { color: var(--danger); }
 	@media (max-width: 28rem) {

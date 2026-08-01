@@ -30,34 +30,34 @@
 
 <style>
 	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+		margin: var(--space-5) 0 var(--space-2);
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
-	.muted.small { font-size: 0.82rem; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
+	.muted.small { font-size: var(--fs-sm); }
 	.ok-inline { color: var(--success); }
 	/* ── coverage check ─────────────────────────────────────────── */
 	.conflict-list {
 		list-style: none;
 		padding: 0;
-		margin: 0.4rem 0 0;
+		margin: var(--space-2) 0 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: var(--space-1);
 	}
 	.conflict-row {
 		display: flex;
-		gap: 0.45rem;
+		gap: var(--space-2);
 		align-items: baseline;
 		flex-wrap: wrap;
-		padding: 0.4rem 0.6rem;
+		padding: var(--space-2) var(--space-3);
 		background: var(--warning-bg);
 		border: 1px solid var(--warning-border);
-		border-radius: 0.35rem;
-		font-size: 0.85rem;
+		border-radius: var(--radius-md);
+		font-size: var(--fs-sm);
 		color: var(--warning);
 	}
 	.cf-match {
@@ -76,7 +76,7 @@
 	.cf-tag {
 		margin-left: auto;
 		color: var(--text-muted);
-		font-size: 0.75rem;
+		font-size: var(--fs-xs);
 		font-style: italic;
 	}
 </style>

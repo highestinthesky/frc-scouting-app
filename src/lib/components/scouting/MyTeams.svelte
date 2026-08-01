@@ -48,43 +48,43 @@
 
 <style>
 	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+		margin: var(--space-5) 0 var(--space-2);
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
-	.muted.small { font-size: 0.82rem; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
+	.muted.small { font-size: var(--fs-sm); }
 	.muted a { color: var(--accent); }
 	.actions-row {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		flex-wrap: wrap;
-		margin-top: 0.4rem;
+		margin-top: var(--space-2);
 	}
 	.freshness {
-		margin-top: 0.6rem;
+		margin-top: var(--space-3);
 		font-style: italic;
-		font-size: 0.8rem;
+		font-size: var(--fs-sm);
 	}
 	/* ── scout: team chips ──────────────────────────────────────────── */
 	.team-chips {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.4rem;
-		margin-bottom: 0.5rem;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2);
 	}
 	.team-chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.25rem;
+		gap: var(--space-1);
 		background: var(--accent-soft);
 		color: var(--accent);
 		border: 1px solid var(--accent);
 		font-weight: 700;
-		padding: 0.25rem 0.55rem;
-		border-radius: 999px;
-		font-size: 0.9rem;
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-pill);
+		font-size: var(--fs-sm);
 	}
 </style>

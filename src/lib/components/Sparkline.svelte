@@ -84,7 +84,10 @@
 		color: var(--text-faint);
 	}
 	circle { fill: var(--text-faint); }
-	circle.good { fill: var(--ok, var(--accent)); }
+	/* was var(--ok, var(--accent)) — --ok has never existed, so an improving
+	   trend rendered in brand purple next to a declining one in red. The
+	   fallback made a missing token look like a design choice. */
+	circle.good { fill: var(--success); }
 	circle.bad { fill: var(--danger); }
 	.spark-empty { height: 24px; }
 </style>

@@ -155,21 +155,21 @@
 
 <style>
 	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+		margin: var(--space-5) 0 var(--space-2);
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
-	.muted.small { font-size: 0.82rem; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
+	.muted.small { font-size: var(--fs-sm); }
 	.ov-pill {
 		display: inline-block;
-		padding: 0 0.4rem;
+		padding: 0 var(--space-2);
 		background: var(--accent-soft);
 		color: var(--accent);
-		border-radius: 999px;
-		font-size: 0.7rem;
+		border-radius: var(--radius-pill);
+		font-size: var(--fs-xs);
 		font-weight: 700;
 	}
 	.ov-x {
@@ -177,7 +177,7 @@
 		border: none;
 		color: var(--text-faint);
 		cursor: pointer;
-		font-size: 0.9rem;
+		font-size: var(--fs-sm);
 	}
 	.ov-x:hover { color: var(--danger); }
 	/* ── match-detail modal ─────────────────────────────────────── */
@@ -188,14 +188,14 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 1rem;
+		padding: var(--space-4);
 		z-index: 50;
 		animation: fadein 0.12s ease-out;
 	}
 	.modal-card {
 		background: var(--bg-card);
 		color: var(--text-primary);
-		border-radius: 0.6rem;
+		border-radius: var(--radius-lg);
 		border: 1px solid var(--border);
 		box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
 		width: 100%;
@@ -208,13 +208,13 @@
 	.modal-head {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.85rem 1rem;
+		gap: var(--space-2);
+		padding: var(--space-4);
 		border-bottom: 1px solid var(--border);
 	}
 	.modal-head h2 {
 		margin: 0;
-		font-size: 1.05rem;
+		font-size: var(--fs-lg);
 		font-weight: 700;
 		text-transform: none;
 		letter-spacing: 0;
@@ -225,35 +225,35 @@
 	.mh-time {
 		color: var(--text-muted);
 		font-weight: 500;
-		font-size: 0.9rem;
-		margin-left: 0.4rem;
+		font-size: var(--fs-sm);
+		margin-left: var(--space-2);
 	}
 	.modal-x {
 		background: transparent;
 		border: none;
 		color: var(--text-faint);
-		font-size: 1.1rem;
+		font-size: var(--fs-lg);
 		cursor: pointer;
-		padding: 0.2rem 0.4rem;
+		padding: var(--space-1) var(--space-2);
 		line-height: 1;
-		border-radius: 0.25rem;
+		border-radius: var(--radius-sm);
 	}
 	.modal-x:hover { color: var(--text-primary); background: var(--bg-subtle); }
 	.modal-body {
-		padding: 0.5rem 1rem 1rem;
+		padding: var(--space-2) var(--space-4) var(--space-4);
 		overflow-y: auto;
 	}
-	.mb-section { margin-top: 0.9rem; }
-	.mb-section:first-child { margin-top: 0.3rem; }
+	.mb-section { margin-top: var(--space-4); }
+	.mb-section:first-child { margin-top: var(--space-1); }
 	.mb-h {
-		font-size: 0.78rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
-		margin: 0 0 0.4rem;
+		margin: 0 0 var(--space-2);
 		display: flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: var(--space-2);
 	}
 	.mb-coverage {
 		list-style: none;
@@ -261,23 +261,23 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: var(--space-1);
 	}
 	.mb-team {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.4rem 0.55rem;
+		gap: var(--space-2);
+		padding: var(--space-2);
 		border: 1px solid var(--border);
-		border-left: 4px solid #999;
-		border-radius: 0.35rem;
+		border-left: 4px solid var(--border-strong);
+		border-radius: var(--radius-md);
 		background: var(--bg-card);
-		font-size: 0.88rem;
+		font-size: var(--fs-sm);
 	}
 	.mb-team[data-color='red'] { border-left-color: var(--alliance-red); }
 	.mb-team[data-color='blue'] { border-left-color: var(--alliance-blue); }
 	.mb-color-tag {
-		font-size: 0.7rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--text-faint);
@@ -286,10 +286,10 @@
 	.mb-team-num { font-weight: 700; min-width: 3.5rem; }
 	.mb-status {
 		flex-shrink: 0;
-		font-size: 0.72rem;
+		font-size: var(--fs-xs);
 		font-weight: 700;
-		padding: 0.1rem 0.4rem;
-		border-radius: 999px;
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-pill);
 		white-space: nowrap;
 		border: 1px solid var(--border);
 		color: var(--text-faint);
@@ -310,59 +310,59 @@
 	.mb-override-tag {
 		color: var(--accent);
 		font-weight: 600;
-		font-size: 0.75rem;
+		font-size: var(--fs-xs);
 	}
 	.mb-scout {
 		flex-shrink: 0;
-		font-size: 0.76rem;
+		font-size: var(--fs-xs);
 		font-weight: 700;
 		text-decoration: none;
 		color: var(--accent);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.3rem;
-		padding: 0.18rem 0.5rem;
+		border-radius: var(--radius-sm);
+		padding: var(--space-1) var(--space-2);
 		white-space: nowrap;
 	}
 	.mb-scout:hover { border-color: var(--accent); background: var(--accent-soft); }
 	.mb-overrides {
 		list-style: none;
 		padding: 0;
-		margin: 0 0 0.6rem;
+		margin: 0 0 var(--space-3);
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: var(--space-1);
 	}
 	.mb-or-row {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		background: var(--bg-subtle);
-		padding: 0.4rem 0.55rem;
-		border-radius: 0.35rem;
-		font-size: 0.88rem;
+		padding: var(--space-2);
+		border-radius: var(--radius-md);
+		font-size: var(--fs-sm);
 	}
 	.mb-form {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		align-items: end;
-		margin-top: 0.4rem;
+		margin-top: var(--space-2);
 	}
 	.mb-field {
 		display: flex;
 		flex-direction: column;
-		gap: 0.2rem;
+		gap: var(--space-1);
 	}
 	.mb-label {
-		font-size: 0.75rem;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		color: var(--text-muted);
 	}
 	.mb-field select {
 		font: inherit;
-		padding: 0.45rem 0.55rem;
+		padding: var(--space-2);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.35rem;
+		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		color: var(--text-primary);
 	}
@@ -371,7 +371,7 @@
 		justify-self: start;
 	}
 	.modal-foot {
-		padding: 0.65rem 1rem;
+		padding: var(--space-3) var(--space-4);
 		border-top: 1px solid var(--border);
 		display: flex;
 		justify-content: flex-end;

@@ -99,32 +99,32 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 
 <style>
 	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+		margin: var(--space-5) 0 var(--space-2);
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
-	.muted.small { font-size: 0.82rem; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
+	.muted.small { font-size: var(--fs-sm); }
 	.ok-inline { color: var(--success); }
 	code {
 		background: var(--bg-subtle);
-		padding: 0 0.25rem;
-		border-radius: 0.2rem;
+		padding: 0 var(--space-1);
+		border-radius: var(--radius-sm);
 	}
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
-		margin-bottom: 0.85rem;
+		gap: var(--space-1);
+		margin-bottom: var(--space-4);
 	}
-	.label { font-weight: 600; font-size: 0.95rem; }
+	.label { font-weight: 600; font-size: var(--fs-md); }
 	input {
 		font: inherit;
-		padding: 0.55rem 0.7rem;
+		padding: var(--space-2) var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		color: var(--text-primary);
 	}
@@ -135,37 +135,37 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 	}
 	.actions-row {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		flex-wrap: wrap;
-		margin-top: 0.4rem;
+		margin-top: var(--space-2);
 	}
 	.rotate-block, .forgot-block {
-		margin-top: 0.75rem;
-		padding: 0.5rem 0.75rem;
+		margin-top: var(--space-3);
+		padding: var(--space-2) var(--space-3);
 		border: 1px solid var(--border);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		background: var(--bg-subtle);
 	}
 	.rotate-block summary, .forgot-block summary {
 		cursor: pointer;
 		font-weight: 600;
-		font-size: 0.9rem;
+		font-size: var(--fs-sm);
 		color: var(--text-primary);
 	}
 	.rotate-block[open], .forgot-block[open] {
-		padding-bottom: 0.75rem;
+		padding-bottom: var(--space-3);
 	}
 	.rotate-block[open] summary, .forgot-block[open] summary {
-		margin-bottom: 0.5rem;
+		margin-bottom: var(--space-2);
 	}
 	.sql-snippet {
 		background: var(--bg-card);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.3rem;
-		padding: 0.5rem 0.7rem;
-		font-size: 0.8rem;
+		border-radius: var(--radius-sm);
+		padding: var(--space-2) var(--space-3);
+		font-size: var(--fs-sm);
 		overflow-x: auto;
-		margin: 0.4rem 0;
+		margin: var(--space-2) 0;
 	}
 	.sql-snippet code {
 		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

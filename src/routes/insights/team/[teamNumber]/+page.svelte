@@ -152,96 +152,98 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	main {
 		max-width: 38rem;
-		margin: 1rem auto;
+		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		margin: 1rem 0;
+		gap: var(--space-3);
+		margin: var(--space-4) 0;
+	}
+	.back {
+		font-size: var(--fs-xl);
+		text-decoration: none;
+		color: var(--accent);
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--radius-sm);
+	}
+	.back:hover { background: var(--bg-subtle); }
+	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
+	h2 {
+		font-size: var(--fs-md);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+		margin: var(--space-5) 0 var(--space-2);
+	}
+	.muted { color: var(--text-faint); }
+	.not-found { margin-top: var(--space-6); text-align: center; }
+	.back-link {
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap-min);
+		margin-top: var(--space-4);
+		color: var(--accent);
+		font-weight: 600;
 	}
 
-	/* ── metric cards ─────────────────────────────────────────────── */
+	/* ── metric cards ─────────────────────────────────── */
 	.metric-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
-		gap: 0.6rem;
+		gap: var(--space-2);
 	}
 	.mcard {
-		padding: 0.6rem 0.7rem;
+		padding: var(--space-3);
 		border: 1px solid var(--border);
-		border-radius: 0.5rem;
+		border-radius: var(--radius-lg);
 		background: var(--bg-card);
 		display: flex;
 		flex-direction: column;
-		gap: 0.15rem;
+		gap: var(--space-1);
 	}
+	/* A metric under the sample-size floor. Dimmed rather than hidden: the
+	   number is real, it just should not be acted on yet. */
 	.mcard.provisional { opacity: 0.68; }
-	.mc-head {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		gap: 0.3rem;
-	}
+	.mc-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-1); }
 	.mc-label {
-		font-size: 0.7rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		color: var(--text-muted);
 	}
-	.mc-prov {
-		font-size: 0.66rem;
-		color: var(--text-faint);
-		font-variant-numeric: tabular-nums;
-	}
-	.mc-value {
-		display: flex;
-		align-items: baseline;
-		gap: 0.35rem;
-	}
+	.mc-prov { font-size: var(--fs-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+	.mc-value { display: flex; align-items: baseline; gap: var(--space-1); }
 	.mc-value strong {
-		font-size: 1.5rem;
+		font-size: var(--fs-xl);
 		font-variant-numeric: tabular-nums;
 		line-height: 1.1;
 	}
-	.mc-trend {
-		font-size: 0.75rem;
-		font-variant-numeric: tabular-nums;
-		color: var(--text-muted);
-	}
-	.mc-trend.up { color: var(--ok, var(--accent)); }
-	.mc-meta {
-		font-size: 0.68rem;
-		color: var(--text-faint);
-		font-variant-numeric: tabular-nums;
-	}
-	.back {
-		font-size: 1.5rem;
-		text-decoration: none;
-		color: var(--accent);
-		padding: 0.25rem 0.5rem;
-	}
-	h1 { margin: 0; font-size: 1.5rem; }
-	h2 {
-		font-size: 1rem;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-		margin: 1.5rem 0 0.5rem;
-	}
-	.muted { color: var(--text-faint); }
-	.not-found { margin-top: 2rem; text-align: center; }
-	.back-link { display: inline-block; margin-top: 1rem; color: var(--accent); font-weight: 600; }
+	.mc-trend { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--text-muted); }
+	/* was var(--ok, …) — --ok has never been defined, so every "up" trend
+	   silently fell through to the accent. --success is the real token. */
+	.mc-trend.up { color: var(--success); }
+	.mc-meta { font-size: var(--fs-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
-	.quick-actions {
-		margin-bottom: 0.6rem;
-	}
+	.quick-actions { margin-bottom: var(--space-2); }
 	.action {
-		font-size: 0.86rem;
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap-min);
+		font-size: var(--fs-sm);
 		color: var(--accent);
 		font-weight: 600;
 		text-decoration: none;
@@ -252,72 +254,89 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 0.75rem;
+		gap: var(--space-3);
 		flex-wrap: wrap;
-		padding: 0.75rem 0.85rem;
+		padding: var(--space-3);
 		background: var(--bg-card);
 		border: 1px solid var(--border);
-		border-radius: 0.5rem;
+		border-radius: var(--radius-lg);
 	}
-	.counts { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.92rem; color: var(--text-muted); }
-	.counts strong { color: var(--accent); margin-right: 0.2rem; }
-	.badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+	.counts {
+		display: flex;
+		gap: var(--space-4);
+		flex-wrap: wrap;
+		font-size: var(--fs-md);
+		color: var(--text-muted);
+	}
+	.counts strong { color: var(--accent); margin-right: var(--space-1); }
+	.badges { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 	.badge {
 		background: var(--bg-subtle);
-		border-radius: 999px;
-		padding: 0.15rem 0.6rem;
+		border-radius: var(--radius-pill);
+		padding: var(--space-1) var(--space-3);
 		color: var(--text-muted);
-		font-size: 0.78rem;
+		font-size: var(--fs-xs);
 	}
 	.badge.bad { background: var(--danger-bg); color: var(--danger); }
-	.badge.warn { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+	.badge.warn {
+		background: var(--warning-bg);
+		color: var(--warning);
+		border: 1px solid var(--warning-border);
+	}
 
 	.paths-block {
-		margin-top: 1rem;
-		padding: 0.6rem 0.8rem;
+		margin-top: var(--space-4);
+		padding: var(--space-3);
 		background: var(--bg-card);
 		border: 1px solid var(--border);
-		border-radius: 0.5rem;
+		border-radius: var(--radius-lg);
 	}
-	.paths-block h2 {
-		margin: 0 0 0.5rem;
-		font-size: 0.88rem;
+	.paths-block h2 { margin: 0 0 var(--space-2); font-size: var(--fs-sm); }
+	.path-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
 	}
-	.path-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
-	.path-list li { display: flex; justify-content: space-between; gap: 0.6rem; font-size: 0.88rem; }
+	.path-list li {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--space-2);
+		font-size: var(--fs-sm);
+	}
 
 	.match-log {
 		list-style: none;
 		padding: 0;
-		margin: 0.5rem 0 0;
+		margin: var(--space-2) 0 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.55rem;
+		gap: var(--space-2);
 	}
 	.entry {
 		background: var(--bg-card);
 		border: 1px solid var(--border);
-		border-left: 4px solid #999;
-		border-radius: 0.45rem;
-		padding: 0.6rem 0.8rem;
+		border-left: 4px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		padding: var(--space-3);
 	}
-	.entry[data-color='red'] { border-left-color: #e24b4a; }
-	.entry[data-color='blue'] { border-left-color: #378add; }
+	/* Was #e24b4a / #378add — a second pair of alliance colours that drifted
+	   from the tokens and never darkened for dark mode. */
+	.entry[data-color='red'] { border-left-color: var(--alliance-red); }
+	.entry[data-color='blue'] { border-left-color: var(--alliance-blue); }
 	.hdr {
 		display: flex;
-		gap: 0.4rem;
+		gap: var(--space-2);
 		align-items: baseline;
-		font-size: 0.92rem;
+		font-size: var(--fs-md);
 		flex-wrap: wrap;
 	}
 	.alliance { text-transform: capitalize; color: var(--text-muted); }
-	.by { margin-left: auto; font-size: 0.8rem; color: var(--text-faint); }
-	.entry p { margin: 0.3rem 0 0; font-size: 0.92rem; line-height: 1.45; }
-	.entry p strong {
-		display: inline-block;
-		width: 1rem;
-		color: var(--accent);
-	}
+	.by { margin-left: auto; font-size: var(--fs-xs); color: var(--text-faint); }
+	.entry p { margin: var(--space-1) 0 0; font-size: var(--fs-md); line-height: 1.45; }
+	.entry p strong { display: inline-block; width: 1rem; color: var(--accent); }
 	.entry p.brokedown { color: var(--danger); font-weight: 600; }
 	.entry p.brokedown strong { color: var(--danger); }
 </style>

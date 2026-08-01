@@ -362,49 +362,54 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	main {
 		max-width: 38rem;
-		margin: 1rem auto;
+		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {
 		display: flex;
 		align-items: baseline;
-		gap: 0.6rem;
-		margin: 1rem 0 0.5rem;
+		gap: var(--space-2);
+		margin: var(--space-4) 0 var(--space-2);
 	}
 	.back {
-		font-size: 1.5rem;
+		font-size: var(--fs-xl);
 		text-decoration: none;
 		color: var(--accent);
-		padding: 0.25rem 0.5rem;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--radius-sm);
 	}
-	h1 { margin: 0; font-size: 1.5rem; }
-	.event { color: var(--text-faint); font-size: 0.9rem; }
+	.back:hover { background: var(--bg-subtle); }
+	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
+	.event { color: var(--text-faint); font-size: var(--fs-sm); }
 	.muted { color: var(--text-faint); }
 
-	/* ── weighted scoring ─────────────────────────────────────────── */
-	.weights {
-		display: grid;
-		gap: 0.4rem;
-		margin-bottom: 0.8rem;
-	}
+	/* ── weighted scoring ─────────────────────────────── */
+	.weights { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }
 	.weight {
 		display: grid;
 		grid-template-columns: minmax(6rem, 9rem) 1fr 2.5rem;
 		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.85rem;
+		gap: var(--space-2);
+		font-size: var(--fs-sm);
+		min-height: var(--tap-min);
 	}
 	.w-label { display: flex; flex-direction: column; }
-	.w-inv {
-		font-size: 0.66rem;
-		color: var(--text-faint);
-	}
+	.w-inv { font-size: var(--fs-xs); color: var(--text-faint); }
 	.w-val {
 		font-variant-numeric: tabular-nums;
-		font-size: 0.8rem;
+		font-size: var(--fs-xs);
 		color: var(--text-muted);
 		text-align: right;
 	}
@@ -415,21 +420,21 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
+		gap: var(--space-1);
 	}
 	.scored li {
 		counter-increment: rank;
 		display: grid;
 		grid-template-columns: auto 1fr auto auto auto;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.35rem 0.5rem;
-		border-radius: 0.35rem;
+		gap: var(--space-2);
+		padding: var(--space-2);
+		border-radius: var(--radius-sm);
 		background: var(--bg-subtle);
 	}
 	.scored li::before {
 		content: counter(rank);
-		font-size: 0.75rem;
+		font-size: var(--fs-xs);
 		font-weight: 700;
 		color: var(--text-faint);
 		font-variant-numeric: tabular-nums;
@@ -444,78 +449,77 @@
 		background: var(--border);
 		overflow: hidden;
 	}
-	.score-fill {
-		display: block;
-		height: 100%;
-		background: var(--accent);
-	}
-	.score-val {
-		font-variant-numeric: tabular-nums;
-		font-size: 0.85rem;
-		font-weight: 600;
-	}
+	.score-fill { display: block; height: 100%; background: var(--accent); }
+	.score-val { font-variant-numeric: tabular-nums; font-size: var(--fs-sm); font-weight: 600; }
 	.thin {
-		font-size: 0.62rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		color: var(--text-faint);
 	}
-	.small { font-size: 0.78rem; margin-top: 0.5rem; }
-	.hint { font-size: 0.92rem; }
+	.small { font-size: var(--fs-xs); margin-top: var(--space-2); }
+	.hint { font-size: var(--fs-md); }
 
 	.empty {
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 0.5rem;
-		padding: 1rem;
+		border-radius: var(--radius-lg);
+		padding: var(--space-4);
 	}
 
 	.block {
-		margin-top: 1rem;
+		margin-top: var(--space-4);
 		background: var(--bg-card);
 		border: 1px solid var(--border);
-		border-radius: 0.55rem;
-		padding: 0.7rem 0.85rem;
+		border-radius: var(--radius-lg);
+		padding: var(--space-3);
 	}
 	.block-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 0.6rem;
+		gap: var(--space-2);
 		flex-wrap: wrap;
-		margin-bottom: 0.4rem;
+		margin-bottom: var(--space-2);
 	}
 	h2 {
 		margin: 0;
-		font-size: 0.95rem;
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
 	h2.warn { color: var(--warning); }
-	.count { font-size: 0.78rem; color: var(--text-faint); margin-left: 0.3rem; }
-	.block-actions { display: flex; gap: 0.5rem; }
+	.count { font-size: var(--fs-xs); color: var(--text-faint); margin-left: var(--space-1); }
+	.block-actions { display: flex; gap: var(--space-2); }
 	.link-btn {
 		background: none;
 		border: none;
 		font: inherit;
-		font-size: 0.85rem;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 		color: var(--accent);
 		cursor: pointer;
-		padding: 0.25rem 0.4rem;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-2);
+		border-radius: var(--radius-sm);
 	}
 	.link-btn:hover { text-decoration: underline; }
+	.link-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 	.link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 	.danger-link { color: var(--danger); }
 
 	.search {
 		font: inherit;
-		padding: 0.4rem 0.6rem;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--text-primary);
 		max-width: 9rem;
 	}
+	.search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 	.picked, .available, .avoided {
 		list-style: none;
@@ -523,40 +527,58 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.35rem;
+		gap: var(--space-1);
 	}
 	.picked li, .available li, .avoided li {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.45rem 0.55rem;
+		gap: var(--space-2);
+		padding: var(--space-2);
 		background: var(--bg-subtle);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		flex-wrap: wrap;
 	}
-	.rank {
-		min-width: 1.5rem;
-		font-weight: 700;
-		color: var(--accent);
-	}
+	.rank { min-width: 1.5rem; font-weight: 700; color: var(--accent); }
 	.team-num { font-weight: 600; min-width: 5rem; }
-	.ministats { color: var(--text-muted); font-size: 0.82rem; flex: 1; }
-	.ops { display: flex; gap: 0.3rem; flex-shrink: 0; }
+	.ministats { color: var(--text-muted); font-size: var(--fs-xs); flex: 1; }
+	.ops { display: flex; gap: var(--space-1); flex-shrink: 0; }
+	/* Draft day is the one place in the app where a manager taps repeatedly
+	   under time pressure, so these get the tap floor even though they read
+	   as small chips. */
 	.ops button, .ops a {
 		font: inherit;
-		font-size: 0.78rem;
+		font-size: var(--fs-xs);
 		font-weight: 600;
-		padding: 0.3rem 0.55rem;
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
 		background: var(--bg-card);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.3rem;
+		border-radius: var(--radius-sm);
 		cursor: pointer;
 		text-decoration: none;
 		color: var(--text-primary);
 	}
-	.ops button:hover, .ops a:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+	.ops button:hover, .ops a:hover {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+	.ops button:focus-visible, .ops a:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
 	.ops button:disabled { opacity: 0.4; cursor: not-allowed; }
-	.ops .danger-btn:hover { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
-	.ops .warn-btn:hover { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning); }
-	.peek { font-size: 0.78rem; }
+	.ops .danger-btn:hover {
+		background: var(--danger-bg);
+		border-color: var(--danger);
+		color: var(--danger);
+	}
+	.ops .warn-btn:hover {
+		background: var(--warning-bg);
+		border-color: var(--warning-border);
+		color: var(--warning);
+	}
+	.peek { font-size: var(--fs-xs); }
 </style>

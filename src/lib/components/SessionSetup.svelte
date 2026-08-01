@@ -43,24 +43,24 @@
 <style>
 	.setup {
 		max-width: 28rem;
-		margin: 4rem auto;
-		padding: 2rem 1.5rem;
+		margin: var(--space-6) auto;
+		padding: var(--space-6) var(--space-5);
 		font-family: system-ui, -apple-system, sans-serif;
 	}
-	h1 { margin: 0 0 1.5rem; }
+	h1 { margin: 0 0 var(--space-5); }
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
-		margin-bottom: 1.25rem;
+		gap: var(--space-1);
+		margin-bottom: var(--space-5);
 	}
 	.label { font-weight: 600; }
-	.help { color: var(--text-faint); font-size: 0.85rem; }
+	.help { color: var(--text-faint); font-size: var(--fs-sm); }
 	input {
 		font: inherit;
-		padding: 0.6rem 0.7rem;
+		padding: var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 	}
 	input:focus {
 		outline: 2px solid var(--accent);
@@ -69,13 +69,13 @@
 	}
 	button {
 		width: 100%;
-		padding: 0.8rem 1rem;
+		padding: var(--space-3) var(--space-4);
 		font: inherit;
 		font-weight: 600;
 		background: var(--accent);
 		color: white;
 		border: none;
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		cursor: pointer;
 	}
 	button:disabled { opacity: 0.6; cursor: progress; }

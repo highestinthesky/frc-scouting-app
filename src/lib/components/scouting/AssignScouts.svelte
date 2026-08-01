@@ -86,15 +86,15 @@
 	.draft-note {
 		display: flex;
 		align-items: baseline;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		flex-wrap: wrap;
-		margin: 0 0 0.7rem;
-		padding: 0.4rem 0.6rem;
-		font-size: 0.82rem;
+		margin: 0 0 var(--space-3);
+		padding: var(--space-2) var(--space-3);
+		font-size: var(--fs-sm);
 		background: var(--warning-bg);
 		color: var(--warning);
 		border: 1px solid var(--warning-border);
-		border-radius: 0.35rem;
+		border-radius: var(--radius-md);
 	}
 	.draft-discard {
 		font: inherit;
@@ -108,19 +108,19 @@
 	}
 	.pending-note { color: var(--accent); }
 	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+		margin: var(--space-5) 0 var(--space-2);
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
-	.muted.small { font-size: 0.82rem; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
+	.muted.small { font-size: var(--fs-sm); }
 	input {
 		font: inherit;
-		padding: 0.55rem 0.7rem;
+		padding: var(--space-2) var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		color: var(--text-primary);
 	}
@@ -131,22 +131,22 @@
 	}
 	.actions-row {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		flex-wrap: wrap;
-		margin-top: 0.4rem;
+		margin-top: var(--space-2);
 	}
 	/* ── manager: assignment editor ─────────────────────────────────── */
 	.assign-row {
 		display: grid;
 		grid-template-columns: 1fr 2fr auto;
-		gap: 0.4rem;
-		margin-bottom: 0.45rem;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2);
 	}
 	.scout-name, .team-list {
 		font: inherit;
-		padding: 0.5rem 0.6rem;
+		padding: var(--space-2) var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		color: var(--text-primary);
 		min-width: 0;
@@ -155,9 +155,9 @@
 		background: transparent;
 		border: none;
 		color: var(--text-faint);
-		font-size: 1.2rem;
+		font-size: var(--fs-lg);
 		cursor: pointer;
-		padding: 0 0.4rem;
+		padding: 0 var(--space-2);
 	}
 	.row-x:hover { color: var(--danger); }
 </style>

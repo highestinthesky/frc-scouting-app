@@ -186,68 +186,81 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	main {
 		max-width: 32rem;
-		margin: 1.5rem auto;
-		padding: 0 1rem 4rem;
+		margin: var(--space-5) auto;
+		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-6));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		margin-bottom: 1rem;
+		gap: var(--space-3);
+		margin-bottom: var(--space-4);
 	}
 	.back {
-		font-size: 1.5rem;
+		font-size: var(--fs-xl);
 		text-decoration: none;
 		color: var(--accent);
-		padding: 0.25rem 0.5rem;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--radius-sm);
 	}
-	h1 { margin: 0; }
+	.back:hover { background: var(--bg-subtle); }
+	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
 	h2 {
-		font-size: 1rem;
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
-		margin: 1.5rem 0 0.75rem;
+		margin: var(--space-5) 0 var(--space-3);
 		border-bottom: 1px solid var(--border);
-		padding-bottom: 0.35rem;
+		padding-bottom: var(--space-1);
 	}
 	.muted { color: var(--text-faint); }
 	.error {
 		background: var(--danger-bg);
 		color: var(--danger);
-		padding: 0.6rem 0.75rem;
-		border-radius: 0.4rem;
-		margin-top: 1rem;
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		margin-top: var(--space-4);
 	}
-	.not-found {
-		margin-top: 2rem;
-		text-align: center;
-	}
+	.not-found { margin-top: var(--space-6); text-align: center; }
 	.back-link {
-		display: inline-block;
-		margin-top: 1rem;
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap-min);
+		margin-top: var(--space-4);
 		color: var(--accent);
 		font-weight: 600;
 	}
 	.actions {
 		display: flex;
-		gap: 0.75rem;
+		gap: var(--space-3);
 		align-items: center;
 		justify-content: flex-end;
-		margin-top: 1.5rem;
+		margin-top: var(--space-5);
+		flex-wrap: wrap;
 	}
 	.cancel {
 		color: var(--text-muted);
 		text-decoration: none;
-		padding: 0.5rem 0.75rem;
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
+		border-radius: var(--radius-sm);
 	}
+	.cancel:hover { background: var(--bg-subtle); color: var(--text-primary); }
+	.cancel:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 	.push-left { margin-right: auto; }
-	.hint {
-		margin-top: 1rem;
-		font-size: 0.85rem;
-		text-align: right;
-	}
+	.hint { margin-top: var(--space-4); font-size: var(--fs-sm); text-align: right; }
 </style>

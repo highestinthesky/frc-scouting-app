@@ -243,165 +243,188 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	main {
 		max-width: 60rem;
-		margin: 1rem auto;
+		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		margin: 1rem 0 0.5rem;
+		gap: var(--space-3);
+		margin: var(--space-4) 0 var(--space-2);
 	}
 	.back {
-		font-size: 1.5rem;
+		font-size: var(--fs-xl);
 		text-decoration: none;
 		color: var(--accent);
-		padding: 0.25rem 0.5rem;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--radius-sm);
 	}
-	h1 { margin: 0; font-size: 1.5rem; }
+	.back:hover { background: var(--bg-subtle); }
+	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
 	.muted { color: var(--text-faint); }
 
 	.add-row {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		align-items: center;
 		flex-wrap: wrap;
-		margin: 0.5rem 0 1rem;
+		margin: var(--space-2) 0 var(--space-4);
 	}
 	.add-input {
 		font: inherit;
-		padding: 0.5rem 0.7rem;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--text-primary);
 		max-width: 9rem;
 	}
+	.add-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 	.add-btn {
 		font: inherit;
 		font-weight: 600;
-		padding: 0.5rem 0.85rem;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-4);
 		background: var(--accent);
 		color: var(--on-accent);
 		border: none;
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		cursor: pointer;
 	}
-	.error { color: var(--danger); font-size: 0.85rem; }
+	.add-btn:hover { background: var(--accent-hover); }
+	.add-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.error { color: var(--danger); font-size: var(--fs-sm); }
 	.info {
 		background: var(--banner-blue-bg);
 		color: var(--alliance-blue);
 		border: 1px solid var(--banner-blue-border);
-		padding: 0.55rem 0.75rem;
-		border-radius: 0.4rem;
-		font-size: 0.86rem;
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		font-size: var(--fs-sm);
 	}
 	.empty {
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
-		border-radius: 0.5rem;
-		padding: 1rem;
+		border-radius: var(--radius-lg);
+		padding: var(--space-4);
 	}
 
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-		gap: 0.75rem;
+		gap: var(--space-3);
 	}
 	.col {
 		background: var(--bg-card);
 		border: 1px solid var(--border);
-		border-radius: 0.55rem;
-		padding: 0.75rem 0.85rem 0.5rem;
+		border-radius: var(--radius-lg);
+		padding: var(--space-3);
 	}
 	.col-head {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 0.4rem;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2);
 	}
-	.col-head h2 { margin: 0; font-size: 1.05rem; color: var(--accent); text-transform: none; letter-spacing: 0; }
+	.col-head h2 {
+		margin: 0;
+		font-size: var(--fs-lg);
+		color: var(--accent);
+		text-transform: none;
+		letter-spacing: 0;
+	}
 	.remove {
 		font: inherit;
 		background: transparent;
 		border: none;
 		color: var(--text-faint);
 		cursor: pointer;
-		font-size: 1.05rem;
+		font-size: var(--fs-lg);
 		line-height: 1;
-		padding: 0.1rem 0.4rem;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		border-radius: var(--radius-sm);
+		flex-shrink: 0;
 	}
-	.remove:hover { color: var(--danger); }
+	.remove:hover { color: var(--danger); background: var(--bg-subtle); }
+	.remove:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 	dl { margin: 0; padding: 0; }
 	dt {
-		margin-top: 0.55rem;
-		font-size: 0.74rem;
+		margin-top: var(--space-3);
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--text-faint);
 		font-weight: 600;
 	}
-	dd {
-		margin: 0.15rem 0 0;
-		font-size: 0.88rem;
-		color: var(--text-primary);
-	}
-	dd.text p { margin: 0.2rem 0 0; line-height: 1.4; }
+	dd { margin: var(--space-1) 0 0; font-size: var(--fs-sm); color: var(--text-primary); }
+	dd.text p { margin: var(--space-1) 0 0; line-height: 1.4; }
 
-	/* ── metric rows ──────────────────────────────────────────────── */
-	dd.metric {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0.3rem;
-	}
-	.mv {
-		font-size: 1.05rem;
-		font-variant-numeric: tabular-nums;
-	}
-	.mmeta {
-		font-size: 0.74rem;
-		color: var(--text-faint);
-		font-variant-numeric: tabular-nums;
-	}
+	/* ── metric rows ──────────────────────────────────── */
+	dd.metric { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1); }
+	.mv { font-size: var(--fs-lg); font-variant-numeric: tabular-nums; }
+	.mmeta { font-size: var(--fs-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
 	/* Leader gets a filled chip plus the word "best" via ::after — colour alone
 	   would be the only signal otherwise, which fails for colourblind users. */
 	dd.metric.leader {
 		background: var(--accent-soft);
-		border-radius: 0.3rem;
-		padding: 0.2rem 0.4rem;
-		margin-left: -0.4rem;
+		border-radius: var(--radius-sm);
+		padding: var(--space-1) var(--space-2);
+		margin-left: calc(-1 * var(--space-2));
 	}
 	dd.metric.leader .mv { color: var(--accent); }
 	dd.metric.leader::after {
 		content: 'best';
-		font-size: 0.66rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		font-weight: 700;
 		color: var(--accent);
 	}
+	/* --warn and --ok were never defined tokens; both fell through to their
+	   fallbacks, so "provisional" and "improving" rendered as ordinary text. */
 	.prov {
-		font-size: 0.66rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: var(--warn, var(--text-muted));
+		color: var(--warning);
 	}
-	.trend {
-		font-size: 0.72rem;
-		font-variant-numeric: tabular-nums;
-		color: var(--text-muted);
-	}
-	.trend.up { color: var(--ok, var(--accent)); }
+	.trend { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--text-muted); }
+	.trend.up { color: var(--success); }
 
 	.r { color: var(--alliance-red); font-weight: 600; }
 	.b { color: var(--alliance-blue); font-weight: 600; }
 	.ok { color: var(--success); }
 	.bad { color: var(--danger); font-weight: 600; }
 	.warn { color: var(--warning); font-weight: 600; }
-	.paths { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
-	.paths li { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; }
+	.paths {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+	.paths li {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--space-2);
+		font-size: var(--fs-sm);
+	}
 	a { color: var(--accent); }
 </style>

@@ -328,141 +328,157 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	main {
 		max-width: 32rem;
-		margin: 1.5rem auto;
-		padding: 0 1rem 4rem;
+		margin: var(--space-5) auto;
+		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-6));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		margin-bottom: 1rem;
+		gap: var(--space-3);
+		margin-bottom: var(--space-4);
 	}
 	.back {
-		font-size: 1.5rem;
+		font-size: var(--fs-xl);
 		text-decoration: none;
 		color: var(--accent);
-		padding: 0.25rem 0.5rem;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--radius-sm);
 	}
-	h1 { margin: 0; }
+	.back:hover { background: var(--bg-subtle); }
+	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
 	h2 {
-		font-size: 1rem;
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
-		margin: 1.5rem 0 0.75rem;
+		margin: var(--space-5) 0 var(--space-3);
 		border-bottom: 1px solid var(--border);
-		padding-bottom: 0.35rem;
+		padding-bottom: var(--space-1);
 	}
 
-	/* ── next-match banner ────────────────────────────────────────── */
+	/* ── next-match banner ─────────────────────────────── */
 	.next-banner {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.65rem 0.8rem;
-		border-radius: 0.5rem;
+		gap: var(--space-2);
+		padding: var(--space-3);
+		border-radius: var(--radius-lg);
 		border: 1.5px solid var(--banner-info-border);
 		background: var(--banner-info-bg);
-		margin-bottom: 0.25rem;
 		flex-wrap: wrap;
 	}
-	.banner-body {
-		display: flex;
-		flex-direction: column;
-		gap: 0.1rem;
-		min-width: 0;
-	}
+	.banner-body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 	.banner-label {
-		font-size: 0.72rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.banner-detail {
-		font-size: 0.95rem;
-		font-weight: 600;
-		color: var(--text-primary);
-	}
+	.banner-detail { font-size: var(--fs-md); font-weight: 600; color: var(--text-primary); }
 	.banner-actions {
 		display: flex;
-		gap: 0.35rem;
+		gap: var(--space-2);
 		align-items: center;
 		flex-wrap: wrap;
 		flex-shrink: 0;
 	}
 	.use-btn {
 		font: inherit;
-		font-size: 0.85rem;
+		font-size: var(--fs-sm);
 		font-weight: 700;
-		padding: 0.45rem 0.8rem;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
 		background: var(--accent);
 		color: var(--on-accent);
 		border: none;
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		cursor: pointer;
 		white-space: nowrap;
 	}
-	.use-btn.pick { background: #2c5cb0; color: #fff; }
-	.use-btn.pick[data-color='red'] { background: #c0392b; }
+	/* Alliance colour, so the button reads as "scout the blue one" rather than
+	   as a second brand colour. Tokens, not literals — dark mode lightens both. */
+	.use-btn.pick { background: var(--alliance-blue); color: var(--on-alliance); }
+	.use-btn.pick[data-color='red'] { background: var(--alliance-red); }
 	.use-btn:hover { filter: brightness(1.06); }
+	.use-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 	.dismiss-btn {
 		font: inherit;
-		font-size: 0.9rem;
+		font-size: var(--fs-md);
 		background: transparent;
 		border: none;
 		color: var(--text-faint);
 		cursor: pointer;
-		padding: 0.3rem 0.45rem;
-		border-radius: 0.3rem;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		border-radius: var(--radius-sm);
 		line-height: 1;
 	}
 	.dismiss-btn:hover { color: var(--text-primary); background: var(--bg-subtle); }
+	.dismiss-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-	/* ── schedule mismatch warning ────────────────────────────────── */
+	/* ── schedule mismatch warning ─────────────────────── */
 	.sched-warn {
-		margin: 0.5rem 0 0;
-		padding: 0.5rem 0.7rem;
+		margin: var(--space-2) 0 0;
+		padding: var(--space-2) var(--space-3);
 		background: var(--warning-bg);
 		border: 1px solid var(--warning-border);
-		border-radius: 0.4rem;
-		font-size: 0.85rem;
+		border-radius: var(--radius-md);
+		font-size: var(--fs-sm);
 		color: var(--warning);
 	}
 	.sched-warn strong { color: var(--warning); filter: brightness(0.85); }
 
-	/* ── form controls ────────────────────────────────────────────── */
+	/* ── form controls ─────────────────────────────── */
 	.error {
 		background: var(--danger-bg);
 		color: var(--danger);
-		padding: 0.6rem 0.75rem;
-		border-radius: 0.4rem;
-		margin-top: 1rem;
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		margin-top: var(--space-4);
 	}
 	.actions {
 		display: flex;
-		gap: 0.75rem;
+		gap: var(--space-3);
 		align-items: center;
 		justify-content: flex-end;
-		margin-top: 1.5rem;
+		margin-top: var(--space-5);
 	}
 	.cancel {
 		color: var(--text-muted);
 		text-decoration: none;
-		padding: 0.5rem 0.75rem;
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
+		border-radius: var(--radius-sm);
 	}
-	button {
+	.cancel:hover { background: var(--bg-subtle); color: var(--text-primary); }
+	.cancel:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+	form button[type='submit'] {
 		font: inherit;
 		font-weight: 600;
-		padding: 0.7rem 1.2rem;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-5);
 		background: var(--accent);
-		color: white;
+		color: var(--on-accent);
 		border: none;
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		cursor: pointer;
 	}
-	button:disabled { opacity: 0.6; cursor: progress; }
+	form button[type='submit']:hover:not(:disabled) { background: var(--accent-hover); }
+	form button[type='submit']:disabled { opacity: 0.6; cursor: progress; }
+	form button[type='submit']:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

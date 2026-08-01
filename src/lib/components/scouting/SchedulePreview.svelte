@@ -66,23 +66,23 @@
 
 <style>
 	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+		margin: var(--space-5) 0 var(--space-2);
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
-	.muted.small { font-size: 0.82rem; }
-	.key-sep { opacity: 0.5; margin: 0 0.35rem; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
+	.muted.small { font-size: var(--fs-sm); }
+	.key-sep { opacity: 0.5; margin: 0 var(--space-2); }
 	/* ── manager: full-schedule preview ─────────────────────────── */
 	.sched-preview {
 		list-style: none;
 		padding: 0;
-		margin: 0.4rem 0 0;
+		margin: var(--space-2) 0 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.2rem;
+		gap: var(--space-1);
 	}
 	.sched-row {
 		display: grid;
@@ -91,12 +91,12 @@
 		   column (which used to clip its label). */
 		grid-template-columns: 2.5rem minmax(0, 1fr) auto minmax(0, 1fr) auto auto auto;
 		align-items: center;
-		gap: 0.4rem;
-		padding: 0.35rem 0.55rem;
+		gap: var(--space-2);
+		padding: var(--space-2);
 		border: 1px solid var(--border);
-		border-radius: 0.3rem;
+		border-radius: var(--radius-sm);
 		background: var(--bg-card);
-		font-size: 0.85rem;
+		font-size: var(--fs-sm);
 	}
 	.sp-match { font-weight: 700; color: var(--accent); }
 	.sp-side { font-variant-numeric: tabular-nums; }
@@ -104,23 +104,23 @@
 	.sp-side.blue { color: var(--alliance-blue); text-align: left; }
 	.sp-vs {
 		color: var(--text-faint);
-		font-size: 0.75rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 	}
 	.sp-time {
 		color: var(--text-muted);
-		font-size: 0.78rem;
+		font-size: var(--fs-xs);
 		white-space: nowrap;
 	}
 	/* ── coverage chip + roll-up ────────────────────────────────── */
 	.cov-chip {
 		justify-self: end;
 		align-self: center;
-		font-size: 0.74rem;
+		font-size: var(--fs-xs);
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
-		padding: 0.15rem 0.45rem;
-		border-radius: 999px;
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-pill);
 		border: 1px solid var(--border);
 		color: var(--text-muted);
 		background: var(--bg-subtle);
@@ -138,11 +138,11 @@
 		border-color: var(--warning-border);
 	}
 	.cov-rollup {
-		margin: 0.2rem 0 0.7rem;
+		margin: var(--space-1) 0 var(--space-3);
 	}
 	.cov-bar {
 		height: 0.5rem;
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
 		overflow: hidden;
@@ -151,12 +151,12 @@
 		display: block;
 		height: 100%;
 		background: var(--success);
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		transition: width 240ms ease;
 	}
 	.cov-rollup-text {
-		margin: 0.35rem 0 0;
-		font-size: 0.82rem;
+		margin: var(--space-2) 0 0;
+		font-size: var(--fs-sm);
 		color: var(--text-muted);
 	}
 	.cov-rollup-text strong {
@@ -167,8 +167,8 @@
 		.sched-row {
 			grid-template-columns: 2.5rem 1fr auto auto;
 			grid-template-rows: auto auto;
-			row-gap: 0.15rem;
-			column-gap: 0.55rem;
+			row-gap: var(--space-1);
+			column-gap: var(--space-2);
 		}
 		.sp-vs { display: none; }
 		.sp-match { grid-row: 1 / span 2; grid-column: 1; }
@@ -198,29 +198,29 @@
 		border: 1px solid var(--border);
 		color: var(--text-muted);
 		font: inherit;
-		font-size: 0.78rem;
+		font-size: var(--fs-xs);
 		font-weight: 600;
 		line-height: 1.2;
-		padding: 0.4rem 0.75rem;
-		border-radius: 0.35rem;
+		padding: var(--space-2) var(--space-3);
+		border-radius: var(--radius-md);
 		cursor: pointer;
 		align-self: center;
 		justify-self: end;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.3rem;
+		gap: var(--space-1);
 		white-space: nowrap;
 		min-height: 1.85rem;
 	}
 	.sp-edit:hover { color: var(--accent); border-color: var(--accent); }
 	.ov-pill {
 		display: inline-block;
-		padding: 0 0.4rem;
+		padding: 0 var(--space-2);
 		background: var(--accent-soft);
 		color: var(--accent);
-		border-radius: 999px;
-		font-size: 0.7rem;
+		border-radius: var(--radius-pill);
+		font-size: var(--fs-xs);
 		font-weight: 700;
 	}
 </style>

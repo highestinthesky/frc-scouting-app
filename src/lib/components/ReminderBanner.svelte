@@ -66,21 +66,21 @@
 <style>
 	.reminder-stack {
 		max-width: 42rem;
-		margin: 0.5rem auto 0;
-		padding: 0 1rem;
+		margin: var(--space-2) auto 0;
+		padding: 0 var(--space-4);
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: var(--space-2);
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 
 	.reminder {
 		display: flex;
 		align-items: flex-start;
-		gap: 0.5rem;
-		padding: 0.55rem 0.75rem;
-		border-radius: 0.4rem;
-		font-size: 0.88rem;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		border-radius: var(--radius-md);
+		font-size: var(--fs-sm);
 		border: 1px solid;
 	}
 	.reminder.auto {
@@ -98,12 +98,12 @@
 		flex: 1 1 0;
 		min-width: 0;
 		display: flex;
-		gap: 0.4rem;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 		align-items: baseline;
 	}
 	.r-label {
-		font-size: 0.7rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		font-weight: 700;
@@ -112,18 +112,18 @@
 	.r-msg { font-weight: 600; }
 	.r-author {
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--fs-sm);
 		font-style: italic;
 	}
 	.r-x {
 		background: transparent;
 		border: none;
 		color: inherit;
-		font-size: 1rem;
+		font-size: var(--fs-md);
 		cursor: pointer;
 		opacity: 0.65;
-		padding: 0.1rem 0.3rem;
-		border-radius: 0.25rem;
+		padding: var(--space-1);
+		border-radius: var(--radius-sm);
 		line-height: 1;
 		flex-shrink: 0;
 	}
@@ -132,13 +132,13 @@
 	.r-scout {
 		flex-shrink: 0;
 		align-self: center;
-		font-size: 0.78rem;
+		font-size: var(--fs-xs);
 		font-weight: 700;
 		text-decoration: none;
 		color: inherit;
 		border: 1px solid currentColor;
-		border-radius: 0.3rem;
-		padding: 0.15rem 0.5rem;
+		border-radius: var(--radius-sm);
+		padding: var(--space-1) var(--space-2);
 		opacity: 0.9;
 		white-space: nowrap;
 	}
@@ -150,10 +150,10 @@
 		border: none;
 		color: var(--accent);
 		font: inherit;
-		font-size: 0.85rem;
+		font-size: var(--fs-sm);
 		font-weight: 600;
 		cursor: pointer;
-		padding: 0.2rem 0.4rem;
+		padding: var(--space-1) var(--space-2);
 	}
 	.r-more:hover { text-decoration: underline; }
 </style>

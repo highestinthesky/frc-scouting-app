@@ -130,11 +130,8 @@
 </svelte:head>
 
 <main>
-	<div class="top">
-		<h1>Entries</h1>
-		<a class="primary" href="{base}/scouting/new/">+ New entry</a>
-	</div>
-
+	<!-- The next match is the only thing a scout needs the instant they open
+	     the app, so it leads — above the page title, not below it. -->
 	{#if nextSuggestion}
 		{@const teams = nextSuggestion.teams}
 		{@const m = nextSuggestion.match}
@@ -159,24 +156,32 @@
 		</a>
 	{/if}
 
+	<div class="top">
+		<div class="titles">
+			<h1>Your entries</h1>
+			{#if !loading && entries.length > 0}
+				<p class="pace">
+					{eventEntries.length}
+					{eventEntries.length === 1 ? 'entry' : 'entries'} this event
+					{#if todayEntries.length > 0}
+						· <strong>{todayEntries.length}</strong> today
+					{/if}
+				</p>
+			{/if}
+		</div>
+		<a class="cta" href="{base}/scouting/new/">+ New</a>
+	</div>
+
 	{#if loading}
 		<p class="muted">Loading…</p>
 
 	{:else if entries.length === 0}
 		<div class="empty">
-			<p>No entries yet.</p>
-			<p class="muted">Tap <strong>+ New entry</strong> to scout your first robot.</p>
+			<p class="empty-title">No entries yet</p>
+			<p class="muted">Tap <strong>+ New</strong> to scout your first robot.</p>
 		</div>
 
 	{:else}
-		<!-- ── Pace counter ──────────────────────────────────────────── -->
-		<p class="pace">
-			{eventEntries.length} {eventEntries.length === 1 ? 'entry' : 'entries'} this event
-			{#if todayEntries.length > 0}
-				· <strong>{todayEntries.length}</strong> today
-			{/if}
-		</p>
-
 		<ul class="entries">
 			{#each entries as e (e.id)}
 				<li class="entry" data-color={e.allianceColor}>
@@ -189,7 +194,7 @@
 						</a>
 						<button
 							class="delete"
-							aria-label="Delete entry"
+							aria-label="Delete entry Q{e.matchNumber} · Team {e.teamNumber}"
 							onclick={() => remove(e.id, `Q${e.matchNumber} · Team ${e.teamNumber}`)}
 						>
 							×
@@ -217,7 +222,7 @@
 					{/if}
 					<small class="muted timestamp">
 						{e.scoutName} · {new Date(e.createdAt).toLocaleString()}
-						<span class="edit-hint">Tap name/match to edit</span>
+						<span class="edit-hint">Tap to edit</span>
 					</small>
 				</li>
 			{/each}
@@ -226,38 +231,56 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	main {
 		max-width: 38rem;
-		margin: 1rem auto;
+		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.top {
 		display: flex;
 		justify-content: space-between;
-		align-items: center;
-		margin: 1rem 0 0.75rem;
+		align-items: flex-end;
+		gap: var(--space-3);
+		margin: var(--space-4) 0 var(--space-3);
 	}
-	h1 { margin: 0; font-size: 1.5rem; }
+	.titles { min-width: 0; }
+	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
 	.muted { color: var(--text-faint); }
-	.primary {
-		display: inline-block;
-		padding: 0.55rem 1rem;
+
+	/* A link, not a button — it navigates. Styled to match Button's primary
+	   variant, including the tap floor, because it is the same affordance. */
+	.cta {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-4);
 		background: var(--accent);
 		color: var(--on-accent);
 		text-decoration: none;
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		font-weight: 600;
+		font-size: var(--fs-md);
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
+	.cta:hover { background: var(--accent-hover); }
+	.cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 	/* ── next-match banner ───────────────────────────────────────── */
 	.home-next {
 		display: flex;
 		align-items: center;
-		gap: 0.6rem;
-		padding: 0.7rem 0.85rem;
-		margin: 0 0 1rem;
-		border-radius: 0.5rem;
+		gap: var(--space-3);
+		min-height: var(--tap-min);
+		padding: var(--space-3);
+		margin: var(--space-4) 0 0;
+		border-radius: var(--radius-lg);
 		border: 1.5px solid var(--banner-info-border);
 		background: var(--banner-info-bg);
 		color: inherit;
@@ -272,59 +295,65 @@
 		border-color: var(--banner-blue-border);
 	}
 	.home-next:hover { filter: brightness(0.98); }
+	.home-next:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 	.next-body {
 		display: flex;
 		flex-direction: column;
-		gap: 0.15rem;
+		gap: var(--space-1);
 		min-width: 0;
 		flex: 1 1 auto;
 	}
 	.next-label {
-		font-size: 0.72rem;
+		font-size: var(--fs-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
 	.next-detail {
-		font-size: 0.95rem;
+		font-size: var(--fs-md);
 		font-weight: 600;
 		color: var(--text-primary);
 	}
-	.next-time {
-		font-weight: 400;
-		color: var(--text-muted);
-		margin-left: 0.15rem;
-	}
+	.next-time { font-weight: 400; color: var(--text-muted); }
 	.next-go {
 		font-weight: 700;
 		color: var(--accent);
-		font-size: 0.9rem;
+		font-size: var(--fs-md);
 		white-space: nowrap;
 	}
 
 	/* ── pace counter ─────────────────────────────────────────────── */
 	.pace {
-		margin: 0 0 0.75rem;
-		font-size: 0.88rem;
+		margin: var(--space-1) 0 0;
+		font-size: var(--fs-sm);
 		color: var(--text-muted);
 	}
 	.pace strong { color: var(--accent); }
 
 	/* ── entry list ───────────────────────────────────────────────── */
-	.empty { margin-top: 3rem; text-align: center; }
+	.empty {
+		margin-top: var(--space-6);
+		text-align: center;
+		padding: var(--space-6) var(--space-4);
+		border: 1px dashed var(--border-strong);
+		border-radius: var(--radius-lg);
+	}
+	.empty-title { margin: 0 0 var(--space-2); font-weight: 600; font-size: var(--fs-lg); }
+	.empty .muted { margin: 0; font-size: var(--fs-md); }
+
 	.entries {
 		list-style: none;
 		padding: 0;
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.6rem;
+		gap: var(--space-2);
 	}
 	.entry {
 		border: 1px solid var(--border);
-		border-left: 4px solid #999;
-		border-radius: 0.4rem;
-		padding: 0.7rem 0.85rem;
+		border-left: 4px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		padding: var(--space-3);
 		background: var(--bg-card);
 	}
 	.entry[data-color='red'] { border-left-color: var(--alliance-red); }
@@ -333,21 +362,22 @@
 	/* ── tappable entry link ──────────────────────────────────────── */
 	.row {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		align-items: center;
-		font-size: 0.95rem;
+		font-size: var(--fs-md);
 	}
 	.entry-link {
 		display: flex;
-		gap: 0.6rem;
+		gap: var(--space-2);
 		align-items: center;
 		flex: 1 1 0;
 		min-width: 0;
+		min-height: var(--tap-min);
 		text-decoration: none;
 		color: inherit;
-		border-radius: 0.25rem;
-		padding: 0.1rem 0.2rem;
-		margin: -0.1rem -0.2rem;
+		border-radius: var(--radius-sm);
+		padding: 0 var(--space-1);
+		margin: 0 calc(-1 * var(--space-1));
 	}
 	.entry-link:hover { background: var(--bg-subtle); }
 	.entry-link:focus-visible { outline: 2px solid var(--accent); }
@@ -356,24 +386,30 @@
 	.alliance {
 		text-transform: capitalize;
 		color: var(--text-muted);
-		font-size: 0.85rem;
+		font-size: var(--fs-sm);
 	}
+	/* 44px square. The old 0.1rem × 0.5rem padding made destroying an entry a
+	   16px target sitting next to a full-width link — easy to hit by accident
+	   and hard to hit on purpose. Both wrong ways round. */
 	.delete {
 		background: transparent;
 		border: none;
-		font-size: 1.4rem;
+		font-size: var(--fs-xl);
 		line-height: 1;
 		color: var(--text-faint);
 		cursor: pointer;
-		padding: 0.1rem 0.5rem;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		border-radius: var(--radius-sm);
 		flex-shrink: 0;
 	}
-	.delete:hover { color: var(--danger); }
+	.delete:hover { color: var(--danger); background: var(--bg-subtle); }
+	.delete:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 	.entry p {
-		margin: 0.4rem 0 0;
-		font-size: 0.92rem;
-		line-height: 1.35;
+		margin: var(--space-2) 0 0;
+		font-size: var(--fs-md);
+		line-height: 1.4;
 	}
 	.entry p strong {
 		display: inline-block;
@@ -383,15 +419,10 @@
 	.entry p.brokedown { color: var(--danger); font-weight: 600; }
 	.entry p.brokedown strong { color: var(--danger); }
 
-
 	.timestamp {
 		display: block;
-		margin-top: 0.45rem;
-		font-size: 0.8rem;
+		margin-top: var(--space-2);
+		font-size: var(--fs-xs);
 	}
-	.edit-hint {
-		margin-left: 0.4rem;
-		color: var(--text-faint);
-		font-style: italic;
-	}
+	.edit-hint { margin-left: var(--space-2); color: var(--text-faint); font-style: italic; }
 </style>

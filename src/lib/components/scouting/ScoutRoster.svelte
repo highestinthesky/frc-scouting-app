@@ -31,40 +31,40 @@
 
 <style>
 	h2 {
-		margin: 1.5rem 0 0.5rem;
-		font-size: 1rem;
+		margin: var(--space-5) 0 var(--space-2);
+		font-size: var(--fs-md);
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
-	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
-	.muted.small { font-size: 0.82rem; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
+	.muted.small { font-size: var(--fs-sm); }
 	/* ── scouts roster ──────────────────────────────────────────── */
 	.roster {
 		list-style: none;
 		padding: 0;
-		margin: 0.4rem 0 0;
+		margin: var(--space-2) 0 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
+		gap: var(--space-1);
 	}
 	.roster-row {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		align-items: baseline;
 		flex-wrap: wrap;
-		padding: 0.4rem 0.6rem;
+		padding: var(--space-2) var(--space-3);
 		background: var(--bg-card);
 		border: 1px solid var(--border);
-		border-radius: 0.35rem;
-		font-size: 0.88rem;
+		border-radius: var(--radius-md);
+		font-size: var(--fs-sm);
 	}
 	.rs-name { font-weight: 700; }
-	.rs-tags { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+	.rs-tags { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 	.rs-tag {
-		font-size: 0.72rem;
-		padding: 0.1rem 0.45rem;
-		border-radius: 999px;
+		font-size: var(--fs-xs);
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-pill);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -72,5 +72,5 @@
 	.rs-tag.assigned { background: var(--accent-soft); color: var(--accent); }
 	.rs-tag.recording { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
 	.rs-tag.warn { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
-	.rs-last { margin-left: auto; color: var(--text-muted); font-size: 0.8rem; }
+	.rs-last { margin-left: auto; color: var(--text-muted); font-size: var(--fs-sm); }
 </style>

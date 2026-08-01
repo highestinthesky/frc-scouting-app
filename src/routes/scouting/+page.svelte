@@ -46,16 +46,16 @@
 	import { reminders as reminderStore } from '$lib/reminders.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
 	import { dialog } from '$lib/dialog.svelte.js';
-	import PublishSchedule from '$lib/components/schedule/PublishSchedule.svelte';
-	import ManagerPassphrase from '$lib/components/schedule/ManagerPassphrase.svelte';
-	import AssignScouts from '$lib/components/schedule/AssignScouts.svelte';
-	import ScoutRoster from '$lib/components/schedule/ScoutRoster.svelte';
-	import CoverageCheck from '$lib/components/schedule/CoverageCheck.svelte';
-	import ReminderPanel from '$lib/components/schedule/ReminderPanel.svelte';
-	import SchedulePreview from '$lib/components/schedule/SchedulePreview.svelte';
-	import MyTeams from '$lib/components/schedule/MyTeams.svelte';
-	import UpcomingMatches from '$lib/components/schedule/UpcomingMatches.svelte';
-	import MatchDetailModal from '$lib/components/schedule/MatchDetailModal.svelte';
+	import PublishSchedule from '$lib/components/scouting/PublishSchedule.svelte';
+	import ManagerPassphrase from '$lib/components/scouting/ManagerPassphrase.svelte';
+	import AssignScouts from '$lib/components/scouting/AssignScouts.svelte';
+	import ScoutRoster from '$lib/components/scouting/ScoutRoster.svelte';
+	import CoverageCheck from '$lib/components/scouting/CoverageCheck.svelte';
+	import ReminderPanel from '$lib/components/scouting/ReminderPanel.svelte';
+	import SchedulePreview from '$lib/components/scouting/SchedulePreview.svelte';
+	import MyTeams from '$lib/components/scouting/MyTeams.svelte';
+	import UpcomingMatches from '$lib/components/scouting/UpcomingMatches.svelte';
+	import MatchDetailModal from '$lib/components/scouting/MatchDetailModal.svelte';
 
 	// ─── shared state ──────────────────────────────────────────────────────
 
@@ -1084,31 +1084,45 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 *
+	 * Thin on purpose — this page is a shell around ten components in
+	 * lib/components/scouting/, each of which carries its own styles.
+	 */
+
 	main {
 		max-width: 36rem;
-		margin: 1rem auto;
+		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		margin: 1rem 0;
+		gap: var(--space-3);
+		margin: var(--space-4) 0;
 	}
 	.back {
-		font-size: 1.5rem;
+		font-size: var(--fs-xl);
 		text-decoration: none;
 		color: var(--accent);
-		padding: 0.25rem 0.5rem;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--radius-sm);
 	}
-	h1 { margin: 0; font-size: 1.5rem; }
-	.muted { color: var(--text-faint); font-size: 0.92rem; margin: 0 0 0.6rem; }
+	.back:hover { background: var(--bg-subtle); }
+	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
+	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-2); }
 	.banner {
-		padding: 0.55rem 0.75rem;
-		border-radius: 0.4rem;
-		margin-top: 1rem;
-		font-size: 0.9rem;
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		margin-top: var(--space-4);
+		font-size: var(--fs-md);
 	}
 	.banner.ok { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
 	.banner.err { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }

@@ -348,24 +348,24 @@
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: 0.35rem;
-		margin-bottom: 1rem;
+		gap: var(--space-2);
+		margin-bottom: var(--space-4);
 	}
 	.label {
 		font-weight: 600;
-		font-size: 0.95rem;
+		font-size: var(--fs-md);
 	}
 	.req { color: var(--danger); }
 	.help {
 		color: var(--text-faint);
-		font-size: 0.85rem;
-		margin-top: -0.15rem;
+		font-size: var(--fs-sm);
+		margin-top: calc(-1 * var(--space-1));
 	}
 	input, textarea, select {
 		font: inherit;
-		padding: 0.6rem 0.7rem;
+		padding: var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		background: var(--bg-card);
 	}
 	input:focus, textarea:focus, select:focus {
@@ -378,20 +378,20 @@
 	.counter {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: var(--space-2);
 	}
 	.ct-btn {
 		flex: 0 0 auto;
 		width: 3rem;
 		height: 3rem;
 		font: inherit;
-		font-size: 1.5rem;
+		font-size: var(--fs-xl);
 		line-height: 1;
 		font-weight: 600;
 		color: var(--accent);
 		background: var(--bg-card);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.5rem;
+		border-radius: var(--radius-lg);
 		cursor: pointer;
 		touch-action: manipulation;
 	}
@@ -404,15 +404,15 @@
 	.ct-value {
 		min-width: 2.5rem;
 		text-align: center;
-		font-size: 1.4rem;
+		font-size: var(--fs-xl);
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 	}
 	.ct-value.unset { color: var(--text-faint); font-weight: 400; }
 	.ct-clear {
 		font: inherit;
-		font-size: 0.8rem;
-		padding: 0.3rem 0.5rem;
+		font-size: var(--fs-sm);
+		padding: var(--space-1) var(--space-2);
 		background: none;
 		border: none;
 		color: var(--text-muted);
@@ -420,7 +420,7 @@
 		cursor: pointer;
 	}
 	.ct-hint {
-		font-size: 0.8rem;
+		font-size: var(--fs-sm);
 		color: var(--text-faint);
 	}
 	textarea {
@@ -432,17 +432,17 @@
 	.tag-pills {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.3rem;
-		margin: 0 0 0.3rem;
+		gap: var(--space-1);
+		margin: 0 0 var(--space-1);
 	}
 	.tag-pill {
 		font: inherit;
-		font-size: 0.78rem;
-		padding: 0.25rem 0.6rem;
+		font-size: var(--fs-xs);
+		padding: var(--space-1) var(--space-3);
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
 		color: var(--text-muted);
-		border-radius: 999px;
+		border-radius: var(--radius-pill);
 		cursor: pointer;
 		max-width: 100%;
 		overflow: hidden;
@@ -459,19 +459,19 @@
 	.defense-entry {
 		display: flex;
 		flex-direction: column;
-		gap: 0.55rem;
-		padding: 0.65rem 0.75rem;
+		gap: var(--space-2);
+		padding: var(--space-3);
 		border: 1px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		background: var(--bg-card);
 	}
 	.de-row {
 		display: flex;
 		flex-direction: column;
-		gap: 0.2rem;
+		gap: var(--space-1);
 	}
 	.de-label {
-		font-size: 0.8rem;
+		font-size: var(--fs-sm);
 		color: var(--text-muted);
 		font-weight: 600;
 	}
@@ -480,7 +480,7 @@
 		color: var(--text-faint);
 	}
 	.de-pills {
-		gap: 0.4rem;
+		gap: var(--space-2);
 	}
 	.de-team {
 		max-width: 8rem;
@@ -492,19 +492,19 @@
 	/* ── pills ────────────────────────────────────────────────────── */
 	.pills {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
 	.pill {
 		flex: 1 1 auto;
 		min-width: 5rem;
-		padding: 0.7rem 1rem;
+		padding: var(--space-3) var(--space-4);
 		font: inherit;
 		font-weight: 600;
 		text-transform: capitalize;
 		background: var(--bg-card);
 		border: 2px solid var(--border-strong);
-		border-radius: 0.4rem;
+		border-radius: var(--radius-md);
 		cursor: pointer;
 	}
 	/* Defense pills don't need to grow to full width */
@@ -512,34 +512,38 @@
 		flex: 0 1 auto;
 		min-width: 7rem;
 	}
+	/* Alliance literals here were the light-mode values, hardcoded — so in dark
+	   mode a selected pill stayed dark crimson against a dark card, and white
+	   label text on the dark-mode alliance colours would have failed AA anyway.
+	   --on-alliance carries the correct ink for each theme. */
 	.pill.selected[data-color='red'] {
-		background: #c0392b;
-		border-color: #c0392b;
-		color: white;
+		background: var(--alliance-red);
+		border-color: var(--alliance-red);
+		color: var(--on-alliance);
 	}
 	.pill.selected[data-color='blue'] {
-		background: #2c5cb0;
-		border-color: #2c5cb0;
-		color: white;
+		background: var(--alliance-blue);
+		border-color: var(--alliance-blue);
+		color: var(--on-alliance);
 	}
 	.pill.selected:not([data-color='red']):not([data-color='blue']) {
 		background: var(--accent);
 		border-color: var(--accent);
-		color: white;
+		color: var(--on-accent);
 	}
 
 	/* ── boolean toggle ───────────────────────────────────────────── */
 	.bool {
 		display: flex;
 		align-items: center;
-		gap: 0.6rem;
-		margin-top: 0.1rem;
+		gap: var(--space-3);
+		margin-top: var(--space-1);
 	}
 	.toggle {
 		appearance: none;
 		background: transparent;
 		border: none;
-		padding: 0.25rem;
+		padding: var(--space-1);
 		cursor: pointer;
 		font: inherit;
 	}
@@ -552,8 +556,8 @@
 		display: inline-block;
 		width: 2.6rem;
 		height: 1.5rem;
-		background: #ccc;
-		border-radius: 999px;
+		background: var(--border-strong);
+		border-radius: var(--radius-pill);
 		transition: background-color 100ms ease;
 	}
 	.thumb {
@@ -569,7 +573,7 @@
 	.toggle.on .track { background: var(--accent); }
 	.toggle.on .thumb { transform: translateX(1.1rem); }
 	.bool-label {
-		font-size: 0.95rem;
+		font-size: var(--fs-md);
 		color: var(--text-primary);
 	}
 </style>
