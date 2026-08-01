@@ -69,11 +69,13 @@ shipped and contrast-tested); OKLCH is given for portability.
 | `--text-muted` | `#555555` | `oklch(45.0% 0 0)` |
 | `--text-faint` | `#707070` | `oklch(54.5% 0 0)` |
 | `--border` | `#e0e0e0` | `oklch(90.7% 0 0)` |
-| `--border-strong` | `#cccccc` | `oklch(84.5% 0 0)` |
+| `--border-strong` | `#8f8f8f` | `oklch(65.0% 0 0)` |
 | `--accent` | `#5f24a2` | `oklch(42.1% 0.187 299.3)` |
 | `--accent-soft` | `#f4ebfa` | `oklch(95.1% 0.022 312.2)` |
+| `--on-accent` | `#ffffff` | `oklch(100% 0 0)` |
 | `--alliance-red` | `#c0392b` | `oklch(54.3% 0.174 29.7)` |
 | `--alliance-blue` | `#2c5cb0` | `oklch(48.8% 0.144 260.7)` |
+| `--on-alliance` | `#ffffff` | `oklch(100% 0 0)` |
 | `--success` | `#047857` | `oklch(50.8% 0.105 165.6)` |
 | `--warning` | `#92400e` | `oklch(47.3% 0.125 46.2)` |
 
@@ -88,32 +90,70 @@ shipped and contrast-tested); OKLCH is given for portability.
 | `--text-muted` | `#a0a0a3` | `oklch(70.7% 0.004 286.3)` |
 | `--text-faint` | `#8a8a8a` | `oklch(63.3% 0 0)` |
 | `--border` | `#2a2a2d` | `oklch(28.6% 0.005 286.1)` |
-| `--border-strong` | `#38383b` | `oklch(34.2% 0.005 286.1)` |
+| `--border-strong` | `#6a6a70` | `oklch(52.0% 0.006 286.1)` |
 | `--accent` | `#b18de0` | `oklch(70.8% 0.124 303.3)` |
 | `--accent-soft` | `#2a1e3d` | `oklch(26.6% 0.058 300.4)` |
+| `--on-accent` | `#1a1a1c` | `oklch(21.9% 0.004 286.1)` |
 | `--alliance-red` | `#f1746a` | `oklch(70.4% 0.156 26.4)` |
 | `--alliance-blue` | `#6fa8ec` | `oklch(72.0% 0.116 253.6)` |
+| `--on-alliance` | `#101014` | `oklch(17.7% 0.005 286.0)` |
 | `--success` | `#6ee7b7` | `oklch(84.5% 0.130 165.0)` |
 | `--warning` | `#fcd34d` | `oklch(87.9% 0.153 91.6)` |
 
 ### Contrast
 
 Every foreground token clears **WCAG AA (4.5:1)** against every background it can
-land on, in both themes. Worst cases: `--text-faint` at 4.54 in both.
+land on, in both themes. Worst case: `--text-faint` at 4.54 in both.
 
-`--text-faint` was `#888888` / `#6e6e72` and failed at 3.54 / 3.42. It carries
-help text, timestamps and `.muted.small` — the smallest type in the app, where
-the requirement is strictest. Re-check this table before changing any of these
-values; the margin on the faint tokens is two hundredths.
+**This is enforced, not asserted.** `scripts/check_contrast.mjs` parses the real
+token values out of `+layout.svelte` and measures every pair the app renders, in
+both themes, on every `npm test`. Do not edit the table above by hand and trust
+it — change the layout and run the check.
+
+Three failures it has already caught, none of which were visible by looking:
+
+| | Was | Why it mattered |
+|---|---|---|
+| `--text-faint` | 3.54 / 3.42 | the smallest type in the app — timestamps, help text |
+| `--on-accent` (dark) | 2.71 on `--accent`, 2.06 on `--accent-hover` | white on light lavender: **every primary button**, in the theme people use in a dark gym |
+| `--border-strong` | 1.61 / 1.49 | an input's border is the only thing that says "input" (WCAG 1.4.11 → 3:1) |
+
+Two pairs are deliberately **not** checked: `--warning-border` on `--warning-bg`
+and `--success-border` on `--success-bg`. 1.4.11 covers boundaries required to
+identify a component; a banner is identified by its fill and its text, and
+deleting its border loses nothing. Forcing decoration to 3:1 would darken those
+tints until they read as errors.
 
 ### Alliance colours are semantic
 
-Red and blue mean alliance, never decoration. Two rules:
+Red and blue mean alliance, never decoration. Three rules:
 
 - They must survive a retheme. Do not reuse them for state.
 - They must never be the only signal. Every place an alliance colour appears, a
   text label or position carries the same information — colour-blind scouts,
   and glare on a phone screen under gym lighting.
+- **Text on an alliance fill uses `--on-alliance`, never `#fff`.** The fills
+  lighten in dark mode; white collapses to 2.47:1 on blue. The ink flips instead
+  of the fill, so red stays red.
+
+The literals `#c0392b`, `#2c5cb0`, `#e24b4a` and `#378add` appeared in six
+places between them — light-mode alliance values, hardcoded, which stayed dark
+against a dark card once dark mode existed. Each looked deliberate in isolation.
+`check_components.mjs` now rejects a hex literal anywhere outside
+`+layout.svelte`.
+
+### One dark block
+
+The dark palette is defined **once**, under `:root[data-theme='dark']`. There is
+no `@media (prefers-color-scheme: dark)` copy; "system" is resolved to an
+explicit `data-theme` by an inline script in `app.html` (before first paint) and
+kept in sync by `+layout.svelte` thereafter.
+
+This is not a preference. The two blocks existed, and they had already drifted —
+`--on-alliance` was in one and not the other, so a scout on OS-level dark saw
+white text on a light blue pill while a scout who chose dark in Settings saw the
+correct ink, and neither could reproduce what the other was looking at.
+`check_contrast.mjs` fails if a second block returns.
 
 ## Typography
 
@@ -160,8 +200,8 @@ because a changing number is easier to read when it moves.
 
 ## CTA voice
 
-- **Primary:** filled `--accent`, `--radius-md`, `0.55rem 1rem`, weight 600.
-  One per screen region.
+- **Primary:** filled `--accent`, `--radius-md`, `var(--tap-min)` tall with
+  `var(--space-4)` of horizontal padding, weight 600. One per screen region.
 - **Secondary:** `--bg-card` with a `--border-strong` outline, same geometry.
 - **Danger:** outlined in `--danger`, filled only on hover.
 - Copy is a verb: "Save assignments", "Publish to teammates". Never "Submit",
@@ -198,9 +238,9 @@ because a changing number is easier to read when it moves.
   /* light */
   --bg-page: #fafafa;      --bg-card: #ffffff;      --bg-subtle: #f5f5f5;
   --text-primary: #1a1a1a; --text-muted: #555555;   --text-faint: #707070;
-  --border: #e0e0e0;       --border-strong: #cccccc;
+  --border: #e0e0e0;       --border-strong: #8f8f8f;
   --accent: #5f24a2;       --accent-soft: #f4ebfa;  --on-accent: #ffffff;
-  --alliance-red: #c0392b; --alliance-blue: #2c5cb0;
+  --alliance-red: #c0392b; --alliance-blue: #2c5cb0; --on-alliance: #ffffff;
   --success: #047857;      --warning: #92400e;      --danger: #c0392b;
 
   --space-1: 0.25rem; --space-2: 0.5rem;  --space-3: 0.75rem;
@@ -215,8 +255,8 @@ because a changing number is easier to read when it moves.
 }
 ```
 
-Dark overrides live under `:root[data-theme='dark']` and the
-`prefers-color-scheme` query — see `+layout.svelte`.
+Dark overrides live under `:root[data-theme='dark']` — one block, no media
+query. See "One dark block" above.
 
 ## Shared components
 
@@ -270,8 +310,22 @@ different: sixteen buttons, one voice, and the duplication was genuine.
 | `Button.svelte` | done |
 | `/settings` | done — the first full page |
 | `/login`, `/register`, `/accounts` | done — built on the system from the start |
-| everything else | pending. The route moves are finished, so each page is now
-  at its final address and gets restyled once. |
+| `/` (home) | done |
+| `/scouting`, `/scouting/new`, `/scouting/edit` | done |
+| `/insights` and its four sub-pages | done |
+| `lib/components/*` (16 files) | done |
+
+**All surfaces are migrated.** The remaining visual work is composition — what
+each page leads with and how dense it is — not tokens. Two checks keep it that
+way, and both run on `npm test`:
+
+- `check_components.mjs` sweeps every `.svelte` file and fails on a raw `rem`
+  in spacing or type, a hex literal outside `+layout.svelte`, or a
+  `var(--token)` that is not defined.
+- `check_contrast.mjs` measures every rendered colour pair in both themes.
+
+The sweep is what makes the "no Card component" decision below survivable: the
+copies may stay separate, but they can no longer drift off the scale.
 
 A page counts as migrated when its spacing comes from tokens, its buttons come
 from `Button.svelte`, and every interactive control clears 44px.

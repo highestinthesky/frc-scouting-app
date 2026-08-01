@@ -156,10 +156,9 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 
 // ─── Settings ──────────────────────────────────────────────────────────────
 //
-// The first page migrated onto the system. These assertions grow one block per
-// page as the rest follow, because the 44px floor is the rule most likely to
-// be quietly broken by a visual pass — a smaller control looks better in a
-// screenshot and fails under a thumb.
+// The first page migrated onto the system, and the one with the most distinct
+// control types, so it keeps named assertions where the sweep below only
+// counts violations.
 {
 	const r = rules('src/routes/settings/+page.svelte');
 	const floors = (sel) =>
@@ -181,23 +180,116 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 		),
 		'a 1.5rem arrow is the most-tapped control on a sub-page and the smallest'
 	);
+}
 
-	// design.md: spacing comes from named tokens. Widths are not spacing and
-	// are allowed to be literal.
-	const rawSpacing = r.flatMap((x) =>
-		['padding', 'margin', 'gap', 'margin-top', 'margin-bottom']
-			.map((prop) => [prop, valueOf(x.body, prop)])
-			.filter(([, v]) => v && /\d*\.?\d+rem/.test(v))
-			.map(([prop, v]) => `${unscoped(x.selector)} { ${prop}: ${v} }`)
-	);
+// ─── the whole tree is on the token scale ──────────────────────────────────
+//
+// design.md defines one spacing scale, one type scale and one palette. A
+// literal is not wrong because it looks bad — it is wrong because it stops
+// tracking. #2c5cb0 was the light-mode alliance blue, hardcoded in Field.svelte
+// and in three other places; when dark mode arrived it stayed dark blue against
+// a dark card in all of them, and nobody noticed because each copy looked
+// deliberate on its own.
+//
+// So: sweep every component and every page, every time.
+//
+// Widths, heights and flex-basis are sizes rather than spacing and stay
+// literal. calc() is allowed — an intentional multiple of a token still tracks.
+{
+	const SPACING = [
+		'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+		'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+		'gap', 'row-gap', 'column-gap'
+	];
+	const COLOUR = ['background', 'background-color', 'color', 'border', 'border-color',
+		'border-left', 'border-right', 'border-top', 'border-bottom', 'fill', 'stroke'];
+
+	const files = readdirRecursive(path.join(root, 'src'))
+		.filter((f) => f.endsWith('.svelte'))
+		.map((f) => path.relative(root, f))
+		.sort();
+
+	const rawSpacing = [];
+	const rawType = [];
+	const rawColour = [];
+
+	for (const rel of files) {
+		for (const x of rules(rel)) {
+			const sel = unscoped(x.selector);
+			const at = (prop, v) => `${rel}  ${sel} { ${prop}: ${v} }`;
+
+			for (const prop of SPACING) {
+				const v = valueOf(x.body, prop);
+				if (v && /(?<![\w.-])\d*\.?\d+rem/.test(v) && !v.includes('calc(')) {
+					rawSpacing.push(at(prop, v));
+				}
+			}
+
+			const fs = valueOf(x.body, 'font-size');
+			if (fs && /(?<![\w.-])\d*\.?\d+rem/.test(fs)) rawType.push(at('font-size', fs));
+
+			// The layout owns the palette; every hex there is a token being
+			// *defined*, which is the one legitimate place for a literal.
+			if (rel === path.join('src', 'routes', '+layout.svelte')) continue;
+			for (const prop of COLOUR) {
+				const v = valueOf(x.body, prop);
+				if (v && /#[0-9a-fA-F]{3,8}\b/.test(v)) rawColour.push(at(prop, v));
+			}
+		}
+	}
+
 	ok(
-		'Settings: spacing comes from tokens, not raw rem',
+		`spacing comes from tokens across all ${files.length} components`,
 		rawSpacing.length === 0,
 		rawSpacing.join('\n        ')
 	);
+	ok(
+		'type sizes come from tokens',
+		rawType.length === 0,
+		rawType.join('\n        ')
+	);
+	ok(
+		'colour comes from tokens — only +layout.svelte may write a literal',
+		rawColour.length === 0,
+		rawColour.join('\n        ')
+	);
 }
 
-// ─── Auth pages ────────────────────────────────────────────────────────────
+// ─── every token referenced is a token that exists ─────────────────────────
+//
+// var(--ok, var(--accent)) compiles, renders, and is wrong: --ok was never
+// defined, so every "improving" trend on /insights/compare and every team page
+// silently rendered in the brand purple instead of green. A fallback turns a
+// missing token into a plausible-looking colour, which is the worst failure
+// mode available — no error, no visual clue, just a lie about the data.
+{
+	const layout = readFileSync(path.join(root, 'src/routes/+layout.svelte'), 'utf8');
+	const defined = new Set([...layout.matchAll(/^\s*(--[\w-]+)\s*:/gm)].map((m) => m[1]));
+
+	const files = readdirRecursive(path.join(root, 'src'))
+		.filter((f) => f.endsWith('.svelte'))
+		.map((f) => path.relative(root, f));
+
+	const missing = [];
+	for (const rel of files) {
+		const src = readFileSync(path.join(root, rel), 'utf8');
+		const sm = /<style>([\s\S]*?)<\/style>/.exec(src);
+		if (!sm) continue;
+		const css = sm[1].replace(/\/\*[\s\S]*?\*\//g, '');
+		// Locally-declared custom properties count as defined for that file.
+		const local = new Set([...css.matchAll(/^\s*(--[\w-]+)\s*:/gm)].map((m) => m[1]));
+		for (const m of css.matchAll(/var\(\s*(--[\w-]+)/g)) {
+			if (!defined.has(m[1]) && !local.has(m[1])) missing.push(`${rel}: var(${m[1]})`);
+		}
+	}
+	ok(
+		'every var(--token) referenced is defined in +layout.svelte',
+		missing.length === 0,
+		missing.join('\n        ')
+	);
+}
+
+// ─── auth pages ────────────────────────────────────────────────────────────
 for (const page of ['login', 'register', 'accounts']) {
 	const r = rules(`src/routes/${page}/+page.svelte`);
 	ok(
@@ -209,13 +301,32 @@ for (const page of ['login', 'register', 'accounts']) {
 		),
 		'a login field is the first thing anyone touches'
 	);
-	const rawSpacing = r.flatMap((x) =>
-		['padding', 'margin', 'gap']
-			.map((prop) => [prop, valueOf(x.body, prop)])
-			.filter(([, v]) => v && /\d*\.?\d+rem/.test(v))
-			.map(([prop, v]) => `${unscoped(x.selector)} { ${prop}: ${v} }`)
+}
+
+// ─── every page's back link is a target, not a glyph ───────────────────────
+//
+// The ← is the most-used control on a sub-page and started life as a 1.5rem
+// character with 4px of padding on every one of them.
+{
+	const offenders = [];
+	for (const rel of readdirRecursive(path.join(root, 'src/routes'))
+		.filter((f) => f.endsWith('+page.svelte'))
+		.map((f) => path.relative(root, f))) {
+		const r = rules(rel);
+		const back = r.filter((x) => /(^|[\s,])\.back\b/.test(unscoped(x.selector)));
+		if (back.length === 0) continue; // page has no back link
+		const sized = back.some(
+			(x) =>
+				/var\(--tap-min\)/.test(valueOf(x.body, 'min-width') ?? '') &&
+				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
+		);
+		if (!sized) offenders.push(rel);
+	}
+	ok(
+		'every back link is at least 44 x 44',
+		offenders.length === 0,
+		offenders.join('\n        ')
 	);
-	ok(`/${page}: spacing comes from tokens`, rawSpacing.length === 0, rawSpacing.join('\n        '));
 }
 
 // ─── a parent must not style a child component through a class prop ────────

@@ -45,7 +45,7 @@ Last updated: 2026-07-29.
 - **`Button.svelte`** — one CTA voice, replacing 194 lines of duplicated CSS.
 - **`/settings` migrated** onto the design system: tokens, 44px targets, and
   both option pickers given proper radiogroup semantics.
-- **`/schedule` split into ten components** under `src/lib/components/schedule/`.
+- **`/schedule` split into ten components** under `src/lib/components/scouting/` (was `schedule/`).
   State stays in the route; CSS co-located verbatim per component.
 - **Auto-assign rewritten as graph colouring.** Every match is a 6-team clique,
   so assigning teams to scouts is exactly graph colouring. DSATUR plus a
@@ -104,7 +104,7 @@ the big ones and both are barely begun.
 | **0** Cheap wins | dialogs · minimal-delta auto-assign · sync UPDATE · picklist sync | **75%** |
 | **1** Auth, roles, accounts | built and additive; cutover pending | **70%** |
 | **2** Alliance selection | not started | **0%** |
-| **3** IA + redesign | routes moved; 1 of 9 pages restyled | **35%** |
+| **3** IA + redesign | routes moved; every page and component on the token scale | **85%** |
 | **4** Studio + Insights | not started | **0%** |
 
 ### Done
@@ -130,9 +130,10 @@ the big ones and both are barely begun.
    belongs between seasons.
 3. **Alliance selection** — picklist sync plus marking teams already taken
    from TBA's alliances endpoint. `tba.js` does not touch that endpoint yet.
-4. **Redesign** — the route moves are done; 8 pages still carry **1,528 lines**
-   of per-page CSS between them, `/insights` alone 429. Each page is now at its
-   final address, so restyling it happens once.
+4. **Redesign** — done as far as the system goes. Every page and all sixteen
+   components are on the token scale, enforced by a sweep rather than by
+   review. What is left is composition: what each page leads with, and how
+   dense it is. That is per-page judgement, not a migration.
 5. **Studio + Insights** — desktop route group, fixed charts.
 
 ### The redesign is deliberately stalled
