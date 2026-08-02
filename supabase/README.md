@@ -105,6 +105,11 @@ deletes the passphrase machinery. See
 
 ## The auth cutover, when you get to it
 
+The passphrase is being **replaced**, not supplemented. `0010` drops
+`has_manager_token()`, drops `event_meta.manager_token`, and rewrites all 18
+policies that currently call it. Two parallel authorisation systems is how you
+get a hole in one.
+
 0008 is additive on purpose: accounts exist and work, and nothing requires
 one. Two things flip together, and neither alone is safe:
 
@@ -118,3 +123,7 @@ tripwire fires when someone changes it.
 
 Before either: every person needs an account, and one super user has to exist.
 The bootstrap steps are at the bottom of `0008_auth.sql`.
+
+Full sequence in [`../ROADMAP.md`](../ROADMAP.md) § Phase 1. It is a one-way
+door — once policies require an authenticated user, a device that has not signed
+in stops working. Do it between seasons.
