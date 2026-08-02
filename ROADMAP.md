@@ -465,6 +465,19 @@ ranked list, not a canvas.
 Moved out of "after the redesign" — the sync UPDATE path and picklist sync were
 promoted into Phase 0 above.
 
+- **Two dashboard toggles are load-bearing and unenforceable.** Confirm email
+  and Secure email change both have to be OFF, because every address is
+  `<username>@scout.invalid` and `.invalid` is permanently unroutable by
+  design. With them on, a manager confirms every scout by hand — a per-person
+  chore that quietly stops a system being used. No migration can set or read a
+  project setting, so this lives in `supabase/README.md` under "Project
+  settings the migrations cannot set", and `verify_migrations.sql` reports the
+  symptom (accounts with a null `email_confirmed_at`).
+
+  Longer term this is an argument for an Edge Function — the first server-side
+  code in the project — which could create accounts through the admin API and
+  sidestep the confirmation flow entirely. Still not worth it: one toggle,
+  once, versus a deploy target this project does not currently have.
 - **Signing in has no visible consequence.** Found 2026-08-01 by signing in for
   the first time. The login succeeds, the redirect happens, and the app looks
   exactly as it did — because the app bar shows `session.scoutName` (the

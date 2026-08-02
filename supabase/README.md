@@ -3,6 +3,33 @@
 The migrations in `migrations/` are the source of truth for this database.
 Applied in filename order, they rebuild it from nothing.
 
+## Project settings the migrations cannot set
+
+Two dashboard toggles are load-bearing, and no SQL file can set or enforce
+them. Both are one-time.
+
+**Authentication → Providers → Email → Confirm email: OFF.**
+
+Every address in this project is `<username>@scout.invalid`. `.invalid` is
+reserved by RFC 2606 as permanently unroutable — that is the point, the address
+is an identifier and not a mailbox. So a confirmation email is sent to nowhere,
+arrives never, and every signup hangs waiting for a click that cannot happen.
+Leaving this on means a manager confirms each scout by hand in the dashboard,
+which is the sort of per-person chore that quietly stops a system being used.
+
+Note that turning it off does not retroactively confirm accounts created
+through the dashboard's "Add user" while it was on
+([supabase#29632](https://github.com/supabase/supabase/issues/29632)). Tick
+"Auto Confirm User" when creating one by hand. Accounts made through
+`/register` are unaffected once the setting is off.
+
+**Authentication → Providers → Email → Secure email change: OFF** is also
+worth doing, for the same reason: it sends confirmation to both the old and new
+address, neither of which exists.
+
+`verify_migrations.sql` reports any account with a null `email_confirmed_at`,
+which is the symptom this produces.
+
 ## The one rule
 
 **Do not change the schema through the Supabase dashboard.**

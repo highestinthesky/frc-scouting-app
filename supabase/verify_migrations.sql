@@ -222,6 +222,27 @@ checks AS (
 
     UNION ALL
 
+    -- ── unconfirmed accounts ───────────────────────────────────────────────
+    --
+    -- Every address here is <username>@scout.invalid. `.invalid` is reserved by
+    -- RFC 2606 as permanently unroutable, deliberately — the address is an
+    -- identifier, not a mailbox. So a confirmation email goes nowhere, arrives
+    -- never, and the account waits forever for a click that cannot happen.
+    --
+    -- The cause is a dashboard toggle no migration can set or read:
+    -- Authentication → Providers → Email → Confirm email. If it is on, someone
+    -- has to confirm every scout by hand, which is the kind of per-person chore
+    -- that quietly stops a system being used. This surfaces the symptom.
+    SELECT CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+           'every account is confirmed',
+           CASE WHEN count(*) = 0 THEN 'no account is waiting on a confirmation'
+                ELSE count(*)::text || ' unconfirmed: ' || string_agg(email, ', ') ||
+                     ' — turn OFF Authentication → Providers → Email → Confirm email' END
+    FROM auth.users
+    WHERE email_confirmed_at IS NULL
+
+    UNION ALL
+
     -- ── informational ──────────────────────────────────────────────────────
     SELECT 'INFO', 'accounts',
            (SELECT count(*) FROM public.profiles)::text || ' profile(s), ' ||
