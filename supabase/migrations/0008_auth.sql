@@ -301,13 +301,22 @@ GRANT SELECT, DELETE ON public.invites TO authenticated;
 -- creator. Once, by hand:
 --
 --   1. Dashboard → Authentication → Add user
---        email:    you@scout.invalid
---        password: (anything)
+--        email:    <username>@scout.invalid   ← MUST match the username below
+--        password: (anything, 6+ characters)
 --        auto-confirm: yes
---   2. Here, with that user's uuid:
+--   2. Here, with that user's uuid and THE SAME username:
 --
 --        INSERT INTO public.profiles (id, username, first_name, last_name, role)
---        VALUES ('<uuid>', 'yourname', 'First', 'Last', 'super');
+--        VALUES ('<uuid>', '<username>', 'First', 'Last', 'super');
+--
+--   The email is not a contact address and is not arbitrary. There is no
+--   username → email lookup table anywhere, by design: signIn() computes
+--   `username || '@scout.invalid'` and asks Supabase for exactly that. If the
+--   local part of the email is not the username, the account is unreachable and
+--   the only symptom is "that username and password do not match", which reads
+--   like a typo. Every account created through /register gets this right
+--   automatically; only this hand-made first one can get it wrong.
+--   verify_migrations.sql asserts the two agree.
 --
 -- Also required, once, in Dashboard → Authentication → Providers → Email:
 --   · Confirm email: OFF. Addresses are synthetic and unroutable, so a

@@ -197,6 +197,31 @@ checks AS (
 
     UNION ALL
 
+    -- ── every profile is reachable by its own username ─────────────────────
+    --
+    -- There is no username → email lookup table, by design: signIn() computes
+    -- `username || '@scout.invalid'` and asks Supabase for exactly that
+    -- address. So a profile whose auth user has a different email is an account
+    -- nobody can log into, and the only symptom is "that username and password
+    -- do not match" — which reads like a typo and sends you looking at the
+    -- password.
+    --
+    -- /register cannot get this wrong; it derives the email the same way. The
+    -- hand-made bootstrap super user can, and did.
+    SELECT CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+           'every profile is reachable by its username',
+           CASE WHEN count(*) = 0 THEN 'username matches the auth email on every profile'
+                ELSE 'UNREACHABLE: ' || string_agg(detail, '; ') END
+    FROM (
+        SELECT p.username || ' expects ' || p.username || '@scout.invalid but the auth user is ' ||
+               COALESCE(u.email, '(no auth user)') AS detail
+        FROM public.profiles p
+        LEFT JOIN auth.users u ON u.id = p.id
+        WHERE u.email IS DISTINCT FROM p.username || '@scout.invalid'
+    ) bad
+
+    UNION ALL
+
     -- ── informational ──────────────────────────────────────────────────────
     SELECT 'INFO', 'accounts',
            (SELECT count(*) FROM public.profiles)::text || ' profile(s), ' ||
