@@ -103,7 +103,7 @@ the big ones and both are barely begun.
 |---|---|---|
 | **0** Cheap wins | dialogs · minimal-delta auto-assign · sync UPDATE · picklist sync | **100%** |
 | **1** Auth, roles, accounts | built and additive; cutover pending | **70%** |
-| **2** Alliance selection | picklist syncs; TBA alliances endpoint next | **40%** |
+| **2** Alliance selection | picklist syncs; taken teams marked live from TBA | **90%** |
 | **3** IA + redesign | routes moved; every page and component on the token scale | **85%** |
 | **4** Studio + Insights | not started | **0%** |
 
@@ -123,6 +123,12 @@ the big ones and both are barely begun.
   so a reorder is one row written instead of the whole list. Migration 0009,
   `lib/picklist.js` + `lib/picklist-store.js`, 45 tests. *Needs migration 0009
   applied.*
+- **Alliance selection board.** During selection the picklist marks teams that
+  are already taken, straight from TBA's alliances endpoint, and names the best
+  team still on your list. Declined teams count as gone — under FRC rules they
+  are out of selection entirely, and "declined" reads like "available".
+  `lib/alliances.js`, 53 tests. The alliance array rides the existing
+  `schedules` row, so the one person with a TBA key publishes for everyone.
 
 ### Not done, in dependency order
 
@@ -131,9 +137,10 @@ the big ones and both are barely begun.
    and no policy requires an account. What remains is migration `0010`, the
    flag, and giving everyone an account first. That is a hard cutover and
    belongs between seasons.
-2. **Alliance selection** — picklist sync is done. What remains is marking
-   teams already taken, from TBA's alliances endpoint. `tba.js` does not touch
-   that endpoint yet.
+2. **Alliance selection** — the board works. What is left is the part that
+   needs a real event to design against: whether managers want the picklist to
+   auto-collapse taken teams, and whether the second pick wants a separate
+   ranking. Both are guesses until someone runs a selection with this.
 3. **Redesign** — done as far as the system goes. Every page and all sixteen
    components are on the token scale, enforced by a sweep rather than by
    review. What is left is composition: what each page leads with, and how

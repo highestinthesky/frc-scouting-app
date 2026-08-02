@@ -81,7 +81,7 @@ still parses fine.
 | `migrations/0006_tba_event_key.sql` | TBA key decoupled from the sync code |
 | `migrations/0007_entry_updated_at.sql` | edit watermark, so corrections reach teammates |
 | `migrations/0008_auth.sql` | accounts, roles, invites — **additive**, nothing enforced yet |
-| `migrations/0009_picklist.sql` | the picklist, one row per team |
+| `migrations/0009_picklist.sql` | the picklist, one row per team; alliances on `schedules` |
 | `verify_entries.sql` | drift assertions, read-only |
 
 Planned next: `0010_policies.sql`, the cutover — swaps every policy to

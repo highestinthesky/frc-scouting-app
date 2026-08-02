@@ -52,41 +52,178 @@ export async function fetchAndCacheSchedule(eventCode, apiKey, tbaEventKey) {
 	const code = eventCode.trim().toLowerCase();
 	// The TBA key drives the fetch; the event code is just the cache namespace.
 	const tbaKey = (tbaEventKey ?? '').trim().toLowerCase() || code;
-	const url = `${TBA_BASE}/event/${tbaKey}/matches/simple`;
-	// 15-second hard timeout so a hung connection (flaky wifi, a broken
-	// service worker intercepting the request, a stuck CORS preflight)
-	// can never lock the UI in its busy state.
+	const matches = await tbaGet(`/event/${tbaKey}/matches/simple`, apiKey, tbaKey);
+	if (!Array.isArray(matches)) {
+		throw new Error('Unexpected response from TBA — expected a match array.');
+	}
+	await cacheSchedule(code, matches);
+	return matches;
+}
+
+/**
+ * One GET against TBA, with the timeout and the error phrasing in one place.
+ *
+ * The 15-second hard timeout is not decoration: flaky venue wifi, a broken
+ * service worker intercepting the request, and a stuck CORS preflight all hang
+ * rather than fail, and any of them would otherwise lock the UI in its busy
+ * state with no way out but a reload.
+ *
+ * @param {string} path      e.g. "/event/2027nyny/alliances"
+ * @param {string} apiKey    TBA read key
+ * @param {string} tbaKey    used only to phrase a 404
+ * @returns {Promise<any>}
+ */
+async function tbaGet(path, apiKey, tbaKey) {
+	if (!apiKey || !apiKey.trim()) {
+		throw new Error(
+			'No TBA API key set. Get a free key at thebluealliance.com/account and add it in Scouting → TBA API key.'
+		);
+	}
 	const ctrl = new AbortController();
 	const timer = setTimeout(() => ctrl.abort(), 15_000);
 	let resp;
 	try {
-		resp = await fetch(url, {
+		resp = await fetch(`${TBA_BASE}${path}`, {
 			headers: { 'X-TBA-Auth-Key': apiKey.trim() },
 			signal: ctrl.signal
 		});
 	} catch (e) {
 		if (e?.name === 'AbortError') {
-			throw new Error('TBA request timed out after 15s. Try again, or do a hard refresh if the issue persists.');
+			throw new Error(
+				'TBA request timed out after 15s. Try again, or do a hard refresh if the issue persists.'
+			);
 		}
 		throw new Error('Could not reach The Blue Alliance. Check your network connection.');
 	} finally {
 		clearTimeout(timer);
 	}
 	if (resp.status === 401) {
-		throw new Error('TBA API key not accepted (401). Check Schedule → TBA API key.');
+		throw new Error('TBA API key not accepted (401). Check Scouting → TBA API key.');
 	}
 	if (resp.status === 404) {
 		throw new Error(`Event "${tbaKey}" not found on The Blue Alliance. Check the TBA event key.`);
 	}
-	if (!resp.ok) {
-		throw new Error(`TBA request failed (${resp.status}).`);
+	if (!resp.ok) throw new Error(`TBA request failed (${resp.status}).`);
+	return resp.json();
+}
+
+// ─── alliance selection ────────────────────────────────────────────────────
+//
+// TBA publishes alliances as they are formed, so during selection this is the
+// live answer to "who is still available". Parsing lives in lib/alliances.js;
+// this is fetch and cache only.
+
+/**
+ * Fetch the alliance list and cache it.
+ *
+ * Cached because selection happens in a gym on venue wifi, and the picklist
+ * has to keep answering "who is left" through a dropout. A stale answer with a
+ * visible timestamp beats a spinner.
+ *
+ * `null` from TBA means selection has not started, and is cached as an empty
+ * array so callers can tell "asked, nothing yet" from "never asked".
+ *
+ * @param {string} eventCode     team sync code — the cache namespace
+ * @param {string} apiKey
+ * @param {string} [tbaEventKey]
+ * @returns {Promise<any[]>}
+ */
+export async function fetchAndCacheAlliances(eventCode, apiKey, tbaEventKey) {
+	if (!eventCode || !eventCode.trim()) {
+		throw new Error('No event code set. Add one in Settings → Event code.');
 	}
-	const matches = await resp.json();
-	if (!Array.isArray(matches)) {
-		throw new Error('Unexpected response from TBA — expected a match array.');
+	const code = eventCode.trim().toLowerCase();
+	const tbaKey = (tbaEventKey ?? '').trim().toLowerCase() || code;
+	const raw = await tbaGet(`/event/${tbaKey}/alliances`, apiKey, tbaKey);
+	// TBA returns null before selection, an array during and after it.
+	const alliances = Array.isArray(raw) ? raw : [];
+	await cacheAlliances(code, alliances);
+	return alliances;
+}
+
+/**
+ * Read the cached alliance list.
+ * @param {string} eventCode
+ * @returns {Promise<{fetchedAt: string, alliances: any[]}|null>}
+ */
+export async function getCachedAlliances(eventCode) {
+	if (!eventCode) return null;
+	const stored = await getSetting(`tba-alliances:${eventCode.trim().toLowerCase()}`);
+	if (!stored || !Array.isArray(stored.alliances)) return null;
+	return stored;
+}
+
+/** Write the alliance cache. Shared by the TBA fetch and the Supabase pull. */
+async function cacheAlliances(eventCode, alliances, fetchedAt) {
+	await setSetting(`tba-alliances:${eventCode}`, {
+		fetchedAt: fetchedAt ?? new Date().toISOString(),
+		alliances
+	});
+}
+
+/**
+ * Manager-only: publish the alliance list so devices without a TBA key can see
+ * it. Rides the existing `schedules` row — see migration 0009.
+ *
+ * Best-effort by design. Selection is live and the local answer is already
+ * correct on this device; failing the manager's refresh because the upload
+ * didn't land would be the wrong trade at the one moment nobody can wait.
+ *
+ * @param {string} eventCode
+ * @param {any[]} alliances
+ * @param {object} opts
+ * @param {string} [opts.managerToken]
+ * @returns {Promise<boolean>} whether the upload landed
+ */
+export async function publishAlliances(eventCode, alliances, opts = {}) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code || !Array.isArray(alliances)) return false;
+	const sid = await deriveSessionId(code);
+	if (!sid) return false;
+	try {
+		const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
+		const { error } = await client
+			.from('schedules')
+			.update({ alliances, alliances_fetched_at: new Date().toISOString() })
+			.eq('session_id', sid);
+		return !error;
+	} catch (_e) {
+		return false;
 	}
-	await cacheSchedule(code, matches);
-	return matches;
+}
+
+/**
+ * Pull the published alliance list into the local cache.
+ *
+ * Returns null when the column doesn't exist yet (migration 0009 unapplied) or
+ * nothing has been published, so callers can keep whatever they already have
+ * rather than blanking the board. That fallback is not hypothetical: this
+ * project has already shipped a client that hard-required an unapplied column
+ * and broke sync on every tick.
+ *
+ * @param {string} eventCode
+ * @returns {Promise<{fetchedAt: string, alliances: any[]}|null>}
+ */
+export async function pullAlliances(eventCode) {
+	const code = (eventCode ?? '').trim().toLowerCase();
+	if (!code) return null;
+	const sid = await deriveSessionId(code);
+	if (!sid) return null;
+	try {
+		const client = createSupabaseClient(sid);
+		const { data, error } = await client
+			.from('schedules')
+			.select('alliances, alliances_fetched_at')
+			.eq('session_id', sid)
+			.maybeSingle();
+		if (error || !data || !Array.isArray(data.alliances)) return null;
+		if (data.alliances.length === 0 && !data.alliances_fetched_at) return null;
+		const fetchedAt = data.alliances_fetched_at ?? new Date().toISOString();
+		await cacheAlliances(code, data.alliances, fetchedAt);
+		return { fetchedAt, alliances: data.alliances };
+	} catch (_e) {
+		return null;
+	}
 }
 
 /** Write the schedule to IndexedDB. Used by manager fetch and scout pull. */

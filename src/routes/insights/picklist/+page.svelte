@@ -9,6 +9,14 @@
 	import { syncState } from '$lib/sync.svelte.js';
 	import { rankForMove, rankBetween, ordered } from '$lib/picklist.js';
 	import * as store from '$lib/picklist-store.js';
+	import {
+		fetchAndCacheAlliances,
+		getCachedAlliances,
+		publishAlliances,
+		pullAlliances
+	} from '$lib/tba.js';
+	import { standingsByTeam, selectionStarted, nextAvailable, describe } from '$lib/alliances.js';
+	import { relativeTime } from '$lib/format.js';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -103,6 +111,7 @@
 		await store.migrateLegacy(eventCode);
 		await store.rebalanceIfNeeded(eventCode);
 		await reload();
+		await loadAlliances();
 		loading = false;
 		syncNow();
 	});
@@ -114,6 +123,9 @@
 			(async () => {
 				await store.migrateLegacy(eventCode);
 				await reload();
+				alliancesRaw = null;
+				alliancesAt = '';
+				await loadAlliances();
 				syncNow();
 			})();
 		}
@@ -239,6 +251,87 @@
 		await mutate(() => store.clearAll(eventCode));
 	}
 
+	// ─── alliance selection ────────────────────────────────────────────────────
+	//
+	// During selection the picklist's job changes. Ranking is done; the only
+	// question is "who on our list is still available", and it changes every
+	// ninety seconds. TBA publishes alliances as they form, so this is a fetch.
+
+	/** Raw TBA payload, cached locally so a wifi dropout mid-selection doesn't
+	 *  blank the board. */
+	let alliancesRaw = $state(/** @type {any[]|null} */ (null));
+	let alliancesAt = $state('');
+	let alliancesBusy = $state(false);
+	let alliancesError = $state('');
+	let clock = $state(new Date());
+
+	const standings = $derived(standingsByTeam(alliancesRaw));
+	const selectionLive = $derived(selectionStarted(alliancesRaw));
+	const upNext = $derived(selectionLive ? nextAvailable(primary, standings) : null);
+	const takenFromList = $derived(primary.filter((r) => standings.has(r.teamNumber)).length);
+
+	/** Local cache first so the board paints instantly, then whatever the
+	 *  manager last published — which is the only source a device without a TBA
+	 *  key has. */
+	async function loadAlliances() {
+		const cached = await getCachedAlliances(eventCode);
+		if (cached) {
+			alliancesRaw = cached.alliances;
+			alliancesAt = cached.fetchedAt;
+		}
+		const pulled = await pullAlliances(eventCode);
+		if (pulled && (!alliancesAt || pulled.fetchedAt > alliancesAt)) {
+			alliancesRaw = pulled.alliances;
+			alliancesAt = pulled.fetchedAt;
+		}
+	}
+
+	/**
+	 * Refresh the board.
+	 *
+	 * With a TBA key: ask TBA, then publish so the rest of the table sees it.
+	 * Without one: pull whatever the key-holder last published. Both paths are
+	 * the same button, because "check now" is what the user means either way and
+	 * which of the two runs is an implementation detail they should not have to
+	 * hold in their head during selection.
+	 */
+	async function refreshAlliances() {
+		if (alliancesBusy || !eventCode) return;
+		alliancesBusy = true;
+		alliancesError = '';
+		try {
+			if (session.tbaApiKey?.trim()) {
+				alliancesRaw = await fetchAndCacheAlliances(
+					eventCode,
+					session.tbaApiKey,
+					session.tbaEventKey
+				);
+				alliancesAt = new Date().toISOString();
+				// Best-effort. The local answer is already right on this device.
+				publishAlliances(eventCode, alliancesRaw, { managerToken: session.managerToken });
+			} else {
+				const pulled = await pullAlliances(eventCode);
+				if (pulled) {
+					alliancesRaw = pulled.alliances;
+					alliancesAt = pulled.fetchedAt;
+				} else {
+					alliancesError =
+						'Nothing published yet. Whoever has the TBA API key needs to check first.';
+				}
+			}
+		} catch (e) {
+			// Keep whatever was cached. A stale board beats a blank one.
+			alliancesError = e?.message ?? 'Could not reach The Blue Alliance.';
+		} finally {
+			alliancesBusy = false;
+		}
+	}
+
+	$effect(() => {
+		const id = setInterval(() => (clock = new Date()), 30_000);
+		return () => clearInterval(id);
+	});
+
 	let teamSearch = $state('');
 	const filteredAvailable = $derived(
 		teamSearch.trim()
@@ -283,6 +376,56 @@
 			<p>No entries on file. Record some entries first, then come back to build a picklist.</p>
 		</div>
 	{:else}
+		<!-- ── Alliance selection ───────────────────────────────────── -->
+		<section class="block sel" class:live={selectionLive}>
+			<div class="block-head">
+				<h2>{selectionLive ? 'Selection in progress' : 'Alliance selection'}</h2>
+				<div class="block-actions">
+					{#if alliancesAt}
+						<small class="muted">checked {relativeTime(alliancesAt, clock)}</small>
+					{/if}
+					<button class="link-btn" onclick={refreshAlliances} disabled={alliancesBusy}>
+						{alliancesBusy ? 'Checking…' : 'Check now'}
+					</button>
+				</div>
+			</div>
+
+			{#if alliancesError}
+				<p class="sel-err">
+					{alliancesError}
+					{#if alliancesAt}Showing the list from {relativeTime(alliancesAt, clock)}.{/if}
+				</p>
+			{/if}
+
+			{#if !selectionLive}
+				<p class="muted hint">
+					{#if alliancesAt}
+						Not started yet. Check again when captains are called.
+					{:else}
+						Once selection starts, check here to see which of your picks are gone.
+					{/if}
+				</p>
+			{:else}
+				<!-- The one number that matters when it is your turn. -->
+				{#if upNext}
+					<p class="up-next">
+						<span class="up-label">Best still available</span>
+						<strong class="up-team">Team {upNext.teamNumber}</strong>
+						<span class="up-rank">#{primary.findIndex((r) => r.teamNumber === upNext.teamNumber) + 1} on your list</span>
+					</p>
+				{:else if primary.length > 0}
+					<p class="up-next none">Every team on your list is taken.</p>
+				{/if}
+				<p class="muted small">
+					{takenFromList} of your {primary.length}
+					{primary.length === 1 ? 'pick' : 'picks'} taken.
+					<!-- Stated rather than implied: a declined team is out of selection
+					     entirely under FRC rules, and "declined" reads like "available". -->
+					Teams that declined an invitation are gone too.
+				</p>
+			{/if}
+		</section>
+
 		<!-- ── Primary picklist ─────────────────────────────────────── -->
 		<section class="block">
 			<div class="block-head">
@@ -307,10 +450,16 @@
 				<ol class="picked">
 					{#each primary as r, i (r.teamNumber)}
 						{@const t = teamFor(r.teamNumber)}
-						<li>
+						{@const gone = standings.get(r.teamNumber)}
+						<li class:taken={gone}>
 							<span class="rank">{i + 1}</span>
 							<span class="team-num">Team {r.teamNumber}</span>
-							{#if t}
+							{#if gone}
+								<!-- Struck through AND labelled. Colour and weight alone
+								     would be the only signal, which fails under gym glare
+								     and for colourblind users. -->
+								<span class="gone">{describe(gone)}</span>
+							{:else if t}
 								<span class="ministats">{t.entryCount}e · {t.matchesCovered}m{#if t.breakdownCount > 0} · {t.breakdownCount}b{/if}</span>
 							{:else}
 								<span class="ministats muted">no entries on this device</span>
@@ -434,8 +583,12 @@
 			{:else}
 				<ul class="available">
 					{#each filteredAvailable as t (t.teamNumber)}
-						<li>
+						{@const gone = standings.get(t.teamNumber)}
+						<li class:taken={gone}>
 							<span class="team-num">Team {t.teamNumber}</span>
+							{#if gone}
+								<span class="gone">{describe(gone)}</span>
+							{/if}
 							<span class="ministats">
 								{t.entryCount} {t.entryCount === 1 ? 'entry' : 'entries'}
 								{#if t.breakdownCount > 0} · {t.breakdownCount} broken{/if}
@@ -509,6 +662,42 @@
 	.share.ro { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning); }
 	.share a { color: inherit; font-weight: 600; }
 	.stale { color: var(--danger); }
+
+	/* ── alliance selection ───────────────────────────── */
+	.sel.live { border-color: var(--accent); background: var(--accent-soft); }
+	.sel .block-actions { align-items: baseline; gap: var(--space-3); }
+	.sel-err { margin: 0 0 var(--space-2); font-size: var(--fs-sm); color: var(--danger); }
+
+	.up-next {
+		display: flex;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		margin: 0 0 var(--space-2);
+	}
+	.up-label {
+		font-size: var(--fs-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+	}
+	.up-team { font-size: var(--fs-xl); color: var(--accent); font-variant-numeric: tabular-nums; }
+	.up-rank { font-size: var(--fs-sm); color: var(--text-muted); }
+	.up-next.none { color: var(--warning); font-weight: 600; }
+
+	/* A team already on an alliance. Dimmed, struck through AND labelled —
+	   three signals, because this one gets read across a table under gym
+	   lighting by someone who has ninety seconds. */
+	li.taken { opacity: 0.55; }
+	li.taken .team-num { text-decoration: line-through; }
+	.gone {
+		font-size: var(--fs-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		font-weight: 700;
+		color: var(--danger);
+		margin-right: auto;
+	}
 
 	/* ── weighted scoring ─────────────────────────────── */
 	.weights { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }

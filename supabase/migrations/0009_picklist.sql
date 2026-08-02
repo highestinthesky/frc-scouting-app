@@ -103,6 +103,25 @@ CREATE TRIGGER picklist_prefs_touch_updated_at
     BEFORE UPDATE ON public.picklist_prefs
     FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
+-- ─── alliances ride on the schedules row ───────────────────────────────────
+--
+-- TBA's alliance list answers "who is still available" during selection, and
+-- fetching it needs a TBA API key. One person at the strategy table has one.
+-- Everyone else has a phone with the app open and no key, which would leave
+-- them looking at a picklist that cannot tell them what happened two picks ago.
+--
+-- A second table would need its own policies and its own sync path for data
+-- that is (a) one small array, (b) per event, (c) manager-written, (d) already
+-- described exactly by the `schedules` row. So it goes there: the whole event's
+-- TBA state in one row, one policy set, one pull.
+
+ALTER TABLE public.schedules
+    ADD COLUMN IF NOT EXISTS alliances jsonb NOT NULL DEFAULT '[]'::jsonb,
+    -- Distinct from fetched_at, which belongs to the match list. Selection
+    -- happens hours after the schedule is published, and a manager needs to
+    -- know how old the ALLIANCE answer is, not how old the schedule is.
+    ADD COLUMN IF NOT EXISTS alliances_fetched_at timestamptz;
+
 -- ─── RLS ───────────────────────────────────────────────────────────────────
 -- Drop every existing policy by name first. Adding a policy next to one that
 -- is already there ORs the two together, so a stricter new policy next to a
