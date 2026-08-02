@@ -45,6 +45,20 @@ conclude a table has no policies when you simply never saw them.
 ## Checking for drift
 
 ```sql
+-- paste supabase/verify_migrations.sql into the SQL editor
+```
+
+Asserts that 0007, 0008 and 0009 actually landed: every table, column,
+function, trigger and index they create, RLS switched on, at least one policy
+per table, `search_path` pinned on every SECURITY DEFINER function, and that the
+username index is genuinely UNIQUE and on `lower()`. **Run this after applying
+them** — the editor shows only the last statement's result, so a 173-statement
+script that fails at statement 40 looks exactly like one that succeeded.
+
+It checks existence, not behaviour. A policy can be present and permit the wrong
+thing; finding that out means signing in as two different people and trying.
+
+```sql
 -- paste supabase/verify_entries.sql into the SQL editor
 ```
 
@@ -96,7 +110,8 @@ still parses fine.
 | `migrations/0007_entry_updated_at.sql` | edit watermark, so corrections reach teammates |
 | `migrations/0008_auth.sql` | accounts, roles, invites — **additive**, nothing enforced yet |
 | `migrations/0009_picklist.sql` | the picklist, one row per team; alliances on `schedules` |
-| `verify_entries.sql` | drift assertions, read-only |
+| `verify_entries.sql` | drift assertions for `entries`, read-only |
+| `verify_migrations.sql` | did 0007/0008/0009 land? read-only |
 
 Planned next: `0010_policies.sql`, the cutover — swaps every policy to
 `to authenticated`, replaces `has_manager_token()` with `is_manager()`, and
