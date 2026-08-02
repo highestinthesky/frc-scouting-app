@@ -25,6 +25,10 @@
 	/** Local edits the server has not confirmed. Non-zero for a scout device
 	 *  forever, by design — see syncNow(). */
 	let pendingCount = $state(0);
+	/** A sync arrived while one was already running. Two taps in a second is
+	 *  normal during selection, and dropping the second one silently means the
+	 *  edit sits unsent until something else happens to trigger a tick. */
+	let syncQueued = $state(false);
 
 	/**
 	 * One row per team: { teamNumber, status, rank, updatedAt, pushedAt, ... }.
@@ -62,6 +66,12 @@
 		const w = await store.localWeights(eventCode);
 		// Merge rather than replace: a metric added to form-config since these
 		// weights were saved needs a default, not undefined.
+		//
+		// `applyingWeights` stops the save effect below from treating a value we
+		// just READ as a value the user just CHANGED — otherwise every pull
+		// writes the weights back and marks them dirty for the next push, and
+		// two devices ping-pong an unchanged object between them forever.
+		applyingWeights = true;
 		weights = {
 			...Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 1])),
 			...(w?.weights ?? {})
@@ -76,7 +86,11 @@
 	 * forever, which is correct: they are a local scratchpad, not the list.
 	 */
 	async function syncNow() {
-		if (!eventCode || syncing) return;
+		if (!eventCode) return;
+		if (syncing) {
+			syncQueued = true;
+			return;
+		}
 		syncing = true;
 		try {
 			const { changed, pending, error } = await store.sync(eventCode, {
@@ -93,6 +107,10 @@
 			syncError = e?.message ?? 'Could not reach the server.';
 		} finally {
 			syncing = false;
+			if (syncQueued) {
+				syncQueued = false;
+				syncNow();
+			}
 		}
 	}
 
@@ -187,6 +205,7 @@
 
 	let showScored = $state(false);
 	let weightsDirty = $state(false);
+	let applyingWeights = $state(false);
 
 	const scored = $derived.by(() => {
 		if (!summary || !showScored) return [];
@@ -205,6 +224,10 @@
 	// write a hundred times per drag. Flagged here, flushed below.
 	$effect(() => {
 		weights;
+		if (applyingWeights) {
+			applyingWeights = false;
+			return;
+		}
 		if (!loading) weightsDirty = true;
 	});
 

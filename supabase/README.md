@@ -55,6 +55,20 @@ check nobody runs — this one answers yes or no.
 Run it after applying a migration, after anyone touches the dashboard, and
 before each season.
 
+## What the client assumes about this schema
+
+`npm test` covers the client side of these tables:
+
+| | |
+|---|---|
+| `src/lib/db.test.mjs` | the IndexedDB version bumps, against a real (faked) IndexedDB — including the v2 → v3 upgrade with existing data, and the legacy picklist migration |
+| `src/lib/picklist.test.mjs` | rank arithmetic and per-team merge |
+| `src/lib/alliances.test.mjs` | TBA's alliance payload |
+
+None of them talk to Postgres. A migration that parses and a client that passes
+its tests can still disagree — `verify_entries.sql` is what checks the live
+database, and it only covers `entries`.
+
 ## Checking syntax
 
 ```

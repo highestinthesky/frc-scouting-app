@@ -13,7 +13,8 @@ import {
 	ordered,
 	rankForMove,
 	mergeRows,
-	pendingRows
+	pendingRows,
+	deletedElsewhere
 } from './picklist.js';
 
 let pass = 0;
@@ -233,6 +234,62 @@ const row = (teamNumber, rank, updatedAt = '2026-08-01T00:00:00Z', extra = {}) =
 	ok('edited-since-push rows are pending', p.includes(118));
 	ok('never-pushed rows are pending', p.includes(1678) && p.includes(2056));
 	eq('and nothing else is', p.length, 3);
+}
+
+// ─── deletedElsewhere ──────────────────────────────────────────────────────
+{
+	const T = '2026-08-01T10:00:00Z';
+	const LATER = '2026-08-01T11:00:00Z';
+	const mk = (teamNumber, o = {}) =>
+		({ teamNumber, rank: 1, updatedAt: T, pushedAt: T, deleted: false, ...o });
+
+	// The base case: pushed, unchanged since, absent from the server.
+	const drop = deletedElsewhere([mk(254)], []);
+	ok('a pushed row missing from the server is dropped', drop.length === 1);
+
+	ok(
+		'a row the server still has is kept',
+		deletedElsewhere([mk(254)], [254]).length === 0
+	);
+
+	// Never pushed: the server has never seen it, so its absence says nothing.
+	// Dropping here would silently discard a team added while offline — which
+	// is the exact scenario the tombstone design exists to prevent.
+	ok(
+		'a never-pushed row is kept',
+		deletedElsewhere([mk(254, { pushedAt: null })], []).length === 0
+	);
+
+	// Edited since the last push: edit beats delete. Discarding an edit
+	// somebody just made is worse than resurrecting a row they can remove
+	// again on purpose.
+	ok(
+		'a row edited since its last push is kept',
+		deletedElsewhere([mk(254, { updatedAt: LATER })], []).length === 0
+	);
+
+	ok(
+		'an existing tombstone is not re-tombstoned',
+		deletedElsewhere([mk(254, { deleted: true })], []).length === 0
+	);
+
+	// Mixed set, since that is what a real pull looks like.
+	const local = [
+		mk(254), // pushed, unchanged, gone remotely -> drop
+		mk(118, { pushedAt: null }), // added offline           -> keep
+		mk(1678, { updatedAt: LATER }), // edited locally      -> keep
+		mk(2056), // still on the server              -> keep
+		mk(971, { deleted: true }) // already tombstoned      -> keep
+	];
+	const dropped = deletedElsewhere(local, [2056]).map((r) => r.teamNumber);
+	ok('only the unambiguous case is dropped', dropped.join() === '254', dropped.join());
+
+	ok('an empty local list is fine', deletedElsewhere([], [1, 2, 3]).length === 0);
+	// A pull that returns nothing because the request failed would look like
+	// "everything was deleted". Callers must not reach here on an error — the
+	// store throws before this point — but the function itself has no way to
+	// tell, which is worth stating.
+	ok('an empty remote list drops every eligible row', deletedElsewhere([mk(1), mk(2)], []).length === 2);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

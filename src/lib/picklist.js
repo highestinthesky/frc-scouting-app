@@ -174,3 +174,38 @@ export function mergeRows(local, remote) {
 export function pendingRows(rows) {
 	return rows.filter((r) => !r.pushedAt || String(r.updatedAt) > String(r.pushedAt));
 }
+
+/**
+ * Local rows that somebody else deleted, and that this device should therefore
+ * drop too.
+ *
+ * A pull returns the whole list, so a row that is here and not there was
+ * removed by another manager. Without this the deleting manager watches the
+ * team disappear and everyone else keeps it — one list disagreeing with itself,
+ * which is worse than either answer.
+ *
+ * Three rows are deliberately NOT deleted:
+ *
+ *   · Never pushed. The server has never seen it, so its absence says nothing.
+ *     Deleting here would silently discard a team added while offline.
+ *   · Already tombstoned. Nothing to do.
+ *   · Edited since the last push. Delete-versus-edit has no correct answer, but
+ *     discarding an edit somebody just made is the worse of the two: they
+ *     watched it happen and have no reason to check. Edit wins; the next push
+ *     puts the row back, and the other manager can remove it again on purpose.
+ *
+ * @template {{teamNumber: number, updatedAt: string, pushedAt?: string|null, deleted?: boolean}} T
+ * @param {T[]} local
+ * @param {Iterable<number>} remoteTeamNumbers
+ * @returns {T[]} the subset to tombstone
+ */
+export function deletedElsewhere(local, remoteTeamNumbers) {
+	const remote = new Set(remoteTeamNumbers);
+	return local.filter(
+		(r) =>
+			!r.deleted &&
+			Boolean(r.pushedAt) &&
+			String(r.updatedAt) <= String(r.pushedAt) &&
+			!remote.has(r.teamNumber)
+	);
+}

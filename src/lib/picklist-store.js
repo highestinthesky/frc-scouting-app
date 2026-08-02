@@ -14,7 +14,15 @@
 
 import { db } from './db.js';
 import { createSupabaseClient, deriveSessionId } from './supabase.js';
-import { mergeRows, ordered, needsRebalance, rebalance, rankBetween, STEP } from './picklist.js';
+import {
+	mergeRows,
+	ordered,
+	needsRebalance,
+	rebalance,
+	rankBetween,
+	deletedElsewhere,
+	STEP
+} from './picklist.js';
 
 /** @typedef {'pick'|'avoid'} PickStatus */
 
@@ -118,6 +126,12 @@ export async function clearAll(eventCode) {
 
 // ─── weights ───────────────────────────────────────────────────────────────
 
+// Metric weights are the one part of the picklist where a whole-document
+// last-write-wins is right: a weight set is only meaningful together, and two
+// managers do not edit sliders simultaneously the way they edit the list.
+// Shared anyway, because "what are we optimising for" is a decision the
+// strategy table makes once and everyone should be looking at.
+
 const weightsKey = (eventCode) => `picklist:weights:${norm(eventCode)}`;
 
 export async function localWeights(eventCode) {
@@ -128,8 +142,70 @@ export async function localWeights(eventCode) {
 export async function putWeights(eventCode, weights) {
 	await db.settings.put({
 		key: weightsKey(eventCode),
-		value: { weights, updatedAt: now() }
+		value: { weights, updatedAt: now(), pushed: false }
 	});
+}
+
+/**
+ * Push local weights if they are newer, pull the server's if they are.
+ *
+ * Returns the winning set, or null when there is nothing anywhere.
+ *
+ * @param {string} eventCode
+ * @param {object} opts
+ * @param {string} [opts.managerToken]
+ * @param {string} [opts.updatedBy]
+ * @returns {Promise<{weights: object, updatedAt: string}|null>}
+ */
+export async function syncWeights(eventCode, opts = {}) {
+	const code = norm(eventCode);
+	const sid = await deriveSessionId(code);
+	if (!sid) return null;
+
+	const mine = await localWeights(code);
+
+	let remote = null;
+	try {
+		const client = createSupabaseClient(sid);
+		const { data, error } = await client
+			.from('picklist_prefs')
+			.select('weights, updated_at')
+			.eq('session_id', sid)
+			.maybeSingle();
+		// A missing table means migration 0009 is not applied. Weights stay
+		// local rather than the page erroring; the list is the important part.
+		if (!error && data) remote = { weights: data.weights, updatedAt: data.updated_at };
+	} catch {
+		return mine;
+	}
+
+	if (remote && (!mine || String(remote.updatedAt) > String(mine.updatedAt))) {
+		await db.settings.put({
+			key: weightsKey(code),
+			value: { ...remote, pushed: true }
+		});
+		return remote;
+	}
+
+	if (mine && !mine.pushed && opts.managerToken) {
+		try {
+			const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
+			const { error } = await client.from('picklist_prefs').upsert(
+				{
+					session_id: sid,
+					event_code: code,
+					weights: mine.weights,
+					updated_by: opts.updatedBy ?? null
+				},
+				{ onConflict: 'session_id' }
+			);
+			if (!error) await db.settings.put({ key: weightsKey(code), value: { ...mine, pushed: true } });
+		} catch {
+			// Retried on the next tick.
+		}
+	}
+
+	return mine;
 }
 
 // ─── sync ──────────────────────────────────────────────────────────────────
@@ -170,16 +246,17 @@ export async function pull(eventCode) {
 
 	const before = await db.picklist.where('eventCode').equals(code).toArray();
 
-	// A row the server does not have, which this device believes it pushed,
-	// was deleted by someone else. Tombstone it locally so it disappears here
-	// too — without this the deleting manager sees it go and everyone else
-	// keeps it, which is the same list disagreeing with itself.
-	const remoteTeams = new Set(remote.map((r) => r.teamNumber));
-	const deletedElsewhere = before
-		.filter((r) => !r.deleted && r.pushedAt && !remoteTeams.has(r.teamNumber))
-		.map((r) => ({ ...r, deleted: true, updatedAt: now(), pushedAt: now() }));
+	// Rows another manager removed. The rule for which of those this device
+	// should drop lives in picklist.js, where it is testable.
+	const stamp = now();
+	const gone = deletedElsewhere(before, remote.map((r) => r.teamNumber)).map((r) => ({
+		...r,
+		deleted: true,
+		updatedAt: stamp,
+		pushedAt: stamp
+	}));
 
-	const merged = mergeRows([...before, ...deletedElsewhere], remote);
+	const merged = mergeRows([...before, ...gone], remote);
 	if (!changed(before, merged)) return false;
 	await db.picklist.bulkPut(merged);
 	return true;
@@ -284,7 +361,19 @@ export async function sync(eventCode, opts = {}) {
 		if (!error) error = e?.message ?? 'pull failed';
 	}
 
-	return { changed, pending: (await localPending(eventCode)).length, error };
+	// Weights ride the same call so the page has one thing to invoke. Their
+	// change has to be reported too — the page re-reads only when told
+	// something moved, and a weight set pulled from a colleague that nothing
+	// re-reads is a weight set nobody sees.
+	const weightsBefore = (await localWeights(eventCode))?.updatedAt ?? '';
+	await syncWeights(eventCode, opts);
+	const weightsAfter = (await localWeights(eventCode))?.updatedAt ?? '';
+
+	return {
+		changed: changed || weightsBefore !== weightsAfter,
+		pending: (await localPending(eventCode)).length,
+		error
+	};
 }
 
 // ─── rank maintenance ──────────────────────────────────────────────────────
@@ -297,13 +386,29 @@ export async function sync(eventCode, opts = {}) {
  * doing it while someone is dragging would be the one write pattern this whole
  * design avoids.
  *
+ * PER STATUS. The pick list and the do-not-pick list are ranked independently
+ * — nothing orders one against the other — so a pick at rank 1024 sitting
+ * beside an avoid at rank 1024 is normal, not a collapsed gap. Checking them
+ * together reads that as exhausted precision and rewrites every row in the
+ * event, on every single load, marking them all pending and pushing all of
+ * them. Which is precisely the whole-list write this design exists to avoid,
+ * arrived at from the other direction.
+ *
  * @param {string} eventCode
  */
 export async function rebalanceIfNeeded(eventCode) {
 	const rows = await localRows(eventCode);
-	if (rows.length === 0 || !needsRebalance(rows)) return 0;
+	if (rows.length === 0) return 0;
+
 	const stamp = now();
-	const fixed = rebalance(rows).map((r) => ({ ...r, updatedAt: stamp }));
+	const fixed = [];
+	for (const status of ['pick', 'avoid']) {
+		const group = rows.filter((r) => r.status === status);
+		if (group.length === 0 || !needsRebalance(group)) continue;
+		fixed.push(...rebalance(group).map((r) => ({ ...r, updatedAt: stamp })));
+	}
+
+	if (fixed.length === 0) return 0;
 	await db.picklist.bulkPut(fixed);
 	return fixed.length;
 }
