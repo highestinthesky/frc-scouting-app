@@ -465,10 +465,28 @@ ranked list, not a canvas.
 Moved out of "after the redesign" — the sync UPDATE path and picklist sync were
 promoted into Phase 0 above.
 
-- **Design-system cleanup.** Once hallmark emits `design.md` and `tokens.css`,
-  migrate every page off its duplicated `<style>` block onto shared components
-  (Button, Card, Badge, Stat, Chip, PageHeader, EmptyState). Finish with a
-  WCAG-AA pass: contrast in both themes, focus states, touch targets.
+- **Signing in has no visible consequence.** Found 2026-08-01 by signing in for
+  the first time. The login succeeds, the redirect happens, and the app looks
+  exactly as it did — because the app bar shows `session.scoutName` (the
+  locally-typed name) and a role badge that reads `auth.role ?? role.value`.
+  With no profile the badge silently falls through to the old local role, so a
+  successful sign-in and no sign-in render identically.
+
+  Two separate things to fix, and the second is the one that bites:
+
+  1. **No signed-in indicator.** The app bar should say who you are as an
+     *account*, not who you typed yourself as. Sign-out exists but only in
+     Settings, which is not discoverable from "am I logged in?".
+  2. **A signed-in user with no profile is invisible.** That state is real —
+     it happens whenever an auth user exists without a `profiles` row, which is
+     exactly what a half-finished bootstrap produces. `auth.orphaned` already
+     models it, and `+layout.svelte` already has a gate for it, but the gate
+     only renders when `AUTH_ENFORCED` is true. Before the cutover the state is
+     reachable and completely silent. The fallback (`?? role.value`) is what
+     makes it silent, and a fallback that makes a broken state look normal is
+     the same mistake as `var(--ok, var(--accent))`.
+- ~~**Design-system cleanup.**~~ Done. Every page and component is on the token
+  scale, enforced by `check_components.mjs` and `check_contrast.mjs`.
 - **Build-time TBA API key.** Put the read key in a GitHub Actions secret
   (`VITE_TBA_API_KEY`), read it in `tba.js`, hide the paste field when set. Keep
   the paste field as a fallback for forks.
