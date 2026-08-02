@@ -8,24 +8,50 @@ Applied in filename order, they rebuild it from nothing.
 Two dashboard toggles are load-bearing, and no SQL file can set or enforce
 them. Both are one-time.
 
-**Authentication → Providers → Email → Confirm email: OFF.**
+**Authentication → Email → Confirm email: OFF.** Not optional. **With this on,
+registration is impossible** — not slow, not manual. Impossible.
 
-Every address in this project is `<username>@scout.invalid`. `.invalid` is
-reserved by RFC 2606 as permanently unroutable — that is the point, the address
-is an identifier and not a mailbox. So a confirmation email is sent to nowhere,
-arrives never, and every signup hangs waiting for a click that cannot happen.
-Leaving this on means a manager confirms each scout by hand in the dashboard,
-which is the sort of per-person chore that quietly stops a system being used.
+Every address here is `<username>@scout.invalid`. `.invalid` is reserved by
+RFC 2606 as permanently unroutable, deliberately: the address is an identifier
+and not a mailbox. With Confirm email on, GoTrue tries to send a confirmation
+message, and its mailer validates the RECIPIENT before sending. `.invalid` fails
+that check, so signup returns
 
-Note that turning it off does not retroactively confirm accounts created
-through the dashboard's "Add user" while it was on
+    Email address "someone@scout.invalid" is invalid
+
+and no account is created. The message points at the address, so you go and look
+at the address — which is the wrong place. The address is fine. Nothing is
+sending mail once this is off, so nothing validates the recipient.
+
+Two other symptoms of the same cause, both misleading:
+
+  · `over_email_send_rate_limit` (HTTP 429) on repeated signups. The built-in
+    SMTP allows only a handful of sends per hour, and every signup was
+    attempting one. With Confirm email off, no mail is sent, so registration
+    stops consuming that budget at all.
+  · Accounts created through the dashboard's **Add user** work fine, because the
+    admin API skips both the mailer and its recipient validation. That
+    asymmetry makes the scheme look verified when it is not — it is how this was
+    missed in the first place.
+
+Turning it off does not retroactively confirm accounts created through
+"Add user" while it was on
 ([supabase#29632](https://github.com/supabase/supabase/issues/29632)). Tick
-"Auto Confirm User" when creating one by hand. Accounts made through
-`/register` are unaffected once the setting is off.
+"Auto Confirm User" when creating one by hand.
 
-**Authentication → Providers → Email → Secure email change: OFF** is also
-worth doing, for the same reason: it sends confirmation to both the old and new
-address, neither of which exists.
+The toggle is not always in the Email provider card — the dashboard has moved it
+between **Sign In / Providers → Email** and a separate **Authentication →
+Emails** section. Rather than hunt for it, read the setting:
+
+```js
+await (await fetch('https://<project>.supabase.co/auth/v1/settings',
+  { headers: { apikey: '<anon key>' } })).json()
+```
+
+`mailer_autoconfirm: true` means Confirm email is off, which is what you want.
+
+**Secure email change: OFF** for the same reason — it confirms to both the old
+and the new address, neither of which exists.
 
 `verify_migrations.sql` reports any account with a null `email_confirmed_at`,
 which is the symptom this produces.

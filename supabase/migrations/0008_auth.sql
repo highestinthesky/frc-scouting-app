@@ -318,6 +318,18 @@ GRANT SELECT, DELETE ON public.invites TO authenticated;
 --   automatically; only this hand-made first one can get it wrong.
 --   verify_migrations.sql asserts the two agree.
 --
--- Also required, once, in Dashboard → Authentication → Providers → Email:
---   · Confirm email: OFF. Addresses are synthetic and unroutable, so a
---     confirmation mail would never arrive and every signup would hang.
+-- Also required, once: Confirm email: OFF.
+--
+--   REGISTRATION IS IMPOSSIBLE WITHOUT THIS. Not slow — impossible. GoTrue's
+--   mailer validates the recipient before sending a confirmation, and
+--   <username>@scout.invalid fails that check, so signup returns
+--   'Email address "..." is invalid' and no account is created. The error names
+--   the address, which sends you to look at the address; the address is fine.
+--   With confirmation off nothing is sent, so nothing validates the recipient.
+--
+--   Accounts made through the dashboard's "Add user" work regardless, because
+--   the admin API skips the mailer entirely. That is what made this look
+--   verified when it was not.
+--
+--   Check it: GET /auth/v1/settings -> mailer_autoconfirm should be true.
+--   See supabase/README.md § Project settings the migrations cannot set.
