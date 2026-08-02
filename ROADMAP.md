@@ -5,7 +5,7 @@ One source of truth. Everything from the old planning docs (`IMPROVEMENT_DRAFT.m
 `PLAN.md`, `UPGRADE_PLAN.md`, `FRC Scouting App v6.pdf`) was folded in here and
 those files deleted. Do not start a second plan document — add to this one.
 
-Last updated: 2026-07-29.
+Last updated: 2026-08-01.
 
 ---
 
@@ -101,9 +101,9 @@ the big ones and both are barely begun.
 
 | Phase | | Status |
 |---|---|---|
-| **0** Cheap wins | dialogs · minimal-delta auto-assign · sync UPDATE · picklist sync | **75%** |
+| **0** Cheap wins | dialogs · minimal-delta auto-assign · sync UPDATE · picklist sync | **100%** |
 | **1** Auth, roles, accounts | built and additive; cutover pending | **70%** |
-| **2** Alliance selection | not started | **0%** |
+| **2** Alliance selection | picklist syncs; TBA alliances endpoint next | **40%** |
 | **3** IA + redesign | routes moved; every page and component on the token scale | **85%** |
 | **4** Studio + Insights | not started | **0%** |
 
@@ -118,37 +118,42 @@ the big ones and both are barely begun.
   fixed, `Button.svelte`, `/settings` migrated.
 - **Database under version control.** `entries` captured as 0001, drift
   assertions, CI gates on tests + SQL parsing.
+- **Picklist cloud sync.** One row per team rather than one blob per event, so
+  a stale device can no longer erase an afternoon of ranking. Ranks are floats,
+  so a reorder is one row written instead of the whole list. Migration 0009,
+  `lib/picklist.js` + `lib/picklist-store.js`, 45 tests. *Needs migration 0009
+  applied.*
 
 ### Not done, in dependency order
 
-1. **Picklist cloud sync** — the last Phase 0 item. A local-only picklist dies
-   with the phone holding it, and selection is what the app is for.
-2. **Auth cutover** — everything is built (`0008`, `auth.svelte.js`, `/login`,
+1. **Auth cutover** — everything is built (`0008`, `auth.svelte.js`, `/login`,
    `/register`, `/accounts`) and deliberately inert: `AUTH_ENFORCED` is false
-   and no policy requires an account. What remains is migration `0009`, the
+   and no policy requires an account. What remains is migration `0010`, the
    flag, and giving everyone an account first. That is a hard cutover and
    belongs between seasons.
-3. **Alliance selection** — picklist sync plus marking teams already taken
-   from TBA's alliances endpoint. `tba.js` does not touch that endpoint yet.
-4. **Redesign** — done as far as the system goes. Every page and all sixteen
+2. **Alliance selection** — picklist sync is done. What remains is marking
+   teams already taken, from TBA's alliances endpoint. `tba.js` does not touch
+   that endpoint yet.
+3. **Redesign** — done as far as the system goes. Every page and all sixteen
    components are on the token scale, enforced by a sweep rather than by
    review. What is left is composition: what each page leads with, and how
    dense it is. That is per-page judgement, not a migration.
-5. **Studio + Insights** — desktop route group, fixed charts.
+4. **Studio + Insights** — desktop route group, fixed charts.
 
-### The redesign is deliberately stalled
+### Nothing is precious except three things
 
-One page of nine is migrated, and that is on purpose: Phase 3 renames and
-merges most routes, so redesigning them now means designing them twice.
-`/settings` was done because it is the one route the reorganisation leaves
-alone.
+The route tree, the component layout and the storage shapes are all v0.5
+artefacts and have been rearranged freely — `/schedule` became `/scouting`, the
+picklist stopped being a blob. Keep doing that where it helps.
 
-**Treat the current structure as a baseplate.** The nine routes, the
-`/manager/*` nesting and the component layout under `src/lib/components/` are
-all v0.5 shapes and none of them are load-bearing for v6. The reorganisation
-should be as aggressive as the target IA needs — the constraints that actually
-bind are `design.md`, the sync invariants, and the metrics blank-vs-zero rule.
-Nothing else is precious.
+The constraints that actually bind:
+
+- **`design.md`** — the token scale and the AA floor, both now enforced by
+  `npm test` rather than by review.
+- **The sync invariants** — a local row with unpushed edits is never
+  overwritten by a peer; the watermark is `updated_at`, not `created_at`.
+- **The metrics blank-vs-zero rule** — blank means *not recorded*, `0` means
+  *recorded and it was zero*.
 
 ## The v6 plan — sequenced
 

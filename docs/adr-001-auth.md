@@ -330,7 +330,7 @@ attention to.
    first to check for column drift, which `CREATE TABLE IF NOT EXISTS` cannot
    fix.
 2. `0008_auth.sql` — types, `profiles`, `invites`, functions, `submitted_by`.
-3. `0009_policies.sql` — swap every policy to `to authenticated`, replace
+3. `0010_policies.sql` — swap every policy to `to authenticated`, replace
    `has_manager_token()` with `is_manager()`, drop the passphrase machinery.
 4. Client: `auth.svelte.js`, `/login`, `/register`, `/accounts`, guard in
    `+layout.svelte`.

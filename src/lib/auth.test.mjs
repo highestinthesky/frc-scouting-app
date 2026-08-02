@@ -91,11 +91,11 @@ const ok = (name, cond, detail = '') => {
 {
 	// Not a correctness assertion — a tripwire. Flipping this locks every
 	// device out until its user signs in, and it must happen together with
-	// migration 0009. If this test fails, that is the reminder.
+	// the policy cutover migration. If this test fails, that is the reminder.
 	ok(
-		'auth is still additive (flip with migration 0009, not before)',
+		'auth is still additive (flip with migration 0010, not before)',
 		AUTH_ENFORCED === false,
-		'AUTH_ENFORCED is true — 0009 must be applied and every user must have an account'
+		'AUTH_ENFORCED is true — 0010 must be applied and every user must have an account'
 	);
 }
 

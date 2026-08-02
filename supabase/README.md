@@ -81,9 +81,10 @@ still parses fine.
 | `migrations/0006_tba_event_key.sql` | TBA key decoupled from the sync code |
 | `migrations/0007_entry_updated_at.sql` | edit watermark, so corrections reach teammates |
 | `migrations/0008_auth.sql` | accounts, roles, invites — **additive**, nothing enforced yet |
+| `migrations/0009_picklist.sql` | the picklist, one row per team |
 | `verify_entries.sql` | drift assertions, read-only |
 
-Planned next: `0009_policies.sql`, the cutover — swaps every policy to
+Planned next: `0010_policies.sql`, the cutover — swaps every policy to
 `to authenticated`, replaces `has_manager_token()` with `is_manager()`, and
 deletes the passphrase machinery. See
 [`../docs/adr-001-auth.md`](../docs/adr-001-auth.md).
@@ -94,10 +95,10 @@ deletes the passphrase machinery. See
 one. Two things flip together, and neither alone is safe:
 
 1. `AUTH_ENFORCED = true` in `src/lib/auth.svelte.js`
-2. Migration `0009`
+2. Migration `0010`
 
-Flipping the flag without 0009 locks the UI while leaving the data open.
-Applying 0009 without the flag locks the data while the UI still offers the
+Flipping the flag without 0010 locks the UI while leaving the data open.
+Applying 0010 without the flag locks the data while the UI still offers the
 old path. `src/lib/auth.test.mjs` asserts the flag is still false, so the
 tripwire fires when someone changes it.
 

@@ -5,122 +5,162 @@
 	import { summarize } from '$lib/aggregate.js';
 	import { scoreTeams, fmt } from '$lib/metrics.js';
 	import { METRIC_FIELDS } from '$lib/form-config.js';
-	import { getSetting, setSetting } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
+	import { rankForMove, rankBetween, ordered } from '$lib/picklist.js';
+	import * as store from '$lib/picklist-store.js';
 
 	let summary = $state(null);
 	let loading = $state(true);
+	let syncing = $state(false);
+	let syncError = $state('');
+	/** Local edits the server has not confirmed. Non-zero for a scout device
+	 *  forever, by design — see syncNow(). */
+	let pendingCount = $state(0);
 
-	/** Ranked team numbers, in pick order. Persisted per-event. */
-	let primary = $state([]);
-	/** Teams the strategy team has explicitly marked "do not pick". */
-	let doNotPick = $state([]);
+	/**
+	 * One row per team: { teamNumber, status, rank, updatedAt, pushedAt, ... }.
+	 *
+	 * Deliberately NOT two arrays of team numbers. The old shape was
+	 * { primary: [...], doNotPick: [...] } in a single IndexedDB key, which is
+	 * fine on one device and unsyncable across several: pushing it is
+	 * last-write-wins over the whole list, so a phone holding the morning's
+	 * copy erases an afternoon of ranking the moment someone taps anything.
+	 * See src/lib/picklist.js.
+	 */
+	let rows = $state(/** @type {any[]} */ ([]));
+	let weights = $state(Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 1])));
 
 	let copyFlash = $state('');
 
-	const settingKey = $derived(
-		`picklist:${(session.eventCode || 'event').toLowerCase()}`
-	);
+	const eventCode = $derived(session.eventCode || '');
+	const isManager = $derived(Boolean(session.managerToken));
 
-	const teamsInList = $derived(new Set([...primary, ...doNotPick]));
-	const availableTeams = $derived.by(() => {
-		if (!summary) return [];
-		return summary.teams.filter((t) => !teamsInList.has(t.teamNumber));
-	});
+	const primary = $derived(ordered(rows.filter((r) => r.status === 'pick')));
+	const doNotPick = $derived(ordered(rows.filter((r) => r.status === 'avoid')));
+	const teamsInList = $derived(new Set(rows.map((r) => r.teamNumber)));
+	const availableTeams = $derived(
+		summary ? summary.teams.filter((t) => !teamsInList.has(t.teamNumber)) : []
+	);
 
 	async function refresh() {
 		summary = await summarize();
 	}
 
-	async function loadList() {
-		const stored = await getSetting(settingKey);
-		if (stored && typeof stored === 'object') {
-			primary = Array.isArray(stored.primary) ? stored.primary.slice() : [];
-			doNotPick = Array.isArray(stored.doNotPick) ? stored.doNotPick.slice() : [];
-			// Merge rather than replace: a metric added to form-config since this
-			// list was saved needs a default weight, not undefined.
-			weights = {
-				...Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 1])),
-				...(stored.weights ?? {})
-			};
-		} else {
-			primary = [];
-			doNotPick = [];
-			weights = Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 1]));
+	/** Re-read the local rows. Every mutation goes through here, so the list on
+	 *  screen is always what is actually stored — never an optimistic guess. */
+	async function reload() {
+		rows = await store.localRows(eventCode);
+		const w = await store.localWeights(eventCode);
+		// Merge rather than replace: a metric added to form-config since these
+		// weights were saved needs a default, not undefined.
+		weights = {
+			...Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 1])),
+			...(w?.weights ?? {})
+		};
+	}
+
+	/**
+	 * Push local edits and pull everyone else's.
+	 *
+	 * Only managers can write — the RLS policy requires x-manager-token — so a
+	 * scout device pulls and displays but never pushes. Its rows stay pending
+	 * forever, which is correct: they are a local scratchpad, not the list.
+	 */
+	async function syncNow() {
+		if (!eventCode || syncing) return;
+		syncing = true;
+		try {
+			const { changed, pending, error } = await store.sync(eventCode, {
+				managerToken: session.managerToken,
+				updatedBy: session.scoutName
+			});
+			pendingCount = pending;
+			// Only surface a failure that actually cost something. A pull error
+			// with nothing pending means the list on screen is simply a few
+			// seconds old, which is not worth a red banner during selection.
+			syncError = pending > 0 ? error : '';
+			if (changed) await reload();
+		} catch (e) {
+			syncError = e?.message ?? 'Could not reach the server.';
+		} finally {
+			syncing = false;
 		}
 	}
 
-	async function saveList() {
-		await setSetting(settingKey, {
-			eventCode: session.eventCode,
-			primary,
-			doNotPick,
-			weights,
-			updatedAt: new Date().toISOString()
-		});
+	/** Apply a change locally, show it immediately, then push in the background.
+	 *
+	 *  Awaiting the network here would put a round trip between a tap and the
+	 *  list moving. Alliance selection runs faster than that. */
+	async function mutate(fn) {
+		await fn();
+		await reload();
+		syncNow();
 	}
 
 	onMount(async () => {
 		await refresh();
-		await loadList();
+		await store.migrateLegacy(eventCode);
+		await store.rebalanceIfNeeded(eventCode);
+		await reload();
 		loading = false;
+		syncNow();
 	});
 
-	// Reload the picklist whenever the user switches events in Identity.
+	// Reload when the user switches events in Identity.
 	$effect(() => {
-		settingKey;
-		if (!loading) loadList();
+		eventCode;
+		if (!loading) {
+			(async () => {
+				await store.migrateLegacy(eventCode);
+				await reload();
+				syncNow();
+			})();
+		}
 	});
 
-	// Auto-save on every list mutation. Cheap; the storage is local.
-	$effect(() => {
-		primary;
-		doNotPick;
-		weights;
-		if (!loading) saveList();
-	});
-
-	// Re-aggregate when sync brings new rows.
+	// Re-aggregate and re-pull when the entry sync tick brings new rows. The
+	// picklist rides that tick rather than running a second timer.
 	$effect(() => {
 		syncState.inboundChanges;
-		if (!loading) refresh();
+		syncState.lastSyncedAt;
+		if (!loading) {
+			refresh();
+			syncNow();
+		}
 	});
 
-	function addToPick(teamNumber) {
-		if (primary.includes(teamNumber)) return;
-		// If team is currently on the do-not-pick list, move it off.
-		doNotPick = doNotPick.filter((n) => n !== teamNumber);
-		primary = [...primary, teamNumber];
+	// ─── mutations ─────────────────────────────────────────────────────────────
+
+	const addToPick = (teamNumber) =>
+		mutate(() =>
+			store.put(eventCode, teamNumber, {
+				status: 'pick',
+				rank: store.appendRank(rows)
+			})
+		);
+
+	const removeFromPick = (teamNumber) => mutate(() => store.remove(eventCode, teamNumber));
+
+	/** Move one team by one position. One row is written, never the whole list —
+	 *  that is the entire reason rank is a float. */
+	function move(teamNumber, delta) {
+		const idx = primary.findIndex((r) => r.teamNumber === teamNumber);
+		if (idx === -1) return;
+		const rank = rankForMove(primary, teamNumber, idx + delta);
+		if (rank === null) return;
+		return mutate(() => store.put(eventCode, teamNumber, { rank }));
 	}
 
-	function removeFromPick(teamNumber) {
-		primary = primary.filter((n) => n !== teamNumber);
-	}
+	const avoid = (teamNumber) =>
+		mutate(() =>
+			store.put(eventCode, teamNumber, {
+				status: 'avoid',
+				rank: rankBetween(doNotPick.length ? doNotPick[doNotPick.length - 1].rank : null, null)
+			})
+		);
 
-	function moveUp(idx) {
-		if (idx <= 0) return;
-		const next = primary.slice();
-		[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-		primary = next;
-	}
-
-	function moveDown(idx) {
-		if (idx >= primary.length - 1) return;
-		const next = primary.slice();
-		[next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
-		primary = next;
-	}
-
-	function avoid(teamNumber) {
-		if (doNotPick.includes(teamNumber)) return;
-		primary = primary.filter((n) => n !== teamNumber);
-		doNotPick = [...doNotPick, teamNumber];
-	}
-
-	function unavoid(teamNumber) {
-		doNotPick = doNotPick.filter((n) => n !== teamNumber);
-	}
+	const unavoid = (teamNumber) => mutate(() => store.remove(eventCode, teamNumber));
 
 	function teamFor(n) {
 		return summary?.teams.find((t) => t.teamNumber === n);
@@ -133,9 +173,8 @@
 	// order — the manual list above is authoritative, because the numbers can't
 	// see a robot that just looks fragile.
 
-	/** metric key → 0..3 weight. Persisted alongside the picklist. */
-	let weights = $state(Object.fromEntries(METRIC_FIELDS.map((m) => [m.key, 1])));
 	let showScored = $state(false);
+	let weightsDirty = $state(false);
 
 	const scored = $derived.by(() => {
 		if (!summary || !showScored) return [];
@@ -143,23 +182,38 @@
 			teamNumber: t.teamNumber,
 			metrics: t.metrics
 		}));
-		const ranked = scoreTeams(pool, weights);
-		return ranked
+		return scoreTeams(pool, weights)
 			.map((r) => ({ ...r, team: teamFor(r.teamNumber) }))
 			.filter((r) => r.team);
 	});
 
 	const anyWeight = $derived(METRIC_FIELDS.some((m) => (weights[m.key] ?? 0) > 0));
 
+	// Weights are a knob, not data: saving on every pixel of slider travel would
+	// write a hundred times per drag. Flagged here, flushed below.
+	$effect(() => {
+		weights;
+		if (!loading) weightsDirty = true;
+	});
+
+	$effect(() => {
+		if (!weightsDirty) return;
+		const id = setTimeout(async () => {
+			weightsDirty = false;
+			await store.putWeights(eventCode, $state.snapshot(weights));
+		}, 400);
+		return () => clearTimeout(id);
+	});
+
 	async function copyText() {
-		const lines = [`Picklist · ${session.eventCode || 'event'}`];
+		const lines = [`Picklist · ${eventCode || 'event'}`];
 		lines.push('');
 		lines.push('Primary:');
-		primary.forEach((n, i) => lines.push(`  ${i + 1}. Team ${n}`));
+		primary.forEach((r, i) => lines.push(`  ${i + 1}. Team ${r.teamNumber}`));
 		if (doNotPick.length > 0) {
 			lines.push('');
 			lines.push('Do not pick:');
-			doNotPick.forEach((n) => lines.push(`  • Team ${n}`));
+			doNotPick.forEach((r) => lines.push(`  • Team ${r.teamNumber}`));
 		}
 		const text = lines.join('\n');
 		try {
@@ -174,13 +228,15 @@
 	async function clearAll() {
 		const ok = await dialog.confirm({
 			title: 'Clear the whole picklist?',
-			body: 'Both the ranked list and the do-not-pick list are emptied. This cannot be undone.',
+			body:
+				'Both the ranked list and the do-not-pick list are emptied, ' +
+				"for everyone on this event's picklist — not just this device.\n\n" +
+				'This cannot be undone.',
 			confirmLabel: 'Clear picklist',
 			danger: true
 		});
 		if (!ok) return;
-		primary = [];
-		doNotPick = [];
+		await mutate(() => store.clearAll(eventCode));
 	}
 
 	let teamSearch = $state('');
@@ -197,16 +253,34 @@
 
 <main>
 	<header class="page-head">
-		<a class="back" href="{base}/insights/" aria-label="Back to manager">←</a>
+		<a class="back" href="{base}/insights/" aria-label="Back to insights">←</a>
 		<h1>Picklist</h1>
-		{#if session.eventCode}<small class="event">· {session.eventCode}</small>{/if}
+		{#if eventCode}<small class="event">· {eventCode}</small>{/if}
 	</header>
+
+	<!-- Who can change this list, and whether the change has landed. Both are
+	     things a manager needs to know before alliance selection, not during. -->
+	<p class="share" class:ro={!isManager}>
+		{#if isManager}
+			Shared with everyone on <strong>{eventCode || 'this event'}</strong>.
+			{#if syncing}
+				Saving…
+			{:else if pendingCount > 0}
+				<span class="stale">
+					{pendingCount} {pendingCount === 1 ? 'change' : 'changes'} not saved yet — retrying.
+				</span>
+			{/if}
+		{:else}
+			Read-only on this device. Enter the manager passphrase on
+			<a href="{base}/scouting/">Scouting</a> to edit the shared list.
+		{/if}
+	</p>
 
 	{#if loading}
 		<p class="muted">Loading…</p>
-	{:else if !summary || summary.totalEntries === 0}
+	{:else if (!summary || summary.totalEntries === 0) && rows.length === 0}
 		<div class="empty">
-			<p>No entries on file. Import or record entries first, then come back to build a picklist.</p>
+			<p>No entries on file. Record some entries first, then come back to build a picklist.</p>
 		</div>
 	{:else}
 		<!-- ── Primary picklist ─────────────────────────────────────── -->
@@ -217,7 +291,11 @@
 					<button class="link-btn" onclick={copyText} disabled={primary.length === 0 && doNotPick.length === 0}>
 						Copy as text
 					</button>
-					<button class="link-btn danger-link" onclick={clearAll} disabled={primary.length === 0 && doNotPick.length === 0}>
+					<button
+						class="link-btn danger-link"
+						onclick={clearAll}
+						disabled={!isManager || (primary.length === 0 && doNotPick.length === 0)}
+					>
 						Clear
 					</button>
 				</div>
@@ -227,20 +305,33 @@
 				<p class="hint muted">Pick teams from the available list below to start ranking.</p>
 			{:else}
 				<ol class="picked">
-					{#each primary as n, i (n)}
-						{@const t = teamFor(n)}
+					{#each primary as r, i (r.teamNumber)}
+						{@const t = teamFor(r.teamNumber)}
 						<li>
 							<span class="rank">{i + 1}</span>
-							<span class="team-num">Team {n}</span>
+							<span class="team-num">Team {r.teamNumber}</span>
 							{#if t}
 								<span class="ministats">{t.entryCount}e · {t.matchesCovered}m{#if t.breakdownCount > 0} · {t.breakdownCount}b{/if}</span>
 							{:else}
 								<span class="ministats muted">no entries on this device</span>
 							{/if}
 							<div class="ops">
-								<button onclick={() => moveUp(i)} disabled={i === 0} title="Move up">↑</button>
-								<button onclick={() => moveDown(i)} disabled={i === primary.length - 1} title="Move down">↓</button>
-								<button class="danger-btn" onclick={() => removeFromPick(n)} title="Remove from picklist">×</button>
+								<button
+									onclick={() => move(r.teamNumber, -1)}
+									disabled={i === 0 || !isManager}
+									aria-label="Move Team {r.teamNumber} up"
+								>↑</button>
+								<button
+									onclick={() => move(r.teamNumber, 1)}
+									disabled={i === primary.length - 1 || !isManager}
+									aria-label="Move Team {r.teamNumber} down"
+								>↓</button>
+								<button
+									class="danger-btn"
+									onclick={() => removeFromPick(r.teamNumber)}
+									disabled={!isManager}
+									aria-label="Remove Team {r.teamNumber} from the picklist"
+								>×</button>
 							</div>
 						</li>
 					{/each}
@@ -253,14 +344,16 @@
 			<section class="block">
 				<h2 class="warn">Do not pick <small class="count">({doNotPick.length})</small></h2>
 				<ul class="avoided">
-					{#each doNotPick as n (n)}
-						{@const t = teamFor(n)}
+					{#each doNotPick as r (r.teamNumber)}
+						{@const t = teamFor(r.teamNumber)}
 						<li>
-							<span class="team-num">Team {n}</span>
+							<span class="team-num">Team {r.teamNumber}</span>
 							{#if t}
 								<span class="ministats">{t.entryCount}e{#if t.breakdownCount > 0} · {t.breakdownCount}b{/if}</span>
 							{/if}
-							<button class="link-btn" onclick={() => unavoid(n)}>Remove</button>
+							<button class="link-btn" onclick={() => unavoid(r.teamNumber)} disabled={!isManager}>
+								Remove
+							</button>
 						</li>
 					{/each}
 				</ul>
@@ -313,7 +406,7 @@
 								{#if s.confidence < 0.5}
 									<span class="thin" title="Fewer than 3 readings on most metrics">thin</span>
 								{/if}
-								<button onclick={() => addToPick(s.teamNumber)}>Pick</button>
+								<button onclick={() => addToPick(s.teamNumber)} disabled={!isManager}>Pick</button>
 							</li>
 						{/each}
 					</ol>
@@ -350,8 +443,17 @@
 							</span>
 							<div class="ops">
 								<a class="peek" href="{base}/insights/team/{t.teamNumber}/" title="Open team page">peek</a>
-								<button onclick={() => addToPick(t.teamNumber)} title="Add to primary picks">Pick</button>
-								<button class="warn-btn" onclick={() => avoid(t.teamNumber)} title="Mark do-not-pick">Avoid</button>
+								<button
+									onclick={() => addToPick(t.teamNumber)}
+									disabled={!isManager}
+									aria-label="Add Team {t.teamNumber} to the picklist"
+								>Pick</button>
+								<button
+									class="warn-btn"
+									onclick={() => avoid(t.teamNumber)}
+									disabled={!isManager}
+									aria-label="Mark Team {t.teamNumber} do-not-pick"
+								>Avoid</button>
 							</div>
 						</li>
 					{/each}
@@ -394,6 +496,19 @@
 	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
 	.event { color: var(--text-faint); font-size: var(--fs-sm); }
 	.muted { color: var(--text-faint); }
+
+	.share {
+		margin: 0 0 var(--space-4);
+		padding: var(--space-2) var(--space-3);
+		font-size: var(--fs-sm);
+		color: var(--text-muted);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+	}
+	.share.ro { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning); }
+	.share a { color: inherit; font-weight: 600; }
+	.stale { color: var(--danger); }
 
 	/* ── weighted scoring ─────────────────────────────── */
 	.weights { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }

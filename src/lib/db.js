@@ -29,6 +29,26 @@ db.version(2).stores({
 	settings: 'key'
 });
 
+// v3: the picklist moves out of `settings` and into rows.
+//
+// It used to be one blob under `picklist:<event>`, which meant syncing it would
+// have been last-write-wins over the whole list — a stale phone could erase an
+// afternoon of ranking. One row per team makes each edit independent. See
+// src/lib/picklist.js.
+//
+// The old setting is left in place; picklist-store.js reads it once to seed the
+// rows and then ignores it. Deleting a user's only copy of their picklist as
+// part of a schema bump is not a trade worth making for one dead key.
+db.version(3).stores({
+	entries:
+		'++id, eventCode, matchNumber, teamNumber, scoutName, createdAt, ' +
+		'[eventCode+matchNumber+teamNumber+scoutName+createdAt]',
+	settings: 'key',
+	// `key` is `${eventCode}:${teamNumber}`. Indexed on eventCode because every
+	// read is "the list for this event", and on status for the two sub-lists.
+	picklist: 'key, eventCode, teamNumber, status, [eventCode+status]'
+});
+
 /**
  * Add a new scouting entry. New rows are stamped with a stable per-device
  * `clientId` and a null `remoteId` — the sync layer fills the `remoteId` in
