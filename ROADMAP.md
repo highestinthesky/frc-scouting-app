@@ -478,6 +478,36 @@ promoted into Phase 0 above.
   code in the project — which could create accounts through the admin API and
   sidestep the confirmation flow entirely. Still not worth it: one toggle,
   once, versus a deploy target this project does not currently have.
+- **`scout_name` is a free-text join key, and accounts are supposed to retire
+  it.** Found 2026-08-02 by signing in as a new manager and being shown the
+  super's name. The app bar renders `session.scoutName` — the string typed into
+  Settings on that device — so it has nothing to do with who is signed in.
+  `auth.displayName` already exists and is used in exactly one place.
+
+  The display is the small half. The name is the **join key** for the whole app:
+  73 references across 24 files, including `assignments.scout_name` (28 uses),
+  `auto-assign`, `coverage`, `reminders`, `sync` and CSV export. Three people
+  typing "Ning", "ning" and "Haolun" are three different scouts to every one of
+  them. The code already knows this is unreliable — `assignments.js` matches on
+  `trim().toLowerCase()` in six places, which is a workaround, not a fix.
+
+  This is the same failure that killed scout-added teams: a scout typed
+  something on one phone and no other device agreed. `profiles.id` is the real
+  identity, and `entries.submitted_by` was added by 0008 precisely to hold it.
+  So this belongs in the cutover, not beside it — replacing the key, not just
+  the label. Doing only the label would leave the app *showing* an account while
+  still *joining* on a typed string, which is worse than today because it looks
+  correct.
+
+- **The event code is a different question from the scout name.** It is the
+  data partition, not identity, and something has to say which event this is.
+  What should go is a scout **typing** it: the manager already publishes a
+  schedule, so a scout could inherit the event from the team rather than copy a
+  string off a whiteboard. Worth designing deliberately rather than folding into
+  the identity change — they fail differently. A mistyped name silently splits
+  one person into two; a mistyped event code silently puts you in an empty
+  universe, which at least announces itself.
+
 - **Signing in has no visible consequence.** Found 2026-08-01 by signing in for
   the first time. The login succeeds, the redirect happens, and the app looks
   exactly as it did — because the app bar shows `session.scoutName` (the
