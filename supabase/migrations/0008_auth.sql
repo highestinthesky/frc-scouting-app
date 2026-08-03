@@ -3,7 +3,7 @@
 -- Implements docs/adr-001-auth.md. ADDITIVE ONLY: nothing here changes an
 -- existing policy, so the app keeps working exactly as it does today while
 -- accounts are built and tested alongside. The cutover — swapping every table
--- to `to authenticated` and deleting the passphrase machinery — is 0010, and
+-- to `to authenticated` and deleting the passphrase machinery — is 0011, and
 -- is deliberately a separate step you run once accounts demonstrably work.
 --
 -- Two parallel authorisation systems is how you end up with a hole in one, so
@@ -89,7 +89,7 @@ ALTER TABLE public.entries
 -- SECURITY DEFINER so the lookup isn't blocked by RLS on profiles itself, with
 -- `search_path = ''` and fully-qualified names — the hardened form. The
 -- existing has_manager_token() uses `search_path = public`, which is still
--- resolvable; 0010 retires that function entirely.
+-- resolvable; 0011 retires that function entirely.
 
 CREATE OR REPLACE FUNCTION public.app_role() RETURNS public.app_role
 LANGUAGE sql

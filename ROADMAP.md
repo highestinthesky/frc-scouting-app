@@ -349,16 +349,34 @@ policy consults any of it.
    redemption, or that the `lower(username)` index behaves. Those are semantic
    questions and no test in this repo can answer them. **This is the largest
    unquantified risk in the project.**
-2. **`0010_policies.sql` does not exist.** The cutover migration is described in
-   the ADR and unwritten. It has to: swap `has_manager_token()` for
-   `is_manager()` across all **18** policies on `entries`, `schedules`,
-   `assignments`, `reminders`, `assignment_overrides`, `picklist`,
-   `picklist_prefs` and `event_meta`; change `to anon` → `to authenticated`;
-   drop `has_manager_token()` and the `manager_token` column; and drop
-   `event_meta`'s passphrase machinery.
-3. **`entries.submitted_by` is added by `0008` and written by nobody.**
-   Accountability was reason one for having accounts, and the write path in
-   `sync.svelte.js` does not set it.
+2. **`0011_policies.sql` — written, not applied.** The cutover. Replaces all
+   **29** pre-cutover policies across eight tables with `to authenticated` +
+   `is_manager()`, revokes every grant from `anon`, drops
+   `has_manager_token()` and `event_meta.manager_token`, and stamps
+   `entries.submitted_by` from `auth.uid()` in a trigger rather than trusting
+   the client to supply it. Verified by script that every pre-cutover policy is
+   dropped and replaced — none missed. `DROP FUNCTION ... RESTRICT`, not
+   CASCADE, so a policy left behind fails the migration loudly instead of being
+   silently dropped along with the function.
+3. **`0010_identity.sql` — written, safe to apply now.** Adds `profile_id`
+   beside `scout_name` on assignments, overrides and reminders, fills
+   `entries.submitted_by`, and backfills all four from a conservative
+   name-to-account match: exact on username or full name, case-insensitive,
+   and only when exactly one profile matches. Ambiguity leaves null, because a
+   wrong match silently attributes one scout's work to another while a null is
+   visible.
+
+   Split from the cutover deliberately. Swapping the identity key and swapping
+   the policies are independent changes with different risk; together they make
+   one irreversible step where a failure is ambiguous — did the policy break or
+   did the join? Expand/migrate/contract instead: after `0010` every new row
+   carries a real identity while the old key still works, so by the time `0011`
+   runs there is nothing left to migrate.
+
+4. **The client still writes only `scout_name`.** `0010` gives the schema
+   somewhere to put a real identity; nothing fills it going forward yet. Dual-
+   write (both columns while signed in) and prefer-`profile_id`-on-read is the
+   next code change, and it is what makes the backfill stop mattering.
 4. **Nine client files still gate on `managerToken`**: `sync.svelte.js`,
    `assignments.js`, `tba.js`, `event-meta.js`, `reminders.js`,
    `picklist-store.js`, `session.svelte.js`, `supabase.js`, plus
@@ -374,8 +392,8 @@ nothing:
 
 | | `AUTH_ENFORCED = false` | `AUTH_ENFORCED = true` |
 |---|---|---|
-| **`0010` not applied** | today — passphrase works, accounts inert | UI demands login; the database still accepts anyone's passphrase. Locked-out users *and* unprotected data |
-| **`0010` applied** | UI still offers passphrase entry, people type it, every write is silently rejected. App looks broken | working |
+| **`0011` not applied** | today — passphrase works, accounts inert | UI demands login; the database still accepts anyone's passphrase. Locked-out users *and* unprotected data |
+| **`0011` applied** | UI still offers passphrase entry, people type it, every write is silently rejected. App looks broken | working |
 
 `auth.test.mjs` asserts the flag is still `false`, so changing it trips a test
 rather than shipping quietly.
@@ -387,7 +405,7 @@ Order of operations, once written:
 2. Create the first super user by hand.
 3. Everyone registers. Every device signs in at least once.
 4. Backfill `entries.submitted_by` where `scout_name` matches a username.
-5. Apply `0010` and flip `AUTH_ENFORCED` in the same deploy.
+5. Apply `0011` and flip `AUTH_ENFORCED` in the same deploy.
 6. Delete the passphrase UI and the nine files' `managerToken` plumbing.
 
 It is a **one-way door**. Once policies require an authenticated user, a device

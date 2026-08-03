@@ -163,17 +163,25 @@ still parses fine.
 | `migrations/0007_entry_updated_at.sql` | edit watermark, so corrections reach teammates |
 | `migrations/0008_auth.sql` | accounts, roles, invites — **additive**, nothing enforced yet |
 | `migrations/0009_picklist.sql` | the picklist, one row per team; alliances on `schedules` |
+| `migrations/0010_identity.sql` | `profile_id` beside `scout_name` — **additive**, safe to apply now |
+| `migrations/0011_policies.sql` | the cutover — **one-way door**, off-season only, not yet applied |
 | `verify_entries.sql` | drift assertions for `entries`, read-only |
 | `verify_migrations.sql` | did 0007/0008/0009 land? read-only |
 
-Planned next: `0010_policies.sql`, the cutover — swaps every policy to
-`to authenticated`, replaces `has_manager_token()` with `is_manager()`, and
-deletes the passphrase machinery. See
-[`../docs/adr-001-auth.md`](../docs/adr-001-auth.md).
+`0010` and `0011` split what could have been one migration, on purpose.
+
+Swapping the identity key and swapping the policies are independent changes
+with different risk. Together they make one irreversible step where a failure is
+ambiguous — did the policy break, or did the join? Apart, they are
+expand/migrate/contract: `0010` adds `profile_id` and backfills while changing
+nothing else (safe today, mid-season), and by the time `0011` runs there is
+nothing left to migrate and it is a policy change only.
+
+See [`../docs/adr-001-auth.md`](../docs/adr-001-auth.md).
 
 ## The auth cutover, when you get to it
 
-The passphrase is being **replaced**, not supplemented. `0010` drops
+The passphrase is being **replaced**, not supplemented. `0011` drops
 `has_manager_token()`, drops `event_meta.manager_token`, and rewrites all 18
 policies that currently call it. Two parallel authorisation systems is how you
 get a hole in one.
@@ -182,10 +190,10 @@ get a hole in one.
 one. Two things flip together, and neither alone is safe:
 
 1. `AUTH_ENFORCED = true` in `src/lib/auth.svelte.js`
-2. Migration `0010`
+2. Migration `0011`
 
-Flipping the flag without 0010 locks the UI while leaving the data open.
-Applying 0010 without the flag locks the data while the UI still offers the
+Flipping the flag without 0011 locks the UI while leaving the data open.
+Applying 0011 without the flag locks the data while the UI still offers the
 old path. `src/lib/auth.test.mjs` asserts the flag is still false, so the
 tripwire fires when someone changes it.
 

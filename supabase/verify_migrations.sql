@@ -52,7 +52,21 @@ WITH expected(migration, kind, name, why) AS (
         ('0009', 'trigger',  'picklist_prefs_touch_updated_at',
          'same, for weights'),
         ('0009', 'index',    'picklist_session_updated_idx', 'the pull index'),
-        ('0009', 'index',    'picklist_session_rank_idx',    'ordering the list')
+        ('0009', 'index',    'picklist_session_rank_idx',    'ordering the list'),
+
+        -- ── 0010: real identity beside the typed name ──────────────────────
+        ('0010', 'column',   'assignments.profile_id',
+         'who is assigned, as an account rather than a typed string'),
+        ('0010', 'column',   'assignment_overrides.profile_id', 'same, per match'),
+        ('0010', 'column',   'reminders.profile_id',  'who a reminder targets'),
+        ('0010', 'function', 'profile_for_name',
+         'conservative name -> account resolution; ambiguity returns null'),
+        ('0010', 'index',    'assignments_profile_idx',        'the "what am I assigned" read'),
+        ('0010', 'index',    'assignments_profile_dedupe_idx', 'one team per person per event'),
+        ('0010', 'index',    'overrides_profile_idx',          'per-match override lookup'),
+        ('0010', 'index',    'overrides_profile_dedupe_idx',   'one override per person per match'),
+        ('0010', 'index',    'reminders_profile_idx',          'reminder targeting'),
+        ('0010', 'index',    'entries_submitted_by_idx',       'attribution lookup')
 ),
 
 -- ── what is actually there ─────────────────────────────────────────────────
@@ -187,11 +201,11 @@ checks AS (
 
     -- ── the cutover has NOT happened yet ───────────────────────────────────
     -- 0007/0008/0009 are additive. If has_manager_token() is gone, someone has
-    -- run 0010 — and AUTH_ENFORCED in src/lib/auth.svelte.js must move with it.
+    -- run 0011 — and AUTH_ENFORCED in src/lib/auth.svelte.js must move with it.
     SELECT CASE WHEN count(*) = 1 THEN 'PASS' ELSE 'FAIL' END,
-           'passphrase gate still present (expected until 0010)',
+           'passphrase gate still present (expected until 0011)',
            CASE WHEN count(*) = 1 THEN 'has_manager_token() exists — pre-cutover, as expected'
-                ELSE 'ABSENT — 0010 has run. AUTH_ENFORCED must be true in the same deploy' END
+                ELSE 'ABSENT — 0011 has run. AUTH_ENFORCED must be true in the same deploy' END
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'has_manager_token'
 
@@ -240,6 +254,28 @@ checks AS (
                      ' — turn OFF Authentication → Providers → Email → Confirm email' END
     FROM auth.users
     WHERE email_confirmed_at IS NULL
+
+    UNION ALL
+
+    -- ── how much of the typed-name history resolved to an account ──────────
+    --
+    -- Informational, not a failure. Rows recorded before accounts existed have
+    -- no profile and never will, and a name nobody has registered stays null
+    -- by design — profile_for_name is deliberately conservative, because a
+    -- wrong match silently attributes one scout's work to another while a null
+    -- is at least visible.
+    --
+    -- Re-run 0010's four UPDATEs once everyone has signed up.
+    SELECT 'INFO', 'identity backfill',
+           (SELECT count(*) FROM public.assignments WHERE profile_id IS NULL)::text ||
+           ' assignment(s) and ' ||
+           (SELECT count(*) FROM public.entries WHERE submitted_by IS NULL)::text ||
+           ' entry(s) still on a typed name only'
+    WHERE EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'assignments'
+          AND column_name = 'profile_id'
+    )
 
     UNION ALL
 
