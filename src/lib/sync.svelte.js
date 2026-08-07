@@ -28,6 +28,8 @@ import { pullScheduleIfStale } from './tba.js';
 import { pullAndApplyForScout } from './assignments.js';
 import { reminders } from './reminders.svelte.js';
 import { session } from './session.svelte.js';
+import { entryWritePayloads } from './sync-rules.js';
+import { auth } from './auth.svelte.js';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -228,18 +230,29 @@ async function pushOutbox() {
 			client_id: local.clientId ?? cachedClientId,
 			created_at: local.createdAt
 		};
+		// The authenticated account on the first successful sync owns the
+		// server attribution. This is necessarily not always the person who held
+		// a shared/offline device when the form was recorded: no signed request
+		// happened then, and trusting a stored client claim would be forgeable.
+		const payloads = entryWritePayloads(row, auth.profile?.id);
 
 		// A row we've already pushed and since edited takes the UPDATE path.
 		// Without this branch the edit never left the device: the cloud row
 		// kept its original values and every teammate stayed wrong, while the
 		// editor's own screen showed the change saved and synced.
 		if (local.remoteId) {
-			const ok = await pushUpdate(client, local, row);
-			if (ok) await markEntrySynced(local.id, local.remoteId);
+			const result = await pushUpdate(client, local, payloads);
+			if (result.clean) {
+				await markEntrySynced(local.id, local.remoteId, result.submittedBy);
+			}
 			continue;
 		}
 
-		const { data, error } = await client.from('entries').insert(row).select('id').single();
+		const { data, error } = await client
+			.from('entries')
+			.insert(payloads.insert)
+			.select('id, submitted_by')
+			.single();
 		if (error) {
 			// Postgres unique_violation — server already has this row (a peer
 			// pushed it, or our previous tick raced the round-trip). Adopt the
@@ -247,20 +260,20 @@ async function pushOutbox() {
 			if (error.code === '23505') {
 				const found = await findRemoteTwin(client, sid, local);
 				if (found?.id) {
-					await markEntrySynced(local.id, found.id);
+					await markEntrySynced(local.id, found.id, found.submitted_by);
 					continue;
 				}
 			}
 			throw error;
 		}
-		await markEntrySynced(local.id, data.id);
+		await markEntrySynced(local.id, data.id, data.submitted_by);
 	}
 	syncState.pendingCount = 0;
 }
 
 /**
- * Push an edit to an existing cloud row. Returns true when the local row can
- * be marked clean.
+ * Push an edit to an existing cloud row. Returns whether the caller should
+ * mark it clean plus the server's authoritative attribution.
  *
  * Two cases that must not spin forever, because a row left dirty is retried
  * every 3 seconds for the rest of the event:
@@ -271,12 +284,12 @@ async function pushOutbox() {
  *     the user edited this entry into a duplicate of another. Surface it and
  *     stop retrying; a loop would hide the problem behind a spinner.
  */
-async function pushUpdate(client, local, row) {
+async function pushUpdate(client, local, payloads) {
 	const { data, error } = await client
 		.from('entries')
-		.update(row)
+		.update(payloads.update)
 		.eq('id', local.remoteId)
-		.select('id');
+		.select('id, submitted_by');
 
 	if (error) {
 		if (error.code === '23505') {
@@ -286,7 +299,7 @@ async function pushUpdate(client, local, row) {
 				`Change the match or team number, or delete the duplicate.`;
 			// Clean, deliberately: retrying cannot succeed, and a permanently
 			// dirty row would re-raise this every tick.
-			return true;
+			return { clean: true, submittedBy: undefined };
 		}
 		throw error;
 	}
@@ -295,30 +308,30 @@ async function pushUpdate(client, local, row) {
 		// No row matched the id. It was deleted server-side; re-insert.
 		const { data: ins, error: insErr } = await client
 			.from('entries')
-			.insert(row)
-			.select('id')
+			.insert(payloads.insert)
+			.select('id, submitted_by')
 			.single();
 		if (insErr) {
 			if (insErr.code === '23505') {
-				const twin = await findRemoteTwin(client, row.session_id, local);
+				const twin = await findRemoteTwin(client, payloads.update.session_id, local);
 				if (twin?.id) {
-					await markEntrySynced(local.id, twin.id);
-					return false;
+					await markEntrySynced(local.id, twin.id, twin.submitted_by);
+					return { clean: false, submittedBy: twin.submitted_by };
 				}
 			}
 			throw insErr;
 		}
-		await markEntrySynced(local.id, ins.id);
-		return false;
+		await markEntrySynced(local.id, ins.id, ins.submitted_by);
+		return { clean: false, submittedBy: ins.submitted_by };
 	}
-	return true;
+	return { clean: true, submittedBy: data[0]?.submitted_by };
 }
 
 /** The remote row matching our dedupe key, if the server already has one. */
 async function findRemoteTwin(client, sid, local) {
 	const { data } = await client
 		.from('entries')
-		.select('id')
+		.select('id, submitted_by')
 		.eq('session_id', sid)
 		.eq('event_code', local.eventCode)
 		.eq('match_number', local.matchNumber)
@@ -356,7 +369,8 @@ async function pullInbox() {
 			// may predate a field this device already has.
 			schemaVersion: remoteRow.schema_version ?? null,
 			createdAt: remoteRow.created_at,
-			clientId: remoteRow.client_id
+			clientId: remoteRow.client_id,
+			submittedBy: remoteRow.submitted_by ?? null
 		};
 
 		// Our own writes echo back. Skip them — but only after the watermark

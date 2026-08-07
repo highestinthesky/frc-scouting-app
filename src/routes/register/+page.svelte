@@ -16,9 +16,16 @@
 	let lastName = $state('');
 	let username = $state('');
 	let password = $state('');
-	let recoveryEmail = $state('');
 	let busy = $state(false);
 	let error = $state('');
+	const resuming = $derived(auth.orphaned && Boolean(auth.authUsername));
+
+	// signUp may have succeeded before invite redemption failed. That auth
+	// username is immutable, so make the retry form use it instead of creating
+	// a second account or a profile whose login name would not work.
+	$effect(() => {
+		if (resuming && auth.authUsername) username = auth.authUsername;
+	});
 
 	/** null = not checked yet, otherwise { valid, role }. */
 	let invite = $state(/** @type {null | {valid: boolean, role: string}} */ (null));
@@ -55,7 +62,7 @@
 			lastName.trim() &&
 			username &&
 			!nameProblem &&
-			password.length >= 8
+			(resuming || password.length >= 8)
 	);
 
 	async function submit(e) {
@@ -67,8 +74,7 @@
 			username,
 			password,
 			firstName,
-			lastName,
-			recoveryEmail
+			lastName
 		});
 		busy = false;
 		if (res.ok) await goto(`${base}/`);
@@ -79,8 +85,12 @@
 <svelte:head><title>Create account · FRC Scout</title></svelte:head>
 
 <main>
-	<h1>Create your account</h1>
-	<p class="lede">Ask a manager for an invite code.</p>
+	<h1>{resuming ? 'Finish account setup' : 'Create your account'}</h1>
+	<p class="lede">
+		{resuming
+			? 'Your login exists, but its invite was not redeemed. Enter a valid invite code to finish.'
+			: 'Ask a manager for an invite code.'}
+	</p>
 
 	<form onsubmit={submit}>
 		<label class="field">
@@ -125,6 +135,7 @@
 				autocapitalize="none"
 				autocorrect="off"
 				spellcheck="false"
+				readonly={resuming}
 				required
 			/>
 			{#if nameProblem}
@@ -134,29 +145,33 @@
 			{/if}
 		</label>
 
-		<label class="field">
-			<span class="label">Password</span>
-			<small class="help">At least 8 characters.</small>
-			<input type="password" bind:value={password} autocomplete="new-password" required />
-		</label>
-
-		<label class="field">
-			<span class="label">Recovery email <span class="opt">optional</span></span>
-			<small class="help">
-				The only way to reset your own password. Without one, a manager has to
-				revoke your account and re-invite you — and you'd lose this username.
-			</small>
-			<input type="email" bind:value={recoveryEmail} autocomplete="email" />
-		</label>
+		{#if resuming}
+			<p class="resume-note">
+				Signed in as <strong>{auth.authUsername}</strong>. Your existing password is unchanged.
+			</p>
+		{:else}
+			<label class="field">
+				<span class="label">Password</span>
+				<small class="help">At least 8 characters.</small>
+				<input type="password" bind:value={password} autocomplete="new-password" required />
+			</label>
+		{/if}
 
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 
 		<Button variant="primary" type="submit" full disabled={busy || !canSubmit}>
-			{busy ? 'Creating…' : 'Create account'}
+			{busy ? (resuming ? 'Finishing…' : 'Creating…') : (resuming ? 'Finish setup' : 'Create account')}
 		</Button>
 	</form>
 
-	<p class="alt">Already have one? <a href="{base}/login/">Sign in</a>.</p>
+	{#if resuming}
+		<p class="alt">
+			Not {auth.authUsername}?
+			<button type="button" class="text-button" onclick={() => auth.signOut()}>Sign out</button>
+		</p>
+	{:else}
+		<p class="alt">Already have one? <a href="{base}/login/">Sign in</a>.</p>
+	{/if}
 </main>
 
 <style>
@@ -185,14 +200,6 @@
 		margin-bottom: var(--space-4);
 	}
 	.label { font-weight: 600; font-size: var(--fs-md); }
-	.opt {
-		font-weight: 400;
-		color: var(--text-faint);
-		font-size: var(--fs-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		margin-left: var(--space-1);
-	}
 	.help { color: var(--text-faint); font-size: var(--fs-xs); line-height: 1.45; }
 	input {
 		font: inherit;
@@ -211,6 +218,15 @@
 	.note { font-size: var(--fs-xs); color: var(--text-faint); }
 	.note.good { color: var(--success); font-weight: 600; }
 	.note.bad { color: var(--danger); font-weight: 600; }
+	.resume-note {
+		margin: 0 0 var(--space-4);
+		padding: var(--space-2) var(--space-3);
+		border: 1px solid var(--warning-border);
+		border-radius: var(--radius-md);
+		background: var(--warning-bg);
+		color: var(--warning);
+		font-size: var(--fs-sm);
+	}
 	.error {
 		background: var(--danger-bg);
 		color: var(--danger);
@@ -225,4 +241,13 @@
 		color: var(--text-muted);
 	}
 	.alt a { color: var(--accent); }
+	.text-button {
+		border: 0;
+		padding: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		text-decoration: underline;
+		cursor: pointer;
+	}
 </style>

@@ -3,6 +3,24 @@
 The migrations in `migrations/` are the source of truth for this database.
 Applied in filename order, they rebuild it from nothing.
 
+## Audited live state
+
+Read-only probes on 2026-08-03 found this deployment state:
+
+| Migration | Live state |
+|---|---|
+| `0001`–`0006` | Existing baseline; not individually re-verified in this audit |
+| `0007_entry_updated_at.sql` | Applied (`entries.updated_at` exists) |
+| `0008_auth.sql` | Applied (profiles/invites/RPCs and `submitted_by` exist) |
+| `0009_picklist.sql` | Applied (picklist and alliance schedule fields exist) |
+| `0010_identity.sql` | Not applied (`profile_id` fields are absent) |
+| `0011_policies.sql` | Not applied (legacy anonymous/session policies still answer) |
+| `0012_passphrase_cleanup.sql` | Not applied (removes the inert passphrase objects after 0011 soaks) |
+
+The client also has `AUTH_ENFORCED = false`. Accounts are therefore additive,
+not the production authorization boundary. The local migration edits described
+below have **not** been run against Supabase.
+
 ## Project settings the migrations cannot set
 
 Two dashboard toggles are load-bearing, and no SQL file can set or enforce
@@ -82,14 +100,16 @@ Three specific things had drifted, and none of them announced itself:
 The `schema_version` default is the one that had already caused a real bug: the
 client hardcoded `2` while `form-config.js` moved to `3`, so entries containing
 counter metrics claimed to predate them — and that column exists precisely to
-tell "never collected" apart from "recorded zero", the invariant
-`lib/metrics.js` and eight of its tests defend.
+tell "never collected" apart from "recorded zero", an invariant enforced by
+`lib/metrics.js` and its tests.
 
 ## Applying migrations
 
-Paste each file into the Supabase SQL editor in order, or use the CLI. They are
-written to be idempotent and corrective — safe to re-run, and they `ALTER` an
-existing table rather than silently skipping it.
+Paste each file into the Supabase SQL editor in order, or use the CLI. The
+migrations are written to be corrective and re-runnable where practical, but
+that does not make the auth cutover routine: read the preconditions for `0010`
+and `0011`, test them in a disposable project, and prepare rollback steps before
+touching production.
 
 **The SQL editor shows only the last statement's result set.** A script of six
 `SELECT`s displays the sixth and discards the rest, which is an easy way to
@@ -101,15 +121,17 @@ conclude a table has no policies when you simply never saw them.
 -- paste supabase/verify_migrations.sql into the SQL editor
 ```
 
-Asserts that 0007, 0008 and 0009 actually landed: every table, column,
+Asserts that 0007, 0008 and 0009 landed: every table, column,
 function, trigger and index they create, RLS switched on, at least one policy
 per table, `search_path` pinned on every SECURITY DEFINER function, and that the
 username index is genuinely UNIQUE and on `lower()`. **Run this after applying
-them** — the editor shows only the last statement's result, so a 173-statement
-script that fails at statement 40 looks exactly like one that succeeded.
+them** — the editor shows only the last statement's result, so an early failure
+can look exactly like a script that succeeded.
 
-It checks existence, not behaviour. A policy can be present and permit the wrong
-thing; finding that out means signing in as two different people and trying.
+The audit's read-only probes confirmed the key live markers for those three
+migrations. The verification script checks existence, not behavior. A policy
+can be present and permit the wrong thing; finding that out requires JWT-backed
+behavioral tests against Postgres.
 
 ```sql
 -- paste supabase/verify_entries.sql into the SQL editor
@@ -122,19 +144,20 @@ check nobody runs — this one answers yes or no.
 Run it after applying a migration, after anyone touches the dashboard, and
 before each season.
 
-## What the client assumes about this schema
+## What the automated checks do and do not prove
 
-`npm test` covers the client side of these tables:
+`npm test` covers IndexedDB upgrades, metrics, assignment logic, dialog and sync
+rules, auth helpers, picklist/alliance behavior, design-system constraints and
+static auth-policy invariants. In particular, `auth-policies.test.mjs` now pins
+profile role/identity guards, membership plus event scoping, attribution
+triggers, grants and the role-based reset RPC.
 
-| | |
-|---|---|
-| `src/lib/db.test.mjs` | the IndexedDB version bumps, against a real (faked) IndexedDB — including the v2 → v3 upgrade with existing data, and the legacy picklist migration |
-| `src/lib/picklist.test.mjs` | rank arithmetic and per-team merge |
-| `src/lib/alliances.test.mjs` | TBA's alliance payload |
-
-None of them talk to Postgres. A migration that parses and a client that passes
-its tests can still disagree — `verify_entries.sql` is what checks the live
-database, and it only covers `entries`.
+Those checks do not connect to Postgres. `npm run check:sql` proves grammar, and
+the verification scripts prove selected live objects exist, but neither proves
+RLS behavior. Before `0011`, test with anon, an authenticated user without a
+profile, scout, manager and super JWTs across two event IDs. Include role
+changes, entry insert/update attribution, all manager writes, revocation and
+`reset_event_data()`.
 
 ## Checking syntax
 
@@ -161,33 +184,41 @@ still parses fine.
 | `migrations/0005_assignment_overrides.sql` | per-match scout overrides |
 | `migrations/0006_tba_event_key.sql` | TBA key decoupled from the sync code |
 | `migrations/0007_entry_updated_at.sql` | edit watermark, so corrections reach teammates |
-| `migrations/0008_auth.sql` | accounts, roles, invites — **additive**, nothing enforced yet |
+| `migrations/0008_auth.sql` | accounts, roles, invites and profile update guards — **live but additive** |
 | `migrations/0009_picklist.sql` | the picklist, one row per team; alliances on `schedules` |
-| `migrations/0010_identity.sql` | `profile_id` beside `scout_name` — **additive**, safe to apply now |
-| `migrations/0011_policies.sql` | the cutover — **one-way door**, off-season only, not yet applied |
+| `migrations/0010_identity.sql` | `profile_id` beside `scout_name` — **not applied; expand/backfill stage** |
+| `migrations/0011_policies.sql` | hardened membership + event RLS and role cutover — **not applied; one-way door** |
+| `migrations/0012_passphrase_cleanup.sql` | drops the inert `has_manager_token()` and `manager_token` — **not applied; after 0011 has soaked** |
 | `verify_entries.sql` | drift assertions for `entries`, read-only |
 | `verify_migrations.sql` | did 0007/0008/0009 land? read-only |
 
-`0010` and `0011` split what could have been one migration, on purpose.
+`0010` and `0011` split what could have been one migration on purpose.
 
 Swapping the identity key and swapping the policies are independent changes
 with different risk. Together they make one irreversible step where a failure is
 ambiguous — did the policy break, or did the join? Apart, they are
 expand/migrate/contract: `0010` adds `profile_id` and backfills while changing
-nothing else (safe today, mid-season), and by the time `0011` runs there is
-nothing left to migrate and it is a policy change only.
+no policy. The client then has to dual-write and read UUID identity before
+`0011` changes the security boundary. Neither stage has been deployed.
+
+The local versions additionally revoke the one-time `profile_for_name()` helper
+from API roles. It is for migration-owner backfill only, not a roster lookup RPC.
 
 See [`../docs/adr-001-auth.md`](../docs/adr-001-auth.md).
 
 ## The auth cutover, when you get to it
 
 The passphrase is being **replaced**, not supplemented. `0011` drops
-`has_manager_token()`, drops `event_meta.manager_token`, and rewrites all 18
-policies that currently call it. Two parallel authorisation systems is how you
-get a hole in one.
+`has_manager_token()`, drops `event_meta.manager_token`, and rewrites the
+policies that currently call it. It also rebuilds every policy on the event-data
+tables, explicitly enables RLS, requires both a real profile and the matching
+`x-session-id`, stamps/preserves `entries.submitted_by`, and replaces the
+passphrase-dependent `reset_event_data()` with a manager-role check. Two
+parallel authorization systems is how you get a hole in one.
 
-0008 is additive on purpose: accounts exist and work, and nothing requires
-one. Two things flip together, and neither alone is safe:
+`0008` is already live and is additive on purpose: accounts can exist while
+nothing requires one. Two things eventually flip together, and neither alone
+is safe:
 
 1. `AUTH_ENFORCED = true` in `src/lib/auth.svelte.js`
 2. Migration `0011`
@@ -197,9 +228,30 @@ Applying 0011 without the flag locks the data while the UI still offers the
 old path. `src/lib/auth.test.mjs` asserts the flag is still false, so the
 tripwire fires when someone changes it.
 
-Before either: every person needs an account, and one super user has to exist.
-The bootstrap steps are at the bottom of `0008_auth.sql`.
+Before either switch:
 
-Full sequence in [`../ROADMAP.md`](../ROADMAP.md) § Phase 1. It is a one-way
-door — once policies require an authenticated user, a device that has not signed
-in stops working. Do it between seasons.
+1. Test invite/registration behavior in a disposable database.
+2. Apply and inspect `0010`; resolve, rather than guess, unmatched identities.
+3. Convert every client read/write from passphrases and free-text identity to
+   authenticated requests and profile UUIDs.
+4. Run live RLS tests for anon, orphaned, scout, manager and super identities,
+   including attempts to cross event scopes.
+5. Bootstrap a super user, create the real accounts and sign every device in.
+6. Apply `0011` and deploy the converted client with `AUTH_ENFORCED = true` as
+   one coordinated release.
+
+The current client conversion is incomplete, so the cutover is **not ready**.
+See [`../ROADMAP.md`](../ROADMAP.md) for the dependency-ordered checklist. Once
+policies require a member profile, an unsigned device stops syncing; schedule
+the release between events and leave time for ordinary-device soak testing.
+
+## Password recovery is not wired
+
+`profiles.recovery_email` is metadata only. Supabase Auth recovery sends to
+`auth.users.email`, which in this design is the derived and unroutable
+`<username>@scout.invalid` address. GoTrue does not consult the profile column.
+
+A functional self-service reset therefore needs trusted server-side code, such
+as an Edge Function using the Auth admin API after verifying the recovery
+contact. Until that is implemented, recovery is a manual admin process; do not
+present the profile field as a working reset channel.

@@ -1,11 +1,13 @@
 # ADR 001 — Authentication and roles
 
-Status: **accepted, not yet implemented**
+Status: **accepted, partially implemented; cutover not deployed**
 Date: 2026-07-29
+Last audited: 2026-08-03
 Supersedes: the account-creation flow in the v6 upgrade doc
 
-Implementation spec for ROADMAP Phase 1. This is a decision record, not a second
-plan document — `ROADMAP.md` stays the single plan and points here.
+Implementation spec for the auth work in `ROADMAP.md`. This is a decision
+record, not a second plan document — `ROADMAP.md` stays the single plan and
+points here.
 
 ---
 
@@ -38,7 +40,7 @@ And one hard constraint that shapes every decision below:
 | 4 | `session_id` stays as the event partition; auth becomes the security boundary. |
 | 5 | Role checks via a hardened `SECURITY DEFINER` function. |
 | 6 | Revoking access = deleting the `profiles` row, not the auth user. |
-| 7 | Optional real email per profile, purely for self-service password reset. |
+| 7 | `recovery_email` may be stored as contact metadata, but a working reset requires a trusted server-side flow. |
 
 ---
 
@@ -78,7 +80,7 @@ create table public.profiles (
     first_name  text        not null,
     last_name   text        not null,
     role        public.app_role not null default 'scout',
-    -- Optional, and only ever used for password recovery. Not an identifier.
+    -- Optional recovery contact metadata. Supabase Auth does not read it.
     recovery_email text,
     created_at  timestamptz not null default now(),
 
@@ -110,9 +112,11 @@ alter table public.entries
 -- Nothing is deleted and nothing is backfilled with a guess.
 ```
 
-`scoutName` stays. It is the display name on a row and it is what the
-assignment editor matches on; `submitted_by` is the accountability link. Two
-different jobs.
+`scout_name` stays through the expand stage for display and compatibility;
+`submitted_by` is the accountability link. Migration `0010_identity.sql` adds
+the equivalent `profile_id` to assignments, overrides and targeted reminders.
+The client must dual-write those IDs before the old free-text joins can be
+retired.
 
 ## 3 · The role function
 
@@ -156,27 +160,39 @@ changes is its job: it stops being the security boundary and becomes a filter.
 The boundary becomes `to authenticated`. That single change closes the
 public-event-code hole, because `anon` loses all access.
 
-Shape, applied to every table:
+Shape, applied to every event-data table by `0011`:
 
 ```sql
 -- Read: any authenticated member, scoped to the current event.
 create policy entries_read on public.entries
     for select to authenticated
-    using (session_id::text = public.current_session_header());
+    using (
+        public.app_role() is not null
+        and session_id::text = public.current_session_header()
+    );
 
 -- Write own data: any authenticated user.
 create policy entries_insert on public.entries
     for insert to authenticated
     with check (
-        session_id::text = public.current_session_header()
+        public.app_role() is not null
+        and session_id::text = public.current_session_header()
         and submitted_by = auth.uid()      -- can't submit as someone else
     );
 
 -- Manager-only surfaces swap has_manager_token() for is_manager().
 create policy schedules_write on public.schedules
     for all to authenticated
-    using (session_id::text = public.current_session_header() and public.is_manager())
-    with check (session_id::text = public.current_session_header() and public.is_manager());
+    using (
+        public.app_role() is not null
+        and session_id::text = public.current_session_header()
+        and public.is_manager()
+    )
+    with check (
+        public.app_role() is not null
+        and session_id::text = public.current_session_header()
+        and public.is_manager()
+    );
 ```
 
 `has_manager_token()` and the passphrase flow get **deleted** once this lands.
@@ -186,18 +202,32 @@ them.
 `profiles` policies:
 
 ```sql
--- Everyone authenticated can read the roster (needed for assignment pickers).
-create policy profiles_read on public.profiles for select to authenticated using (true);
--- You may edit yourself; managers may edit anyone's role except their own.
+-- Only authenticated users who have a profile can read the roster.
+create policy profiles_read on public.profiles for select to authenticated
+    using (public.app_role() is not null);
+-- You may edit your non-identity fields; managers may edit other rows.
 create policy profiles_self_update on public.profiles
-    for update to authenticated using (id = auth.uid());
+    for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 create policy profiles_manager_update on public.profiles
     for update to authenticated
-    using (public.is_manager() and id <> auth.uid());
+    using (public.is_manager() and id <> auth.uid()
+           and (role <> 'super' or public.is_super()))
+    with check (public.is_manager() and id <> auth.uid()
+                and (role <> 'super' or public.is_super()));
 ```
 
-That last `id <> auth.uid()` is deliberate: a manager cannot promote
-themselves to `super`. Only a `super` can mint a `super` invite.
+RLS chooses rows, not mutable columns, so `0008` also installs a `BEFORE UPDATE`
+trigger. It makes `id` and `username` immutable, rejects every self-role change,
+and reserves transitions to or from `super` for a super user. Without that
+trigger, the self-update policy would be a privilege-escalation path.
+
+`0011` rebuilds every policy on each event-data table instead of assuming old
+dashboard policies are absent. Each policy requires both a real profile
+(`app_role() is not null`) and the matching `x-session-id`; authentication and
+event partitioning are independent checks. It also re-enables RLS explicitly,
+revokes `anon` grants, stamps `submitted_by` on insert, preserves it on update,
+and rewrites `reset_event_data()` to authorize with `is_manager()` before
+dropping `has_manager_token()`.
 
 ## 5 · Login without email
 
@@ -225,8 +255,9 @@ operation, not a settings field.
 ## 6 · Registration, as an RPC
 
 `signUp()` creates the auth user; a `SECURITY DEFINER` RPC creates the profile
-and burns the invite in one transaction. No profile means no access, so an auth
-user created without a valid invite can log in and see nothing.
+and burns the invite in one transaction. Once `0011` is deployed, no profile
+means no event-data access, so an auth user created without a valid invite can
+log in and see nothing.
 
 ```sql
 create or replace function public.redeem_invite(
@@ -300,53 +331,58 @@ Route guarding is therefore **presence-of-session**, not validity-of-token:
 const hasSession = Boolean(session.access_token || session.refresh_token);
 ```
 
-## 8 · Password recovery — the honest gap
+## 8 · Password recovery — unimplemented
 
-No real email means no built-in reset. Two paths, neither requiring a server:
+The derived Auth address is `<username>@scout.invalid`, so Supabase's normal
+reset email has nowhere to go. The `profiles.recovery_email` column does **not**
+fix that: GoTrue sends recovery mail to `auth.users.email` and never consults a
+column in `public.profiles`.
 
-- **Preferred:** the profile carries an optional `recovery_email`. If set,
-  Supabase's own recovery flow works normally. Offered at registration and in
-  Settings, clearly labelled as recovery-only.
-- **Fallback:** the manager deletes the `profiles` row and issues a fresh
-  invite. Access dies with the profile because every policy keys off it. The
-  orphaned `auth.users` row is harmless — it can log in and see nothing.
-
-This is the weakest part of the design and the part most likely to bite: a
-teenager forgetting a password at 7am on competition Saturday is a *when*, not
-an *if*. The fallback works but costs them their username. If it happens twice
-in one season, that's the signal to add one small Edge Function holding
-`service_role` and do proper resets — and *only* then, because it's the first
-piece of server-side code in the project and that's a threshold worth paying
-attention to.
+Consequently there is no working self-service reset in the current design.
+Implementing one requires trusted code — most likely a small Edge Function
+holding `service_role` — that verifies the recovery contact and invokes the
+Auth admin API. Until that exists, recovery is a manual administrator
+operation. Deleting only the profile revokes data access after `0011`, but it
+does not delete or rename the underlying Auth user and must not be documented
+as a complete reset flow.
 
 ## 9 · Migration order
 
-1. **`0001_entries.sql` — done.** The `entries` table and its policies lived
-   only in the Supabase dashboard; migrations started at 0002. Now captured,
-   and written to be idempotent: it drops every existing policy on the table by
-   name — whatever it is called — before creating the known set. That matters
-   because permissive policies combine with OR, so one forgotten dashboard
-   policy would silently defeat a restrictive one. Run `verify_entries.sql`
-   first to check for column drift, which `CREATE TABLE IF NOT EXISTS` cannot
-   fix.
-2. `0008_auth.sql` — types, `profiles`, `invites`, functions, `submitted_by`.
-3. `0011_policies.sql` — swap every policy to `to authenticated`, replace
-   `has_manager_token()` with `is_manager()`, drop the passphrase machinery.
-4. Client: `auth.svelte.js`, `/login`, `/register`, `/accounts`, guard in
-   `+layout.svelte`.
-5. Delete `hashManagerToken`, `event-meta.js`'s passphrase functions, and the
-   `ManagerPassphrase` component.
+The live project was probed on 2026-08-03. Migrations `0007`, `0008` and `0009`
+are applied. `0010` and `0011` are not, and `AUTH_ENFORCED` remains `false`.
+No migration was deployed as part of the current local hardening work.
 
-**Step 3 is a hard cutover.** Every existing device loses access until it logs
-in. With ~15 users and months of runway that is the right trade — a dual-run
-window means two authorisation systems live simultaneously, which is how you
-get a hole in one. Do it between seasons, not before an event.
+Finish the upgrade in dependency order:
+
+1. Exercise the existing account and invite flow in a non-production database,
+   including concurrent invite redemption and username conflicts.
+2. Apply `0010_identity.sql` in staging. Inspect every unmatched backfill; do
+   not guess at ambiguous names.
+3. Convert the client to dual-write `profile_id`/`submitted_by`, prefer UUIDs on
+   reads, and use the authenticated Supabase client for every shared-data path.
+4. Remove `managerToken` and passphrase plumbing from the client. The legacy UI
+   must not survive the policy cutover.
+5. Run live Postgres/RLS tests as anon, orphaned auth user, scout, manager and
+   super. Cover cross-event requests, profile-role changes, entry attribution,
+   every manager table, revoke behavior and `reset_event_data()`.
+6. Bootstrap and invite the real users, then make every event device sign in
+   once while online.
+7. Apply `0011_policies.sql` and deploy `AUTH_ENFORCED = true` with the converted
+   client as one coordinated release. Verify immediately, with rollback steps
+   prepared before the migration starts.
+8. Only after the cutover is verified, remove obsolete passphrase schema and
+   compatibility code that the coordinated release no longer needs.
+
+Step 7 is the hard cutover. Applying `0011` while the current client still sends
+manager passphrases would reject normal operations; flipping the flag without
+`0011` would lock the UI while leaving the old database boundary in place.
+Do this between events, followed by ordinary-device soak time.
 
 ## 10 · Bootstrap
 
 Chicken-and-egg: the first `super` needs an invite, and invites need a creator.
 
-Once, by hand in the Supabase dashboard:
+Once per environment, by hand in the Supabase dashboard before the cutover:
 
 1. Auth → Add user → `<you>@scout.invalid`, a password, confirmed.
 2. SQL editor: insert a `profiles` row for that uuid with `role = 'super'`.
@@ -366,19 +402,33 @@ it is exactly the step that gets forgotten.
 
 ## 12 · Test plan
 
-Policies are the part that fails silently, so they get tested directly in SQL
-rather than through the UI:
+The repository now has static regression checks for policy shape. They catch a
+missing membership check, missing event scope, a mutable profile role, an
+unprotected attribution column, unsafe grants and a passphrase-dependent reset
+RPC. These checks are valuable, but they inspect text and do not execute
+Postgres.
+
+Before deployment, run behavioral tests against a disposable Supabase database:
 
 - A `scout` JWT cannot insert into `schedules`, `assignments`, or `invites`.
 - A `scout` cannot `update` their own `role`.
 - A `manager` cannot set `role = 'super'` on anyone, including themselves.
-- `anon` gets zero rows from every table.
+- `anon` and an authenticated user without a profile get zero rows from every
+  event-data table.
+- A valid member cannot read or mutate another `session_id` by changing the
+  request body or header independently.
 - Two concurrent `redeem_invite` calls on one code: exactly one succeeds.
 - Two concurrent registrations with the same username: exactly one succeeds,
   the other raises `23505`.
 - `insert` with `submitted_by` set to another user's uuid is rejected.
+- Updating an entry cannot alter its original `submitted_by`.
+- `reset_event_data()` rejects anon/scouts, accepts a manager for the current
+  event only, clears planning state and preserves entries.
 
 Client-side, the one that matters most:
 
 - Kill the network, record three entries, restore the network. All three
   arrive, and the app never showed a login screen.
+
+The cutover is not ready until those live tests pass and the client UUID/
+passphrase conversion is complete.

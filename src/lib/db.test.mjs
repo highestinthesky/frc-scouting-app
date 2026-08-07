@@ -144,9 +144,24 @@ function dbAt(name, upTo) {
 {
 	// picklist-store.js imports the shared `db` singleton, so the fixture has to
 	// go through that instance rather than a local one.
-	const { db } = await import('./db.js');
+	const { db, markEntrySynced } = await import('./db.js');
 	const store = await import('./picklist-store.js');
 	await db.open();
+
+	const attributionFixture = await db.entries.add({
+		eventCode: '2027hvr',
+		matchNumber: 1,
+		teamNumber: 254,
+		scoutName: 'ning',
+		createdAt: '2026-08-03T12:00:00Z',
+		pendingSync: true
+	});
+	await markEntrySynced(attributionFixture, 'remote-attribution-row', 'server-profile');
+	const attributed = await db.entries.get(attributionFixture);
+	ok('the authoritative INSERT attribution is persisted locally',
+		attributed.submittedBy === 'server-profile');
+	ok('persisting server attribution also marks the outbox row clean',
+		attributed.pendingSync === false && attributed.remoteId === 'remote-attribution-row');
 
 	await db.settings.put({
 		key: 'picklist:2027hvr',

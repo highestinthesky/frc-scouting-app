@@ -7,7 +7,13 @@
 // overwritten are exactly the ones worth pinning down, so they were pulled
 // somewhere they can be.
 
-import { shouldApplyRemote, sameObservations, pushMode, EDITABLE_FIELDS } from './sync-rules.js';
+import {
+	shouldApplyRemote,
+	sameObservations,
+	pushMode,
+	entryWritePayloads,
+	EDITABLE_FIELDS
+} from './sync-rules.js';
 
 let pass = 0;
 let fail = 0;
@@ -27,6 +33,7 @@ const localRow = (over = {}) => ({
 	teamNumber: 1234,
 	allianceColor: 'red',
 	schemaVersion: 3,
+	submittedBy: 'profile-a',
 	observations: { autoPath: 'left', notes: 'fast' },
 	...over
 });
@@ -65,6 +72,7 @@ const localRow = (over = {}) => ({
 		teamNumber: 5678,
 		allianceColor: 'blue',
 		schemaVersion: 4,
+		submittedBy: 'profile-b',
 		observations: { autoPath: 'right', notes: 'fast' }
 	};
 	for (const k of EDITABLE_FIELDS) {
@@ -110,6 +118,20 @@ const localRow = (over = {}) => ({
 	ok('a never-synced row inserts', pushMode({ remoteId: null }) === 'insert');
 	ok('a synced row updates', pushMode({ remoteId: 'r1' }) === 'update');
 	ok('a missing row defaults to insert', pushMode(undefined) === 'insert');
+}
+
+// ─── immutable submitter attribution ──────────────────────────────────────
+{
+	const common = { id: 'remote-id', team_number: 254 };
+	const payloads = entryWritePayloads(common, 'profile-a');
+	ok('a new row carries the account performing its first sync',
+		payloads.insert.submitted_by === 'profile-a');
+	ok('an entry edit never rewrites submitted_by',
+		!Object.hasOwn(payloads.update, 'submitted_by'));
+	ok('payload construction does not mutate the common row',
+		!Object.hasOwn(common, 'submitted_by'));
+	ok('a legacy anonymous recording inserts an explicit null attribution',
+		entryWritePayloads(common, undefined).insert.submitted_by === null);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

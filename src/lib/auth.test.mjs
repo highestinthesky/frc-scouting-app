@@ -2,8 +2,8 @@
 //   node src/lib/auth.test.mjs
 //
 // auth.svelte.js is runes and cannot be imported outside a Svelte runtime, so
-// the two functions worth pinning down — the derived email and the username
-// rule — are re-read from source and evaluated. They are pure and dependency
+// the pure helpers worth pinning down — derived email, username rules and auth
+// user-id extraction — are re-read from source and evaluated. They are dependency
 // free, which is what makes that safe.
 //
 // What they protect:
@@ -24,11 +24,23 @@ const src = readFileSync(path.join(here, 'auth.svelte.js'), 'utf8');
 
 // Lift the pure exports out. Everything above `const state = $state(` is free
 // of runes; taking that prefix keeps this honest about what it is testing.
+//
+// /gm, not /m. Without the global flag this stripped only the FIRST import, so
+// the day auth.svelte.js gained a second one the leftover relative specifier
+// went into a data: URL that cannot resolve it, and the whole suite died with
+// ERR_INVALID_URL — a failure that names the loader rather than the cause.
 const pure = src.slice(0, src.indexOf('const state = $state(')).replace(
-	/^import .*$/m,
+	/^import .*$/gm,
 	''
 );
-const { emailForUsername, usernameProblem, USERNAME_RE, AUTH_ENFORCED } = await import(
+const {
+	emailForUsername,
+	usernameProblem,
+	USERNAME_RE,
+	authUserId,
+	authUsername,
+	AUTH_ENFORCED
+} = await import(
 	'data:text/javascript,' + encodeURIComponent(pure)
 );
 
@@ -85,6 +97,48 @@ const ok = (name, cond, detail = '') => {
 
 	ok('a too-short name says so specifically', /3 characters/.test(usernameProblem('ab')));
 	ok('a too-long name says so specifically', /24 characters/.test(usernameProblem('x'.repeat(30))));
+}
+
+// ─── profile reads must target the signed-in user ───────────────────────────
+{
+	ok('gets the user id from getSession data',
+		authUserId({ session: { user: { id: 'session-user' } } }) === 'session-user');
+	ok('gets the user id from sign-in data',
+		authUserId({ user: { id: 'signed-in-user' }, session: null }) === 'signed-in-user');
+	ok('missing auth data has no user id', authUserId(null) === null);
+	ok('recovers the immutable username from a stored auth session',
+		authUsername({ session: { user: { email: 'Scout.One@scout.invalid' } } }) === 'scout.one');
+	ok('does not treat an unrelated email address as an app username',
+		authUsername({ user: { email: 'scout@example.com' } }) === null);
+
+	const loadProfileSrc = src.slice(src.indexOf('async function loadProfile'));
+	ok('loadProfile scopes the roster query to the current user',
+		/\.from\('profiles'\)[\s\S]*?\.eq\('id', userId\)[\s\S]*?\.maybeSingle\(\)/.test(loadProfileSrc));
+}
+
+// ─── additive client cutover invariants ────────────────────────────────────
+{
+	const supabaseSrc = readFileSync(path.join(here, 'supabase.js'), 'utf8');
+	const registerSrc = readFileSync(path.join(here, '../routes/register/+page.svelte'), 'utf8');
+	const layoutSrc = readFileSync(path.join(here, '../routes/+layout.svelte'), 'utf8');
+	const editSrc = readFileSync(path.join(here, '../routes/scouting/edit/+page.svelte'), 'utf8');
+
+	ok('event clients fetch the current auth-client session for each request',
+		/fetchWithCurrentAuth[\s\S]*?getAuthClient\(\)\.auth\.getSession\(\)/.test(supabaseSrc));
+	ok('event clients do not persist a second, stale auth session',
+		/persistSession:\s*false[\s\S]*?fetch:\s*fetchWithCurrentAuth/.test(supabaseSrc));
+	ok('an orphaned signed-in user is allowed to remain on the registration route',
+		/onRegisterRoute\s*&&\s*!auth\.orphaned/.test(layoutSrc));
+	ok('the registration form supports finishing an orphaned account',
+		/auth\.orphaned[\s\S]*?Finish account setup/.test(registerSrc));
+	ok('registration no longer promises an unsupported recovery-email flow',
+		!/recoveryEmail|Recovery email|reset your own password/i.test(registerSrc));
+	ok('a last-known profile keeps account role UI available on a cold offline launch',
+		/readCachedProfile\(userId\)[\s\S]*?state\.profile = cached/.test(src));
+	ok('the profile UI cache is cleared on sign-out',
+		/event === 'SIGNED_OUT'[\s\S]*?clearCachedProfile\(\)/.test(src));
+	ok('post-cutover peer entries are read-only for ordinary scouts',
+		/AUTH_ENFORCED[\s\S]*?entry\.submittedBy === auth\.profile\?\.id/.test(editSrc));
 }
 
 // ─── the cutover flag ──────────────────────────────────────────────────────

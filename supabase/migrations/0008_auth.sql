@@ -21,6 +21,8 @@
 --
 -- SAFE TO RE-RUN.
 
+BEGIN;
+
 -- ─── role ──────────────────────────────────────────────────────────────────
 
 DO $$
@@ -125,6 +127,74 @@ GRANT EXECUTE ON FUNCTION public.app_role()  TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_manager() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_super()   TO authenticated;
 
+-- RLS decides which ROW a caller may update; it cannot safely express which
+-- columns may change because WITH CHECK sees only the proposed row. Keep the
+-- immutable identity and the role hierarchy in a trigger, where OLD and NEW are
+-- both available. SQL-owner/service-role maintenance has no auth.uid() and is
+-- deliberately left alone; these checks protect authenticated API callers.
+
+CREATE OR REPLACE FUNCTION public.guard_profile_update() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+    v_auth_email text;
+BEGIN
+    IF auth.uid() IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.id IS DISTINCT FROM auth.uid() THEN
+            RAISE EXCEPTION 'A profile must belong to the signed-in user.'
+                USING ERRCODE = '42501';
+        END IF;
+
+        SELECT lower(u.email) INTO v_auth_email
+          FROM auth.users u
+         WHERE u.id = auth.uid();
+        IF v_auth_email IS DISTINCT FROM lower(NEW.username) || '@scout.invalid' THEN
+            RAISE EXCEPTION 'Profile username must match the signed-in account.'
+                USING ERRCODE = '42501';
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    IF NEW.id IS DISTINCT FROM OLD.id THEN
+        RAISE EXCEPTION 'Profile ids are immutable.' USING ERRCODE = '42501';
+    END IF;
+
+    IF NEW.username IS DISTINCT FROM OLD.username THEN
+        RAISE EXCEPTION 'Usernames are immutable.' USING ERRCODE = '42501';
+    END IF;
+
+    IF NEW.role IS DISTINCT FROM OLD.role THEN
+        IF OLD.id = auth.uid() THEN
+            RAISE EXCEPTION 'You cannot change your own role.' USING ERRCODE = '42501';
+        END IF;
+
+        IF (OLD.role = 'super' OR NEW.role = 'super') AND NOT public.is_super() THEN
+            RAISE EXCEPTION 'Only a super user may promote or demote a super user.'
+                USING ERRCODE = '42501';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.guard_profile_update() FROM PUBLIC;
+
+DROP TRIGGER IF EXISTS profiles_guard_identity ON public.profiles;
+CREATE TRIGGER profiles_guard_identity
+    BEFORE UPDATE ON public.profiles
+    FOR EACH ROW EXECUTE FUNCTION public.guard_profile_update();
+
+DROP TRIGGER IF EXISTS profiles_guard_insert_identity ON public.profiles;
+CREATE TRIGGER profiles_guard_insert_identity
+    BEFORE INSERT ON public.profiles
+    FOR EACH ROW EXECUTE FUNCTION public.guard_profile_update();
+
 -- ─── redeeming an invite ───────────────────────────────────────────────────
 --
 -- signUp() creates the auth user; this creates the profile and burns the code
@@ -141,9 +211,19 @@ AS $$
 DECLARE
     v_role public.app_role;
     v_code text := upper(trim(p_code));
+    v_username text := lower(trim(p_username));
+    v_auth_email text;
 BEGIN
     IF auth.uid() IS NULL THEN
         RAISE EXCEPTION 'Sign up before redeeming an invite.';
+    END IF;
+
+    SELECT lower(u.email) INTO v_auth_email
+      FROM auth.users u
+     WHERE u.id = auth.uid();
+    IF v_auth_email IS DISTINCT FROM v_username || '@scout.invalid' THEN
+        RAISE EXCEPTION 'That username does not match the signed-in account.'
+            USING ERRCODE = '42501';
     END IF;
 
     -- FOR UPDATE is the point: without the lock, two scouts redeeming the same
@@ -162,7 +242,7 @@ BEGIN
     INSERT INTO public.profiles (id, username, first_name, last_name, role, recovery_email)
     VALUES (
         auth.uid(),
-        lower(trim(p_username)),
+        v_username,
         trim(p_first),
         trim(p_last),
         v_role,
@@ -205,7 +285,8 @@ BEGIN
     LOOP
         v_code := (
             SELECT string_agg(substr('ABCDEFGHJKMNPQRSTUVWXYZ23456789',
-                                     (floor(random() * 30) + 1)::int, 1), '')
+                                     (floor(random() * length('ABCDEFGHJKMNPQRSTUVWXYZ23456789')) + 1)::int,
+                                     1), '')
             FROM generate_series(1, 6)
         );
         EXIT WHEN NOT EXISTS (SELECT 1 FROM public.invites WHERE code = v_code);
@@ -259,21 +340,31 @@ BEGIN
     END LOOP;
 END $$;
 
--- Everyone signed in can read the roster: the assignment editor and the
--- reminder picker both need names.
+-- Every signed-in TEAM MEMBER can read the roster: the assignment editor and
+-- reminder picker both need names. An auth.users row without a profile is an
+-- unredeemed or revoked account, not membership.
 CREATE POLICY profiles_read ON public.profiles
-    FOR SELECT TO authenticated USING (true);
+    FOR SELECT TO authenticated USING (public.app_role() IS NOT NULL);
 
--- You may edit yourself.
+-- You may edit yourself. guard_profile_update() keeps username immutable and
+-- prevents this policy from becoming a self-promotion path.
 CREATE POLICY profiles_self_update ON public.profiles
     FOR UPDATE TO authenticated USING (id = auth.uid()) WITH CHECK (id = auth.uid());
 
--- A manager may edit anyone EXCEPT themselves. The `id <> auth.uid()` is
--- deliberate: without it a manager could promote themselves to super.
+-- A manager may edit another scout/manager. Only a super may touch a row that
+-- is or will become super; USING checks the old row, WITH CHECK the new one.
 CREATE POLICY profiles_manager_update ON public.profiles
     FOR UPDATE TO authenticated
-    USING (public.is_manager() AND id <> auth.uid())
-    WITH CHECK (public.is_manager() AND id <> auth.uid());
+    USING (
+        public.is_manager()
+        AND id <> auth.uid()
+        AND (role <> 'super' OR public.is_super())
+    )
+    WITH CHECK (
+        public.is_manager()
+        AND id <> auth.uid()
+        AND (role <> 'super' OR public.is_super())
+    );
 
 -- Revoking access = deleting the profile. A manager cannot delete themselves,
 -- and cannot delete a super.
@@ -285,14 +376,28 @@ CREATE POLICY profiles_manager_delete ON public.profiles
 -- bypasses this. No policy means no direct inserts.
 
 CREATE POLICY invites_manager_read ON public.invites
-    FOR SELECT TO authenticated USING (public.is_manager());
+    FOR SELECT TO authenticated USING (
+        public.is_manager()
+        AND (role <> 'super' OR public.is_super())
+    );
 
 CREATE POLICY invites_manager_delete ON public.invites
-    FOR DELETE TO authenticated USING (public.is_manager() AND redeemed_at IS NULL);
+    FOR DELETE TO authenticated USING (
+        public.is_manager()
+        AND redeemed_at IS NULL
+        AND (role <> 'super' OR public.is_super())
+    );
 
 -- Insert goes through create_invite() only.
 
-GRANT SELECT, UPDATE, DELETE ON public.profiles TO authenticated;
+-- recovery_email is reserved metadata for a future trusted recovery service;
+-- it does not belong in the team roster. RLS filters rows, not columns, so a
+-- table-wide SELECT would expose it to every member through direct REST calls.
+REVOKE SELECT ON public.profiles FROM PUBLIC, anon, authenticated;
+REVOKE SELECT (recovery_email) ON public.profiles FROM PUBLIC, anon, authenticated;
+GRANT SELECT (id, username, first_name, last_name, role, created_at)
+    ON public.profiles TO authenticated;
+GRANT UPDATE, DELETE ON public.profiles TO authenticated;
 GRANT SELECT, DELETE ON public.invites TO authenticated;
 
 -- ─── bootstrap ─────────────────────────────────────────────────────────────
@@ -333,3 +438,5 @@ GRANT SELECT, DELETE ON public.invites TO authenticated;
 --
 --   Check it: GET /auth/v1/settings -> mailer_autoconfirm should be true.
 --   See supabase/README.md § Project settings the migrations cannot set.
+
+COMMIT;

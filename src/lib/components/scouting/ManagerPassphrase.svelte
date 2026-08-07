@@ -13,6 +13,7 @@
 		showForgotHelp = $bindable(),
 		passphraseSetRemote,
 		passphraseLocallyKnown,
+		accountManaged = false,
 		busy,
 		onSet,
 		onVerify,
@@ -23,6 +24,23 @@
 </script>
 
 <section>
+	{#if accountManaged}
+		<h2>Manager access</h2>
+		<p class="muted">
+			Your signed-in manager account authorizes schedule, assignment, reminder and picklist changes.
+			The legacy shared passphrase is not used after account cutover.
+		</p>
+		<details class="forgot-block">
+			<summary>Reset event planning data</summary>
+			<p class="muted small">
+				This keeps scouting entries, but removes the published schedule, assignments, overrides,
+				reminders and shared picklist for <code>{session.eventCode}</code>.
+			</p>
+			<Button variant="danger" onclick={onReset} disabled={busy}>
+				Reset planning data
+			</Button>
+		</details>
+	{:else}
 	<h2>Manager passphrase</h2>
 	<p class="muted">
 		Required to publish schedules and edit assignments. Scouts don't need it.
@@ -94,6 +112,7 @@ WHERE event_code = '{session.eventCode}';</code></pre>
 				Then come back here, set a fresh passphrase, and re-publish.
 			</p>
 		</details>
+	{/if}
 	{/if}
 </section>
 

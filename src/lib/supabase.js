@@ -70,21 +70,49 @@ export function createSupabaseClient(sessionId, opts = {}) {
 	if (opts.managerToken) headers['x-manager-token'] = opts.managerToken;
 	return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 		auth: {
-			// Reads the shared session from storage so requests carry the
-			// signed-in user's token, but does NOT drive the refresh loop —
-			// only the auth client below does that. Several clients each
-			// refreshing the same token would race each other.
-			...AUTH_STORAGE,
-			autoRefreshToken: false
+			// Event clients never own or persist an auth session. Their fetch
+			// wrapper below asks the single auth client for its current token on
+			// every request. Reading the same storage key here only captures the
+			// session when this client is constructed; cached event clients would
+			// otherwise keep sending a token from before the latest refresh.
+			persistSession: false,
+			autoRefreshToken: false,
+			detectSessionInUrl: false
 		},
-		global: { headers }
+		global: { headers, fetch: fetchWithCurrentAuth }
 	});
+}
+
+/**
+ * Supabase's data client starts each request with the anon-key Authorization
+ * header. Replace it with the access token owned by the current auth client,
+ * when one exists. With no session (the pre-cutover legacy path), leaving the
+ * header alone intentionally keeps anonymous event-code sync working.
+ *
+ * This runs at request time, not client-construction time, so a cached event
+ * client immediately sees sign-in, sign-out and token refreshes.
+ */
+async function fetchWithCurrentAuth(input, init = {}) {
+	try {
+		const { data } = await getAuthClient().auth.getSession();
+		const token = data.session?.access_token;
+		if (token) {
+			const headers = new Headers(init.headers);
+			headers.set('authorization', `Bearer ${token}`);
+			return fetch(input, { ...init, headers });
+		}
+	} catch (_error) {
+		// A refresh/read failure must not break the legacy anonymous path. The
+		// request will either work under the additive policies or be rejected
+		// after cutover and retried by the sync layer when auth recovers.
+	}
+	return fetch(input, init);
 }
 
 // ─── auth ──────────────────────────────────────────────────────────────────
 //
-// One storage key, shared by every client, so the per-event data clients pick
-// up whatever session the auth client established.
+// One persisted auth session, owned by one client. Event-scoped data clients
+// borrow its current access token through fetchWithCurrentAuth() above.
 
 const AUTH_STORAGE = {
 	persistSession: true,

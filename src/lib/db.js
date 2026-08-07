@@ -142,8 +142,13 @@ export async function getUnsyncedEntries() {
  * the dirty flag. Clearing matters — a row left dirty is retried on every
  * 3-second tick forever.
  */
-export async function markEntrySynced(localId, remoteId) {
-	return db.entries.update(localId, { remoteId, pendingSync: false });
+export async function markEntrySynced(localId, remoteId, submittedBy = undefined) {
+	const patch = { remoteId, pendingSync: false };
+	// The INSERT response is authoritative for attribution. Migration 0011
+	// stamps auth.uid() server-side, so persist what Postgres actually accepted
+	// rather than the claim the pre-cutover client sent.
+	if (submittedBy !== undefined) patch.submittedBy = submittedBy;
+	return db.entries.update(localId, patch);
 }
 
 /**
@@ -323,4 +328,3 @@ export async function getMostUsedObservationValuesForTeam(observationKey, teamNu
 		.sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
 		.slice(0, limit);
 }
-

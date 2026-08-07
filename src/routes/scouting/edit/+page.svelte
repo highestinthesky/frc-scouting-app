@@ -7,6 +7,7 @@
 	import { base } from '$app/paths';
 	import { getEntry, updateEntry, deleteEntry } from '$lib/db.js';
 	import { kick as kickSync } from '$lib/sync.svelte.js';
+	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
 	import {
 		IDENTITY_FIELDS,
 		METRIC_FIELDS,
@@ -24,6 +25,12 @@
 	let notFound = $state(false);
 	let saving = $state(false);
 	let error = $state('');
+	const canEdit = $derived(
+		!AUTH_ENFORCED ||
+			!entry?.remoteId ||
+			auth.isManager ||
+			(Boolean(entry?.submittedBy) && entry.submittedBy === auth.profile?.id)
+	);
 
 	function blank() {
 		const v = {};
@@ -74,6 +81,10 @@
 
 	async function submit(e) {
 		e.preventDefault();
+		if (!canEdit) {
+			error = 'Only the original submitter or a manager can edit this entry.';
+			return;
+		}
 		const v = validate();
 		if (v) {
 			error = v;
@@ -140,7 +151,14 @@
 			<a class="back-link" href="{base}/">Back to entries</a>
 		</div>
 	{:else}
+		{#if !canEdit}
+			<p class="read-only" role="status">
+				Read only — this entry belongs to another scout. Its original submitter or a manager can
+				make corrections.
+			</p>
+		{/if}
 		<form onsubmit={submit} novalidate>
+			<fieldset disabled={!canEdit}>
 			<section>
 				<h2>Match</h2>
 				{#each IDENTITY_FIELDS as f (f.key)}
@@ -181,6 +199,7 @@
 			<p class="hint muted">
 				Originally recorded {new Date(entry.createdAt).toLocaleString()} by {entry.scoutName}.
 			</p>
+			</fieldset>
 		</form>
 	{/if}
 </main>
@@ -232,6 +251,21 @@
 		padding: var(--space-3);
 		border-radius: var(--radius-md);
 		margin-top: var(--space-4);
+	}
+	.read-only {
+		margin: 0 0 var(--space-4);
+		padding: var(--space-3);
+		border: 1px solid var(--warning-border);
+		border-radius: var(--radius-md);
+		background: var(--warning-bg);
+		color: var(--warning);
+		line-height: 1.45;
+	}
+	fieldset {
+		min-width: 0;
+		margin: 0;
+		padding: 0;
+		border: 0;
 	}
 	.not-found { margin-top: var(--space-6); text-align: center; }
 	.back-link {

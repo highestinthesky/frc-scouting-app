@@ -37,12 +37,16 @@
 	// on validity is how a scout in a dead corner gets bounced to a login
 	// screen mid-match, which is the failure this whole design avoids.
 	const PUBLIC_ROUTES = ['/login', '/register'];
+	const onLoginRoute = $derived(isActive('/login'));
+	const onRegisterRoute = $derived(isActive('/register'));
 	const onPublicRoute = $derived(PUBLIC_ROUTES.some((r) => isActive(r)));
 
 	$effect(() => {
 		if (auth.loading) return;
-		// Signed in and sitting on /login: always bounce them home.
-		if (auth.signedIn && onPublicRoute) {
+		// A signed-in user never needs /login. A complete account never needs
+		// /register either, but an orphaned auth user MUST be allowed to stay
+		// there and retry the invite redemption that failed after signUp().
+		if (auth.signedIn && (onLoginRoute || (onRegisterRoute && !auth.orphaned))) {
 			goto(`${base}/`, { replaceState: true });
 			return;
 		}
@@ -54,6 +58,20 @@
 			goto(`${base}/login/`, { replaceState: true });
 		}
 	});
+
+	// Before cutover, the local role/name and manager passphrase remain the
+	// operational authority. After cutover, the account profile becomes the
+	// only identity and role source. Keeping this branch next to the flag avoids
+	// a half-cutover where the badge and manager navigation disagree.
+	const shellIdentity = $derived.by(() =>
+		AUTH_ENFORCED
+			? {
+					name: auth.displayName || auth.profile?.username || '',
+					role: auth.role ?? 'scout',
+					isManager: auth.isManager
+				}
+			: { name: session.scoutName, role: role.value, isManager: role.isManager }
+	);
 
 	// Re-scope the sync layer whenever the user changes their event code in
 	// Identity. Empty/missing event code pauses sync; otherwise the layer
@@ -138,12 +156,12 @@
 		<div class="app-bar-inner">
 			<strong class="event">{session.eventCode}</strong>
 			<span class="sep">·</span>
-			<span class="name">{session.scoutName}</span>
+			<span class="name">{shellIdentity.name}</span>
 			<span class="sync-dot {syncDot.className}" title={syncDot.title} aria-label={syncDot.title}>
 				{#if syncState.pendingCount > 0}<span class="pending-count">{syncState.pendingCount}</span>{/if}
 			</span>
-			<span class="role-badge" class:manager={auth.isManager}>
-				{auth.role ?? role.value}
+			<span class="role-badge" class:manager={shellIdentity.isManager}>
+				{shellIdentity.role}
 			</span>
 		</div>
 	</header>
@@ -157,7 +175,7 @@
 		<a href="{base}/scouting/" class:active={isActive('/scouting')} aria-current={isActive('/scouting') ? 'page' : undefined}>
 			Scouting
 		</a>
-		{#if auth.isManager || role.isManager}
+		{#if shellIdentity.isManager}
 			<a href="{base}/insights/" class:active={isActive('/insights')} aria-current={isActive('/insights') ? 'page' : undefined}>
 				Insights
 			</a>
@@ -166,6 +184,14 @@
 			Settings
 		</a>
 	</nav>
+
+	{#if !AUTH_ENFORCED && auth.orphaned}
+		<div class="account-warning" role="status">
+			<strong>Account setup is incomplete.</strong>
+			Legacy event-code access still works on this release, but this account will not work after
+			cutover until you <a href="{base}/register/">redeem an invite</a>.
+		</div>
+	{/if}
 
 	<ReminderBanner />
 
@@ -362,6 +388,19 @@
 		color: var(--text-primary);
 		border: 1px solid var(--border-strong);
 	}
+	.account-warning {
+		max-width: 72rem;
+		margin: var(--space-3) auto 0;
+		padding: var(--space-2) var(--space-4);
+		border: 1px solid var(--warning-border);
+		border-radius: var(--radius-md);
+		background: var(--warning-bg);
+		color: var(--warning);
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: var(--fs-sm);
+		line-height: 1.45;
+	}
+	.account-warning a { color: inherit; font-weight: 700; }
 
 	/* Full-screen boot state — a deliberate optical centre, not spacing on the
 	   scale, so it is written as a multiple of the largest token. */

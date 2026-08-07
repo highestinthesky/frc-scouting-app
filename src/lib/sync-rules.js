@@ -4,14 +4,16 @@
 //
 // The rules here are small but they are the ones that lose data when wrong.
 
-/** Fields an edit can change. createdAt, eventCode, scoutName and clientId
- *  identify the row and are never rewritten by a sync. */
+/** Fields a pull may refresh. createdAt, eventCode, scoutName and clientId
+ * identify the row and are never rewritten by a sync. submittedBy is immutable
+ * user data, but the server copy is authoritative when a remote row arrives. */
 export const EDITABLE_FIELDS = [
 	'matchNumber',
 	'teamNumber',
 	'allianceColor',
 	'observations',
-	'schemaVersion'
+	'schemaVersion',
+	'submittedBy'
 ];
 
 /**
@@ -74,4 +76,24 @@ export function sameObservations(a, b) {
  */
 export function pushMode(local) {
 	return local?.remoteId ? 'update' : 'insert';
+}
+
+/**
+ * Build the two wire shapes for an entry.
+ *
+ * Attribution is a claim by the account performing the first sync and is only
+ * sent when the entry first reaches the server. Migration 0011 independently
+ * stamps the same value from auth.uid(); the client field keeps the additive
+ * pre-cutover migration useful without trusting it after cutover. An edit must
+ * never rewrite the original submitter.
+ *
+ * @param {object} row common database-column payload
+ * @param {string|null|undefined} submittedBy
+ * @returns {{insert: object, update: object}}
+ */
+export function entryWritePayloads(row, submittedBy) {
+	return {
+		insert: { ...row, submitted_by: submittedBy ?? null },
+		update: { ...row }
+	};
 }

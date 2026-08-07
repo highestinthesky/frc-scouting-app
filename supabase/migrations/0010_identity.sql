@@ -29,16 +29,16 @@
 --
 -- Expand / migrate / contract instead:
 --
---     0010  (this)  add profile_id, backfill, change nothing else
---                   → the client dual-writes and prefers profile_id on read
---                   → safe to apply TODAY, mid-season, nothing depends on it
---     0011          swap the policies to `to authenticated`, drop the
---                   passphrase, make profile_id the key, drop scout_name
+--     0010  (this)  add profile_id and conservatively backfill it
+--                   → the client can begin a later UUID dual-write/read pass
+--                   → no policy or existing text-key workflow changes here
+--     0011          swap the policies to `to authenticated` and make accounts
+--                   the authorization boundary
 --                   → the one-way door, between seasons
 --
--- After 0010, every new row carries a real identity while the old key still
--- works. By the time 0011 runs there is nothing left to migrate, and it is a
--- policy change only.
+-- Applying 0010 alone does not make new planning rows carry a UUID: the current
+-- client still keys assignments and reminders by scout_name. Treat these
+-- columns as an expansion surface until that dual-write/read work is complete.
 --
 -- ─── What the backfill can and cannot do ───────────────────────────────────
 --
@@ -106,15 +106,18 @@ AS $$
         FROM public.profiles p
         WHERE lower(btrim(p_name)) IN (
             lower(p.username),
-            lower(btrim(p.first_name || ' ' || p.last_name)),
-            lower(btrim(p.first_name))
+            lower(btrim(p.first_name || ' ' || p.last_name))
         )
     ) c
     WHERE c.matches = 1;
 $$;
 
 REVOKE ALL ON FUNCTION public.profile_for_name(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.profile_for_name(text) TO authenticated;
+-- Migration helper only. It runs below as the migration owner; the client never
+-- needs to call it. Granting this SECURITY DEFINER lookup to every authenticated
+-- auth user would let an unredeemed or revoked account probe roster names before
+-- the policy cutover has a chance to reject it.
+REVOKE ALL ON FUNCTION public.profile_for_name(text) FROM anon, authenticated;
 
 -- ─── backfill ──────────────────────────────────────────────────────────────
 --
@@ -160,14 +163,17 @@ CREATE INDEX IF NOT EXISTS reminders_profile_idx
 CREATE INDEX IF NOT EXISTS entries_submitted_by_idx
     ON public.entries (session_id, submitted_by);
 
--- A person cannot be assigned the same team twice in one event. The existing
--- dedupe index is on scout_name and stays until 0011; this is its counterpart,
--- partial so it ignores the rows that have no profile yet.
-CREATE UNIQUE INDEX IF NOT EXISTS assignments_profile_dedupe_idx
+-- Do not add UNIQUE constraints during a guessed backfill. Distinct historical
+-- spellings can legitimately occupy separate rows today and then resolve to the
+-- same profile UUID. A unique index would abort this otherwise-safe expansion.
+-- These ordinary indexes make the conflicts cheap to audit; add constraints in
+-- a later contract migration only after the UUID client path is live and the
+-- duplicate report below is empty.
+CREATE INDEX IF NOT EXISTS assignments_profile_team_idx
     ON public.assignments (session_id, profile_id, team_number)
     WHERE profile_id IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS overrides_profile_dedupe_idx
+CREATE INDEX IF NOT EXISTS overrides_profile_team_idx
     ON public.assignment_overrides (session_id, match_number, profile_id, team_number)
     WHERE profile_id IS NOT NULL;
 
@@ -189,5 +195,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS overrides_profile_dedupe_idx
 -- Anything with unmatched > 0 is a name no account claims — either a scout who
 -- has not registered yet, or a spelling nobody uses any more. Re-run the four
 -- UPDATEs above once everyone has signed up.
+--
+-- Backfill collisions that must be resolved before a later UNIQUE constraint:
+--
+--   SELECT session_id, profile_id, team_number, count(*)
+--     FROM public.assignments
+--    WHERE profile_id IS NOT NULL
+--    GROUP BY session_id, profile_id, team_number
+--   HAVING count(*) > 1;
+--
+--   SELECT session_id, match_number, profile_id, team_number, count(*)
+--     FROM public.assignment_overrides
+--    WHERE profile_id IS NOT NULL
+--    GROUP BY session_id, match_number, profile_id, team_number
+--   HAVING count(*) > 1;
 
 COMMIT;

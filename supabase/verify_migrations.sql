@@ -1,4 +1,5 @@
--- Did 0007, 0008 and 0009 actually land? Read-only.
+-- Did 0007 through 0010 land, and is the database consistently before or after
+-- the 0011 auth cutover? Read-only.
 --
 -- The Supabase SQL editor shows you the result of the LAST statement and
 -- silently discards the rest. A 173-statement script that fails at statement 40
@@ -34,6 +35,10 @@ WITH expected(migration, kind, name, why) AS (
         ('0008', 'function', 'app_role',      'reads the caller role without recursing through RLS'),
         ('0008', 'function', 'is_manager',    'the role check every manager policy will call'),
         ('0008', 'function', 'is_super',      'only a super may mint a super'),
+        ('0008', 'function', 'guard_profile_update',
+         'keeps profile ids and usernames immutable and blocks role escalation'),
+        ('0008', 'trigger',  'profiles_guard_identity',
+         'enforces the profile security fields on every API update'),
         ('0008', 'function', 'redeem_invite', 'the only path from an invite code to an account'),
         ('0008', 'function', 'create_invite', 'manager-side invite minting'),
         ('0008', 'function', 'peek_invite',   'lets the register form validate before asking for a password'),
@@ -106,7 +111,9 @@ live AS (
 -- Tables that must have RLS switched on. Off with policies present still means
 -- fully open, and the dashboard looks completely normal in that state.
 rls_expected(name) AS (
-    VALUES ('profiles'), ('invites'), ('picklist'), ('picklist_prefs')
+    VALUES ('entries'), ('schedules'), ('assignments'),
+           ('assignment_overrides'), ('reminders'), ('event_meta'),
+           ('profiles'), ('invites'), ('picklist'), ('picklist_prefs')
 ),
 
 checks AS (
@@ -199,15 +206,285 @@ checks AS (
 
     UNION ALL
 
-    -- ── the cutover has NOT happened yet ───────────────────────────────────
-    -- 0007/0008/0009 are additive. If has_manager_token() is gone, someone has
-    -- run 0011 — and AUTH_ENFORCED in src/lib/auth.svelte.js must move with it.
-    SELECT CASE WHEN count(*) = 1 THEN 'PASS' ELSE 'FAIL' END,
-           'passphrase gate still present (expected until 0011)',
-           CASE WHEN count(*) = 1 THEN 'has_manager_token() exists — pre-cutover, as expected'
-                ELSE 'ABSENT — 0011 has run. AUTH_ENFORCED must be true in the same deploy' END
-    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public' AND p.proname = 'has_manager_token'
+    -- ── which side of the cutover is this database on? ─────────────────────
+    --
+    -- The signal is whether has_manager_token() can still AUTHORISE anything,
+    -- not whether it exists and not whether event_meta.manager_token exists.
+    -- 0011 leaves both objects in place on purpose — a PWA running cached JS
+    -- should get a denial, not "function does not exist" — and 0012 removes
+    -- them after the soak window. Either object's mere presence is therefore
+    -- true on both sides of the cutover, and keying off it would silently skip
+    -- every post-cutover check below, which are all conditional on the same
+    -- predicate. A verifier that quietly stops checking is the one failure mode
+    -- this file exists to prevent.
+    --
+    -- "Live" means executable by an API role, or a body that is not the
+    -- always-false stub. 0011 makes it neither.
+    SELECT CASE WHEN gate_is_live = old_policies_present THEN 'PASS' ELSE 'FAIL' END,
+           'auth cutover state is internally consistent',
+           CASE
+               WHEN gate_is_live AND old_policies_present
+                   THEN 'pre-cutover — passphrase gate live, session policies in place'
+               WHEN NOT gate_is_live AND NOT old_policies_present
+                   THEN 'post-cutover — passphrase inert; deployed AUTH_ENFORCED must be true'
+               WHEN gate_is_live
+                   THEN 'PARTIAL — policies were replaced but the passphrase gate still grants'
+               ELSE 'PARTIAL — passphrase gate disabled but session policies remain'
+           END
+    FROM (
+        SELECT
+            EXISTS (
+                SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'public' AND p.proname = 'has_manager_token'
+                  AND (
+                      has_function_privilege('anon', p.oid, 'EXECUTE')
+                      OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
+                      OR lower(regexp_replace(p.prosrc, '\s+', ' ', 'g')) NOT LIKE '%select false%'
+                  )
+            ) AS gate_is_live,
+            -- The header-scoped policies 0001-0009 created and 0011 replaces.
+            EXISTS (
+                SELECT 1 FROM pg_policies
+                WHERE schemaname = 'public'
+                  AND policyname IN ('entries_session_select', 'entries_session_insert',
+                                     'assignments_session_select', 'schedules_session_select')
+            ) AS old_policies_present
+    ) cutover
+
+    UNION ALL
+
+    -- Once 0011 has removed the passphrase helper, unauthenticated table access
+    -- must be gone as well. Conditional so a healthy pre-cutover database still
+    -- passes this verifier.
+    SELECT CASE WHEN count(*) FILTER (WHERE has_anon_access) = 0 THEN 'PASS' ELSE 'FAIL' END,
+           'post-cutover anon table grants are revoked',
+           CASE WHEN count(*) FILTER (WHERE has_anon_access) = 0
+                THEN 'anon has no event-data table privileges'
+                ELSE string_agg(name, ', ' ORDER BY name) FILTER (WHERE has_anon_access) END
+    FROM (
+        SELECT r.name,
+               has_table_privilege('anon', 'public.' || quote_ident(r.name), 'SELECT')
+               OR has_table_privilege('anon', 'public.' || quote_ident(r.name), 'INSERT')
+               OR has_table_privilege('anon', 'public.' || quote_ident(r.name), 'UPDATE')
+               OR has_table_privilege('anon', 'public.' || quote_ident(r.name), 'DELETE')
+                   AS has_anon_access
+        FROM rls_expected r
+        WHERE r.name NOT IN ('profiles', 'invites')
+    ) grants
+    HAVING NOT EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'has_manager_token'
+          AND (
+              has_function_privilege('anon', p.oid, 'EXECUTE')
+              OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
+              OR lower(regexp_replace(p.prosrc, '\s+', ' ', 'g')) NOT LIKE '%select false%'
+          )
+    )
+
+    UNION ALL
+
+    -- Catalog-level policy audit for the post-cutover state. Static repository
+    -- tests inspect the source; this checks what Postgres actually installed.
+    SELECT CASE WHEN count(*) = 29 AND count(*) FILTER (WHERE unsafe) = 0
+                THEN 'PASS' ELSE 'FAIL' END,
+           'post-cutover event policies keep membership and session scope',
+           count(*)::text || ' policy/policies installed; ' ||
+           count(*) FILTER (WHERE unsafe)::text || ' unsafe'
+    FROM (
+        SELECT p.*,
+               array_to_string(p.roles, ',') <> 'authenticated'
+               OR CASE upper(p.cmd)
+                    WHEN 'SELECT' THEN p.qual IS NULL
+                        OR p.qual NOT ILIKE '%app_role()%IS NOT NULL%'
+                        OR p.qual NOT ILIKE '%current_session_header()%'
+                    WHEN 'DELETE' THEN p.qual IS NULL
+                        OR p.qual NOT ILIKE '%app_role()%IS NOT NULL%'
+                        OR p.qual NOT ILIKE '%current_session_header()%'
+                    WHEN 'INSERT' THEN p.with_check IS NULL
+                        OR p.with_check NOT ILIKE '%app_role()%IS NOT NULL%'
+                        OR p.with_check NOT ILIKE '%current_session_header()%'
+                    WHEN 'UPDATE' THEN p.qual IS NULL OR p.with_check IS NULL
+                        OR p.qual NOT ILIKE '%app_role()%IS NOT NULL%'
+                        OR p.qual NOT ILIKE '%current_session_header()%'
+                        OR p.with_check NOT ILIKE '%app_role()%IS NOT NULL%'
+                        OR p.with_check NOT ILIKE '%current_session_header()%'
+                    ELSE true
+                  END AS unsafe
+        FROM pg_policies p
+        WHERE p.schemaname = 'public'
+          AND p.tablename IN (
+              'entries', 'schedules', 'assignments', 'assignment_overrides',
+              'reminders', 'picklist', 'picklist_prefs', 'event_meta'
+          )
+    ) policy_state
+    HAVING NOT EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'has_manager_token'
+          AND (
+              has_function_privilege('anon', p.oid, 'EXECUTE')
+              OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
+              OR lower(regexp_replace(p.prosrc, '\s+', ' ', 'g')) NOT LIKE '%select false%'
+          )
+    )
+
+    UNION ALL
+
+    SELECT CASE WHEN count(*) = 19 AND count(*) FILTER (WHERE unsafe) = 0
+                THEN 'PASS' ELSE 'FAIL' END,
+           'post-cutover planning writes require manager role',
+           count(*)::text || ' mutation policy/policies installed; ' ||
+           count(*) FILTER (WHERE unsafe)::text || ' missing a manager check'
+    FROM (
+        SELECT p.*,
+               CASE upper(p.cmd)
+                   WHEN 'INSERT' THEN p.with_check IS NULL
+                       OR p.with_check NOT ILIKE '%is_manager()%'
+                   WHEN 'DELETE' THEN p.qual IS NULL
+                       OR p.qual NOT ILIKE '%is_manager()%'
+                   WHEN 'UPDATE' THEN p.qual IS NULL OR p.with_check IS NULL
+                       OR p.qual NOT ILIKE '%is_manager()%'
+                       OR p.with_check NOT ILIKE '%is_manager()%'
+                   ELSE true
+               END AS unsafe
+        FROM pg_policies p
+        WHERE p.schemaname = 'public'
+          AND p.tablename IN (
+              'schedules', 'assignments', 'assignment_overrides', 'reminders',
+              'picklist', 'picklist_prefs', 'event_meta'
+          )
+          AND upper(p.cmd) IN ('INSERT', 'UPDATE', 'DELETE')
+    ) manager_policies
+    HAVING NOT EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'has_manager_token'
+          AND (
+              has_function_privilege('anon', p.oid, 'EXECUTE')
+              OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
+              OR lower(regexp_replace(p.prosrc, '\s+', ' ', 'g')) NOT LIKE '%select false%'
+          )
+    )
+
+    UNION ALL
+
+    SELECT CASE WHEN count(*) = 1
+                     AND bool_and(with_check ILIKE '%submitted_by%auth.uid()%')
+                THEN 'PASS' ELSE 'FAIL' END,
+           'post-cutover entry inserts bind the submitter',
+           CASE WHEN count(*) = 1
+                     AND bool_and(with_check ILIKE '%submitted_by%auth.uid()%')
+                THEN 'submitted_by is checked against auth.uid()'
+                ELSE 'entries_insert is missing or does not bind submitted_by' END
+    FROM pg_policies p
+    WHERE p.schemaname = 'public' AND p.tablename = 'entries'
+      AND p.policyname = 'entries_insert' AND upper(p.cmd) = 'INSERT'
+    HAVING NOT EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'has_manager_token'
+          AND (
+              has_function_privilege('anon', p.oid, 'EXECUTE')
+              OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
+              OR lower(regexp_replace(p.prosrc, '\s+', ' ', 'g')) NOT LIKE '%select false%'
+          )
+    )
+
+    UNION ALL
+
+    -- Exactly one trigger, and specifically NOT the other.
+    --
+    -- An earlier draft protected attribution with a BEFORE UPDATE trigger
+    -- pinning NEW.submitted_by := OLD.submitted_by. entries.submitted_by
+    -- carries ON DELETE SET NULL, so revoking a profile makes Postgres issue an
+    -- internal UPDATE setting that column to null — which the trigger would
+    -- undo, breaking the referential action. Revoking anyone with historical
+    -- entries would start failing, months after the cutover, for no visible
+    -- reason. Column-level privilege does the same job without touching
+    -- referential actions; 0011 drops the trigger and withholds
+    -- UPDATE (submitted_by) from every API role instead.
+    SELECT CASE
+               WHEN count(*) FILTER (WHERE t.tgname = 'entries_stamp_submitted_by') = 1
+                AND count(*) FILTER (WHERE t.tgname = 'entries_preserve_submitted_by') = 0
+               THEN 'PASS' ELSE 'FAIL'
+           END,
+           'post-cutover entry attribution trigger',
+           CASE
+               WHEN count(*) FILTER (WHERE t.tgname = 'entries_stamp_submitted_by') = 0
+                   THEN 'entries_stamp_submitted_by is MISSING — inserts carry no attribution'
+               WHEN count(*) FILTER (WHERE t.tgname = 'entries_preserve_submitted_by') > 0
+                   THEN 'entries_preserve_submitted_by is back — it breaks ON DELETE SET NULL'
+               ELSE 'stamp trigger installed; no preserve trigger, as intended'
+           END
+    FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relname = 'entries'
+      AND NOT t.tgisinternal
+      AND t.tgname IN ('entries_stamp_submitted_by', 'entries_preserve_submitted_by')
+    HAVING NOT EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'has_manager_token'
+          AND (
+              has_function_privilege('anon', p.oid, 'EXECUTE')
+              OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
+              OR lower(regexp_replace(p.prosrc, '\s+', ' ', 'g')) NOT LIKE '%select false%'
+          )
+    )
+
+    UNION ALL
+
+    -- The mechanism that replaced that trigger. If a later migration issues a
+    -- bare GRANT UPDATE on entries, this is the only thing that notices.
+    SELECT CASE
+               WHEN NOT has_column_privilege('authenticated', 'public.entries', 'submitted_by', 'UPDATE')
+               THEN 'PASS' ELSE 'FAIL'
+           END,
+           'post-cutover attribution is not client-writable',
+           CASE
+               WHEN has_column_privilege('authenticated', 'public.entries', 'submitted_by', 'UPDATE')
+                   THEN 'authenticated may UPDATE entries.submitted_by — a correction can forge the submitter'
+               ELSE 'UPDATE (submitted_by) withheld from authenticated'
+           END
+    HAVING NOT EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'has_manager_token'
+          AND (
+              has_function_privilege('anon', p.oid, 'EXECUTE')
+              OR has_function_privilege('authenticated', p.oid, 'EXECUTE')
+              OR lower(regexp_replace(p.prosrc, '\s+', ' ', 'g')) NOT LIKE '%select false%'
+          )
+    )
+
+    UNION ALL
+
+    SELECT CASE
+               WHEN NOT has_function_privilege('anon', 'public.reset_event_data()', 'EXECUTE')
+                AND has_function_privilege('authenticated', 'public.reset_event_data()', 'EXECUTE')
+               THEN 'PASS' ELSE 'FAIL'
+           END,
+           'post-cutover archive RPC grant',
+           'anon=' || has_function_privilege('anon', 'public.reset_event_data()', 'EXECUTE')::text ||
+           ', authenticated=' ||
+           has_function_privilege('authenticated', 'public.reset_event_data()', 'EXECUTE')::text
+    WHERE NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'event_meta'
+          AND column_name = 'manager_token'
+    )
+
+    UNION ALL
+
+    SELECT CASE
+               WHEN NOT has_function_privilege('anon', 'public.profile_for_name(text)', 'EXECUTE')
+                AND NOT has_function_privilege('authenticated', 'public.profile_for_name(text)', 'EXECUTE')
+               THEN 'PASS' ELSE 'FAIL'
+           END,
+           'identity backfill helper is not client-callable',
+           'anon=' || has_function_privilege('anon', 'public.profile_for_name(text)', 'EXECUTE')::text ||
+           ', authenticated=' ||
+           has_function_privilege('authenticated', 'public.profile_for_name(text)', 'EXECUTE')::text
+    WHERE EXISTS (
+        SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'profile_for_name'
+    )
 
     UNION ALL
 
@@ -267,9 +544,11 @@ checks AS (
     --
     -- Re-run 0010's four UPDATEs once everyone has signed up.
     SELECT 'INFO', 'identity backfill',
-           (SELECT count(*) FROM public.assignments WHERE profile_id IS NULL)::text ||
+           (SELECT count(*) FROM public.assignments a
+             WHERE to_jsonb(a) ->> 'profile_id' IS NULL)::text ||
            ' assignment(s) and ' ||
-           (SELECT count(*) FROM public.entries WHERE submitted_by IS NULL)::text ||
+           (SELECT count(*) FROM public.entries e
+             WHERE to_jsonb(e) ->> 'submitted_by' IS NULL)::text ||
            ' entry(s) still on a typed name only'
     WHERE EXISTS (
         SELECT 1 FROM information_schema.columns

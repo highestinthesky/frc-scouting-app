@@ -24,13 +24,15 @@
 // field.
 
 import { getAuthClient } from './supabase.js';
+// session.svelte.js imports only db.js, so this direction is acyclic.
+import { session } from './session.svelte.js';
 
 /**
  * Does the app REQUIRE an account yet?
  *
  * False while migration 0008 is additive: accounts exist and can be created
  * and tested, but nothing is locked and the event-code path still works.
- * Flipping this to true is the cutover, and it belongs with migration 0009,
+ * Flipping this to true is the cutover, and it belongs with migration 0011,
  * which swaps every policy to `to authenticated`.
  *
  * Deliberately a constant rather than a probe. A client that guesses whether
@@ -41,6 +43,7 @@ export const AUTH_ENFORCED = false;
 
 /** RFC 2606 reserves .invalid as permanently unroutable. Nothing is ever sent. */
 const AUTH_EMAIL_DOMAIN = 'scout.invalid';
+const PROFILE_CACHE_KEY = 'frc-scout-last-profile';
 
 /** @param {string} username */
 export const emailForUsername = (username) =>
@@ -61,12 +64,42 @@ export function usernameProblem(username) {
 	return null;
 }
 
+/**
+ * Read the current user's id from any Supabase auth response shape we use:
+ * getSession() returns { session }, while sign-in/sign-up responses also expose
+ * { user }. Keeping this pure makes the profile-query scope easy to test.
+ *
+ * @param {{user?: {id?: string}|null, session?: {user?: {id?: string}|null}|null}|null|undefined} data
+ * @returns {string|null}
+ */
+export function authUserId(data) {
+	return data?.user?.id ?? data?.session?.user?.id ?? null;
+}
+
+/**
+ * Recover the immutable login username from the synthetic auth email. This is
+ * used only for an unfinished signup: once signUp() succeeds, retrying invite
+ * redemption must keep the same username or the displayed username would no
+ * longer map to the email Supabase expects at the next login.
+ *
+ * @param {{user?: {email?: string}|null, session?: {user?: {email?: string}|null}|null}|null|undefined} data
+ * @returns {string|null}
+ */
+export function authUsername(data) {
+	const email = data?.user?.email ?? data?.session?.user?.email ?? '';
+	const suffix = `@${AUTH_EMAIL_DOMAIN}`;
+	return email.toLowerCase().endsWith(suffix) ? email.slice(0, -suffix.length).toLowerCase() : null;
+}
+
 const state = $state({
 	/** Has this device ever completed a sign-in? Drives route guarding. */
 	signedIn: false,
+	/** Auth identity retained even when invite redemption has not made a profile. */
+	userId: /** @type {string|null} */ (null),
+	authUsername: /** @type {string|null} */ (null),
 	/** The profile row, or null while loading / if the account was revoked. */
 	profile: /** @type {null | {id: string, username: string, first_name: string,
-	 *  last_name: string, role: 'scout'|'manager'|'super', recovery_email: string|null}} */ (null),
+	 *  last_name: string, role: 'scout'|'manager'|'super'}} */ (null),
 	/** True until the first session check finishes — pages should wait. */
 	loading: true,
 	/**
@@ -81,10 +114,45 @@ export const auth = {
 	get signedIn() { return state.signedIn; },
 	get loading() { return state.loading; },
 	get orphaned() { return state.orphaned; },
+	get userId() { return state.userId; },
+	get authUsername() { return state.authUsername; },
 	get profile() { return state.profile; },
 	get role() { return state.profile?.role ?? null; },
 	get isManager() { return state.profile?.role === 'manager' || state.profile?.role === 'super'; },
 	get isSuper() { return state.profile?.role === 'super'; },
+
+	/**
+	 * May this device write manager-scoped data — schedules, assignments,
+	 * reminders, the picklist?
+	 *
+	 * Before the cutover the database gates on has_manager_token(), so the
+	 * answer is "does this device hold the passphrase hash". Afterwards it gates
+	 * on is_manager(), so the answer is the account's role. Both live here, in
+	 * ONE place, because the two pages that ask this had already drifted apart:
+	 * /scouting derived it from AUTH_ENFORCED while /insights/picklist read
+	 * session.managerToken raw, so flipping the flag would have locked one and
+	 * left the other offering buttons that silently fail.
+	 *
+	 * Callers must not re-derive this. `check_components.mjs` fails the build if
+	 * they do.
+	 */
+	get canManage() {
+		return AUTH_ENFORCED ? this.isManager : Boolean(session.managerToken);
+	},
+
+	/**
+	 * The credential bag every manager-scoped write passes to
+	 * createSupabaseClient().
+	 *
+	 * After the cutover this is empty: the passphrase header is meaningless
+	 * because 0011 drops has_manager_token(), and authorisation rides the
+	 * access token instead. Sending it anyway would cost nothing functionally
+	 * and would leave a dead security mechanism looking live, which is how
+	 * someone later mistakes it for protection.
+	 */
+	managerCredentials() {
+		return AUTH_ENFORCED ? {} : { managerToken: session.managerToken };
+	},
 	get displayName() {
 		const p = state.profile;
 		return p ? `${p.first_name} ${p.last_name}`.trim() : '';
@@ -98,18 +166,23 @@ export const auth = {
 		const client = getAuthClient();
 		const { data } = await client.auth.getSession();
 		state.signedIn = Boolean(data.session);
-		if (data.session) await loadProfile();
+		rememberAuthIdentity(data);
+		if (data.session) await loadProfile(authUserId(data));
 		state.loading = false;
 
-		client.auth.onAuthStateChange((event) => {
+		client.auth.onAuthStateChange((event, session) => {
 			// Deliberately NOT handling TOKEN_REFRESH_FAILED by signing out.
 			// See rule 2 at the top of this file — that path is how a scout
 			// loses unsaved work in a dead spot.
 			if (event === 'SIGNED_IN') {
 				state.signedIn = true;
-				loadProfile();
+				rememberAuthIdentity(session);
+				loadProfile(authUserId(session));
 			} else if (event === 'SIGNED_OUT') {
+				clearCachedProfile();
 				state.signedIn = false;
+				state.userId = null;
+				state.authUsername = null;
 				state.profile = null;
 				state.orphaned = false;
 			}
@@ -122,7 +195,7 @@ export const auth = {
 	 * @returns {Promise<{ok: true} | {ok: false, message: string}>}
 	 */
 	async signIn(username, password) {
-		const { error } = await getAuthClient().auth.signInWithPassword({
+		const { data, error } = await getAuthClient().auth.signInWithPassword({
 			email: emailForUsername(username),
 			password
 		});
@@ -133,7 +206,8 @@ export const auth = {
 			return { ok: false, message: 'That username and password do not match.' };
 		}
 		state.signedIn = true;
-		await loadProfile();
+		rememberAuthIdentity(data);
+		await loadProfile(authUserId(data));
 		return { ok: true };
 	},
 
@@ -142,8 +216,8 @@ export const auth = {
 	 * user exists either way; without a redeemed invite it has no profile and
 	 * therefore no access.
 	 *
-	 * @param {{code: string, username: string, password: string,
-	 *          firstName: string, lastName: string, recoveryEmail?: string}} req
+	 * @param {{code: string, username: string, password?: string,
+	 *          firstName: string, lastName: string}} req
 	 * @returns {Promise<{ok: true} | {ok: false, message: string}>}
 	 */
 	async register(req) {
@@ -153,23 +227,53 @@ export const auth = {
 		const problem = usernameProblem(username);
 		if (problem) return { ok: false, message: problem };
 
-		const { error: signUpError } = await client.auth.signUp({
-			email: emailForUsername(username),
-			password: req.password
-		});
-		if (signUpError) {
-			if (/already/i.test(signUpError.message)) {
-				return { ok: false, message: 'That username is taken. Pick another.' };
+		// A failed invite redemption leaves a valid, signed-in auth user but no
+		// profile. Reuse that user on the next attempt instead of calling signUp
+		// again (which can only report that the username already exists).
+		const { data: sessionData } = await client.auth.getSession();
+		let userId = authUserId(sessionData);
+		const existingUsername = authUsername(sessionData);
+		if (userId) {
+			if (state.profile) {
+				return { ok: false, message: 'This account is already set up.' };
 			}
-			return { ok: false, message: signUpError.message };
+			if (existingUsername && existingUsername !== username) {
+				return {
+					ok: false,
+					message: `This unfinished account belongs to ${existingUsername}. Use that username or sign out first.`
+				};
+			}
+			state.signedIn = true;
+			rememberAuthIdentity(sessionData);
+		} else {
+			if (!req.password || req.password.length < 8) {
+				return { ok: false, message: 'Use a password with at least 8 characters.' };
+			}
+			const { data: signUpData, error: signUpError } = await client.auth.signUp({
+				email: emailForUsername(username),
+				password: req.password
+			});
+			if (signUpError) {
+				if (/already/i.test(signUpError.message)) {
+					return { ok: false, message: 'That username is taken. Pick another.' };
+				}
+				return { ok: false, message: signUpError.message };
+			}
+			userId = authUserId(signUpData);
+			if (!userId) {
+				return { ok: false, message: 'Account creation did not start a session. Try signing in.' };
+			}
+			state.signedIn = true;
+			state.profile = null;
+			state.orphaned = true;
+			rememberAuthIdentity(signUpData);
 		}
 
 		const { error: redeemError } = await client.rpc('redeem_invite', {
 			p_code: req.code,
 			p_username: username,
 			p_first: req.firstName,
-			p_last: req.lastName,
-			p_recovery_email: req.recoveryEmail ?? null
+			p_last: req.lastName
 		});
 		if (redeemError) {
 			// 23505 is the unique index on lower(username) firing. It is a
@@ -177,13 +281,17 @@ export const auth = {
 			// moment, not an error worth logging — the availability check in
 			// the form has a race window and this is what actually holds.
 			if (redeemError.code === '23505') {
-				return { ok: false, message: 'That username was just taken. Pick another.' };
+				return existingUsername
+					? {
+							ok: false,
+							message: 'That username was taken before setup finished. Sign out below and choose another.'
+						}
+					: { ok: false, message: 'That username was just taken. Pick another.' };
 			}
 			return { ok: false, message: redeemError.message };
 		}
 
-		state.signedIn = true;
-		await loadProfile();
+		await loadProfile(userId);
 		return { ok: true };
 	},
 
@@ -244,10 +352,32 @@ export const auth = {
 	}
 };
 
-async function loadProfile() {
-	const { data, error } = await getAuthClient()
+async function loadProfile(userId = null) {
+	const client = getAuthClient();
+	if (!userId) {
+		// getSession() reads the persisted local session. Do not use getUser() here:
+		// that validates over the network and would make profile reloads less
+		// reliable in the exact offline conditions this app is designed for.
+		const { data: sessionData, error: sessionError } = await client.auth.getSession();
+		if (sessionError) return;
+		userId = authUserId(sessionData);
+	}
+	if (!userId) return;
+
+	// Profile reads need the network even when the persisted auth session does
+	// not. Restore the last profile first so a cold offline PWA launch keeps its
+	// identity and manager UI. This cache is presentation state only: every
+	// server write is still authorised independently by Postgres RLS.
+	const cached = readCachedProfile(userId);
+	if (cached) {
+		state.profile = cached;
+		state.orphaned = false;
+	}
+
+	const { data, error } = await client
 		.from('profiles')
-		.select('id, username, first_name, last_name, role, recovery_email')
+		.select('id, username, first_name, last_name, role')
+		.eq('id', userId)
 		.maybeSingle();
 	if (error) {
 		// A read failure here is a network problem, not a revocation. Leave the
@@ -257,4 +387,46 @@ async function loadProfile() {
 	}
 	state.profile = data ?? null;
 	state.orphaned = state.signedIn && !data;
+	if (data) cacheProfile(data);
+	else clearCachedProfile();
+}
+
+function rememberAuthIdentity(data) {
+	const nextUserId = authUserId(data);
+	if (state.userId && nextUserId && state.userId !== nextUserId) {
+		clearCachedProfile();
+		state.profile = null;
+		state.orphaned = false;
+	}
+	state.userId = nextUserId;
+	state.authUsername = authUsername(data);
+}
+
+function readCachedProfile(userId) {
+	if (typeof localStorage === 'undefined') return null;
+	try {
+		const cached = JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY) ?? 'null');
+		return cached?.id === userId ? cached : null;
+	} catch (_error) {
+		return null;
+	}
+}
+
+function cacheProfile(profile) {
+	if (typeof localStorage === 'undefined') return;
+	try {
+		localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
+	} catch (_error) {
+		// Storage may be unavailable in a private tab. The online profile still
+		// works; only cold-start offline identity loses this convenience.
+	}
+}
+
+function clearCachedProfile() {
+	if (typeof localStorage === 'undefined') return;
+	try {
+		localStorage.removeItem(PROFILE_CACHE_KEY);
+	} catch (_error) {
+		// Nothing else depends on the cache being writable.
+	}
 }

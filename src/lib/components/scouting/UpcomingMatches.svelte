@@ -9,7 +9,6 @@
 	//
 	// Either way a row expands in place to show all six robots, so a scout can
 	// check partners and opponents without going to the manager's preview.
-	import { role } from '$lib/role.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
 	import { teamStatus } from '$lib/coverage.js';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -22,7 +21,8 @@
 		qmList,
 		entryIndex,
 		now,
-		hrefFor
+		hrefFor,
+		isManager = false
 	} = $props();
 
 	let view = $state(/** @type {'mine'|'all'} */ ('mine'));
@@ -81,7 +81,7 @@
 
 	{#if !cached}
 		<p class="muted small">
-			{#if role.isManager}
+			{#if isManager}
 				Fetch and publish to populate this list.
 			{:else}
 				No schedule pulled yet. Tap “Refresh from manager” above once your

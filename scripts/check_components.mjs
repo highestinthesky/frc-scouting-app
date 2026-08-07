@@ -303,6 +303,45 @@ for (const page of ['login', 'register', 'accounts']) {
 	);
 }
 
+// ─── nobody re-derives "am I a manager" ────────────────────────────────────
+//
+// Before the cutover the database gates writes on has_manager_token(); after
+// it, on is_manager(). `auth.canManage` and `auth.managerCredentials()` hold
+// both answers so the switch is one constant.
+//
+// This is not hypothetical tidiness. /scouting and /insights/picklist had
+// already drifted: one derived the answer from AUTH_ENFORCED, the other read
+// session.managerToken raw. Flipping the flag would have locked the first and
+// left the second showing buttons that silently fail — the worse half, because
+// it looks like it worked.
+//
+// Reading session.managerToken is allowed only where AUTH_ENFORCED is checked
+// on the same line, which is the passphrase-entry UI that exists solely before
+// the cutover and is deleted with it.
+{
+	const offenders = [];
+	for (const abs of readdirRecursive(path.join(root, 'src'))) {
+		if (!/\.(svelte|js)$/.test(abs)) continue;
+		const rel = path.relative(root, abs);
+		if (rel.endsWith(path.join('lib', 'auth.svelte.js'))) continue; // owns the answer
+
+		readFileSync(abs, 'utf8')
+			.split('\n')
+			.forEach((line, i) => {
+				const code = line.replace(/\/\/.*$/, '');
+				if (!/\bsession\.managerToken\b/.test(code)) return;
+				if (/\bAUTH_ENFORCED\b/.test(code)) return; // explicitly pre-cutover only
+				offenders.push(`${rel}:${i + 1}  ${line.trim()}`);
+			});
+	}
+	ok(
+		'nobody derives manager rights outside auth.svelte.js',
+		offenders.length === 0,
+		offenders.join('\n        ') +
+			'\n        use auth.canManage / auth.managerCredentials(), or guard on AUTH_ENFORCED'
+	);
+}
+
 // ─── every page's back link is a target, not a glyph ───────────────────────
 //
 // The ← is the most-used control on a sub-page and started life as a 1.5rem

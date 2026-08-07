@@ -1,108 +1,110 @@
 # FRC Scout — application overview
 
-A brief map of what this app is and how it's put together. Written 2026-07-26.
+Audited 2026-08-03. This describes the source tree and the live database
+separately; a migration being present in Git does not mean it is deployed.
 
 ## What it is
 
-A PWA for FRC team 3419 that lets scouts record match observations on their
-phones and lets a manager aggregate everything for alliance-selection decisions.
-Static SvelteKit site deployed to GitHub Pages; Supabase is the sync bus.
+FRC Scout is an offline-first PWA for FRC team 3419. Scouts record match
+observations on phones; managers publish the event schedule, assign scouts and
+use the combined data for alliance-selection decisions. It is a static SvelteKit
+site deployed to GitHub Pages, with IndexedDB as the local write target and
+Supabase as the shared mirror.
 
-**Stack:** Svelte 5 (runes) + SvelteKit 2, `adapter-static`, Vite 5, PWA
-plugin, Dexie (IndexedDB), `@supabase/supabase-js`. No TypeScript (JSDoc types
-only). One test file, `src/lib/metrics.test.mjs`, run with
-`node src/lib/metrics.test.mjs`.
+**Stack:** Svelte 5 (runes), SvelteKit 2 with `adapter-static`, Vite 5,
+`vite-plugin-pwa`, Dexie and `@supabase/supabase-js`. The project uses JavaScript
+with JSDoc rather than TypeScript.
 
 ## The core model
 
-Everything hangs off one string: the **event code**.
+The event code still defines the data partition:
 
-- `deriveSessionId(eventCode)` hashes it into a UUID (`sha256("frc-scout:event:" + code)`).
-- Every Supabase request carries that UUID in an `x-session-id` header.
-- RLS policies compare the header to the row's `session_id`. No header → zero rows.
+- `deriveSessionId(eventCode)` hashes it into a UUID.
+- Every event-data request carries that UUID in `x-session-id`.
+- Each shared row also stores the same value as `session_id`.
 
-Two devices typing the same event code share data. There is no login and no
-per-user auth — this is a deliberate, documented trade-off (the event code is
-public on TBA). Write access to *scheduling* tables is gated separately by
-`x-manager-token`, a client-side SHA-256 of a manager passphrase + event code,
-checked by the `has_manager_token()` Postgres function.
+IndexedDB remains the source of truth for scouting entries. A save succeeds
+locally even without a network or valid access token; the polling sync layer
+pushes it later and pulls peers' changes. `updated_at` is the edit watermark, so
+corrections propagate without overwriting a local row that still has unpushed
+changes.
 
-**IndexedDB is the source of truth.** Supabase is a mirror. The sync layer
-(`sync.svelte.js`) polls every 3s, pushing unsynced local rows and pulling
-peers' rows; schedule and assignment data is checked every 10th tick (30s).
-A scout with no signal can still save; the entry flushes on reconnect. That
-matters because a venue is a few hundred phones on one access point.
+The repository also contains the account upgrade: Supabase Auth, invite-based
+registration, `profiles` roles and `/login`, `/register` and `/accounts`.
+However, `AUTH_ENFORCED` is still `false`. The deployed authorization path is
+therefore still the legacy one: event-scoped reads and a manager passphrase for
+privileged writes. Accounts are not yet the production security boundary.
 
-## Two roles, one codebase
-
-Stored as a local setting (`role.svelte.js`) — it only changes which UI shows.
-
-- **Scout** — records entries, sees their assigned teams and next match.
-- **Manager** — same, plus the aggregation views and schedule publishing.
-
-## Routes
+## Current routes
 
 | Route | Purpose |
 |---|---|
-| `/` | Entry list, next-match suggestion |
-| `/new` | The entry form — counts, then notes (schedule pre-fill, mismatch warnings) |
-| `/edit` | Edit a saved entry |
-| `/schedule` | Biggest page (2.2k lines). Scout: my teams. Manager: TBA fetch, publish, passphrase, auto-assign, per-match overrides, coverage board, reminders |
-| `/manager` | Aggregated per-team view — stats, search, sort, filters, discrepancy flags, CSV export |
-| `/manager/team/[n]` | Per-team match log |
-| `/manager/compare` | Multi-team side-by-side |
-| `/manager/picklist` | Drag-ordered picklist builder (local only) |
-| `/settings` | Identity, role, theme, data management |
+| `/` | Entry history, sync status and next-match guidance |
+| `/scouting` | Published schedule, assignments, coverage and manager event controls |
+| `/scouting/new` | Record a match observation |
+| `/scouting/edit` | Correct a saved observation |
+| `/insights` | Aggregated team metrics, filters and CSV export |
+| `/insights/team/[teamNumber]` | One team's match history |
+| `/insights/compare` | Side-by-side team comparison |
+| `/insights/picklist` | Ranked picklist and alliance-selection state |
+| `/settings` | Local identity, role, theme and data controls |
+| `/login`, `/register` | Account sign-in and invite redemption; optional before cutover |
+| `/accounts` | Manager account and invite administration |
 
-## Key library modules
+The former `/schedule`, `/new`, `/edit` and `/manager/*` routes have already
+been moved. The large scouting screen is split into components under
+`src/lib/components/scouting/`.
 
-- **`db.js`** — Dexie wrapper. `entries` + `settings` tables, schema v2. Dedupe
-  via a compound index on `[eventCode+matchNumber+teamNumber+scoutName+createdAt]`.
-- **`form-config.js`** — single source of truth for form fields. Editing this
-  file updates the form, the CSV export, and every manager view together.
-  `METRIC_FIELDS` holds the numeric counters (retuned each January);
-  `NOTE_FIELDS` holds the qualitative ones.
-- **`metrics.js`** — the numeric engine. Per-metric n, mean, median, max, min,
-  standard deviation, trend, small-sample guard, and the weighted `scoreTeams()`
-  used by the picklist. Enforces the rule that blank ≠ 0.
-- **`aggregate.js`** — `summarize()` builds per-team rollups: metric stats,
-  counts, unique strengths, auto-path frequency, cross-scout discrepancies.
-- **`tba.js`** — The Blue Alliance v3 integration. Manager fetches and
-  publishes; scouts pull from Supabase and never need a key. TBA event key is
-  decoupled from the team's sync code.
-- **`assignments.js`** — scout↔team mapping plus `autoAssignTeams()`, a greedy
-  most-constrained-first allocator that avoids giving one scout two teams that
-  play each other.
-- **`coverage.js`** — pure "which (match, team) cells are scouted?" logic,
-  shared by home, schedule, and manager so all three agree.
-- **`reminders.js` / `reminders.svelte.js`** — manager-authored (Supabase) and
-  auto-generated (client-side, from match predicted times) reminders in one
-  banner slot. Dismissal is local.
-- **`csv.js`** — CSV export for spreadsheet work. Columns derive from
-  `form-config.js`, so a new field appears automatically.
+## Key modules
 
-## Database
+- **`db.js`** — Dexie database and the offline-first entry write path. Its
+  current schema also stores row-based picklist data.
+- **`sync.svelte.js` / `sync-rules.js`** — entry push/pull, edit conflict rules
+  and throttled schedule/assignment refreshes.
+- **`form-config.js`** — shared field definitions for the form, export and
+  insights surfaces.
+- **`metrics.js` / `aggregate.js`** — numeric summaries and team rollups. Blank
+  means “not recorded”; zero means a recorded zero.
+- **`auto-assign.js` / `assignments.js` / `coverage.js`** — DSATUR assignment,
+  overrides and coverage calculations.
+- **`tba.js` / `alliances.js`** — The Blue Alliance schedule and alliance data.
+- **`picklist.js` / `picklist-store.js`** — per-team ranked-list persistence and
+  merge behavior.
+- **`auth.svelte.js`** — account state, invite registration and role/profile
+  management. Profile reads are scoped to the signed-in user's UUID.
 
-Five tables via 5 migrations: `event_meta` (passphrase hash), `schedules`
-(cached TBA match list + `tba_event_key`), `assignments`, `assignment_overrides`,
-`reminders`. Plus `reset_event_data()`, which clears scheduling state while
-deliberately preserving scout entries. Every table is RLS-gated by
-`x-session-id` for reads and `has_manager_token()` for writes.
+## Database state
 
-## State of the code
+The migration files are the rebuild source of truth, but the live project is
+currently between stages:
 
-Well-commented throughout — most modules open with a paragraph explaining the
-design decision, not just the mechanics. Consistent patterns. The main soft
-spots:
+| Migration | Live state |
+|---|---|
+| `0001`–`0006` | Existing baseline; not individually re-verified in this audit |
+| `0007_entry_updated_at.sql` | Applied |
+| `0008_auth.sql` | Applied; account objects exist, but enforcement is off |
+| `0009_picklist.sql` | Applied |
+| `0010_identity.sql` | Not applied |
+| `0011_policies.sql` | Not applied |
 
-1. **`/schedule` is ~2,200 lines** in one component and does roughly eight
-   distinct jobs. Splitting it is step one of the hallmark redesign.
-2. **Every page carries its own `<style>` block.** Design tokens exist but no
-   shared components.
-3. **`/edit` changes never reach the cloud.** The sync layer is INSERT-only, so
-   an edited entry keeps its stale remote row.
-4. Build artifacts (`build/`, `.svelte-kit/`) are committed to the repo.
+The local, unapplied migration work now guards immutable profile identity and
+role transitions, requires both team membership and matching event scope in the
+cutover policies, stamps and preserves entry attribution, and rewrites the
+archive/reset RPC to use manager roles. Static tests pin those invariants. This
+is hardening work, not a deployment: no migration was run by this change.
 
-`ROADMAP.md` is the single plan — it also records what was deliberately *not*
-built (photos, push notifications, voice-to-text, a fully online rewrite) so
-those don't get re-proposed.
+## Upgrade boundary
+
+The auth cutover is not ready to deploy yet. Before `0011` and
+`AUTH_ENFORCED = true` can ship together, the client must stop using
+`managerToken`, dual-write `profile_id`/`submitted_by`, read assignments and
+targeted reminders by profile UUID, and pass live Postgres tests with anon,
+orphaned, scout, manager and super identities.
+
+`profiles.recovery_email` is only stored metadata today. Supabase password
+recovery sends to the email in `auth.users`; it does not consult this column.
+Working self-service recovery therefore needs an Edge Function or another
+trusted server-side admin flow.
+
+`ROADMAP.md` is the single dependency-ordered plan. `docs/adr-001-auth.md`
+records the auth decisions and `supabase/README.md` is the migration runbook.

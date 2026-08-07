@@ -83,7 +83,7 @@
 			body:
 				`They can no longer sign in to this team's data.\n\n` +
 				`Entries they already recorded are kept — this removes the person, not their work.\n\n` +
-				`To bring them back you'd issue a new invite, and they would pick a new username.`,
+				`To bring them back, issue a new invite. They can sign in with the same username and redeem it.`,
 			confirmLabel: 'Revoke access',
 			danger: true
 		});

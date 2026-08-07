@@ -6,6 +6,7 @@
 	import { scoreTeams, fmt } from '$lib/metrics.js';
 	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { session } from '$lib/session.svelte.js';
+	import { auth } from '$lib/auth.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import { rankForMove, rankBetween, ordered } from '$lib/picklist.js';
 	import * as store from '$lib/picklist-store.js';
@@ -46,7 +47,9 @@
 	let copyFlash = $state('');
 
 	const eventCode = $derived(session.eventCode || '');
-	const isManager = $derived(Boolean(session.managerToken));
+	// One source of truth — see auth.canManage. Deriving this locally is how
+	// this page drifted from /scouting in the first place.
+	const isManager = $derived(auth.canManage);
 
 	const primary = $derived(ordered(rows.filter((r) => r.status === 'pick')));
 	const doNotPick = $derived(ordered(rows.filter((r) => r.status === 'avoid')));
@@ -94,8 +97,8 @@
 		syncing = true;
 		try {
 			const { changed, pending, error } = await store.sync(eventCode, {
-				managerToken: session.managerToken,
-				updatedBy: session.scoutName
+				...auth.managerCredentials(),
+				updatedBy: auth.displayName || session.scoutName
 			});
 			pendingCount = pending;
 			// Only surface a failure that actually cost something. A pull error
@@ -331,7 +334,7 @@
 				);
 				alliancesAt = new Date().toISOString();
 				// Best-effort. The local answer is already right on this device.
-				publishAlliances(eventCode, alliancesRaw, { managerToken: session.managerToken });
+				publishAlliances(eventCode, alliancesRaw, auth.managerCredentials());
 			} else {
 				const pulled = await pullAlliances(eventCode);
 				if (pulled) {
