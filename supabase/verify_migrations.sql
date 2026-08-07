@@ -67,9 +67,14 @@ WITH expected(migration, kind, name, why) AS (
         ('0010', 'function', 'profile_for_name',
          'conservative name -> account resolution; ambiguity returns null'),
         ('0010', 'index',    'assignments_profile_idx',        'the "what am I assigned" read'),
-        ('0010', 'index',    'assignments_profile_dedupe_idx', 'one team per person per event'),
+        -- Not UNIQUE, and not named *_dedupe_idx. 0010 backfills profile_id by
+        -- guessing from a typed name, so two historical spellings can resolve to
+        -- one account and a unique index would abort the whole expansion. These
+        -- make that collision cheap to audit; the constraint comes later, in a
+        -- contract migration, once the duplicate report is empty.
+        ('0010', 'index',    'assignments_profile_team_idx',   'audits one-team-per-person collisions'),
         ('0010', 'index',    'overrides_profile_idx',          'per-match override lookup'),
-        ('0010', 'index',    'overrides_profile_dedupe_idx',   'one override per person per match'),
+        ('0010', 'index',    'overrides_profile_team_idx',     'audits one-override-per-person-per-match collisions'),
         ('0010', 'index',    'reminders_profile_idx',          'reminder targeting'),
         ('0010', 'index',    'entries_submitted_by_idx',       'attribution lookup')
 ),
@@ -116,27 +121,51 @@ rls_expected(name) AS (
            ('profiles'), ('invites'), ('picklist'), ('picklist_prefs')
 ),
 
+-- How much of each migration is actually here. Three states, not two: all of
+-- it, none of it, or some of it.
+migration_state AS (
+    SELECT e.migration,
+           count(*) AS expected_count,
+           count(*) FILTER (
+               WHERE EXISTS (SELECT 1 FROM live l WHERE l.kind = e.kind AND l.name = e.name)
+           ) AS present_count
+    FROM expected e
+    GROUP BY e.migration
+),
+
 checks AS (
 
     -- ── every expected object exists ───────────────────────────────────────
+    --
+    -- Only for a migration that has started. One nobody has run yet is a fact,
+    -- not a fault: before 0010 is applied this listed its ten objects as FAIL,
+    -- sorting ten non-problems above every real finding, and a check that cries
+    -- wolf is one people learn to scroll past — which is precisely the habit
+    -- that let the entries table drift for months.
+    --
+    -- Half a migration is the genuinely dangerous state, because it means a
+    -- transaction did not finish, so those still fail loudly.
     SELECT 'FAIL' AS status,
            e.migration || ' ' || e.kind || ' missing' AS check_name,
            e.name || ' — ' || e.why AS detail
     FROM expected e
-    WHERE NOT EXISTS (SELECT 1 FROM live l WHERE l.kind = e.kind AND l.name = e.name)
+    JOIN migration_state m ON m.migration = e.migration
+    WHERE m.present_count > 0
+      AND NOT EXISTS (SELECT 1 FROM live l WHERE l.kind = e.kind AND l.name = e.name)
 
     UNION ALL
 
-    SELECT 'PASS',
-           e.migration || ' complete',
-           count(*)::text || ' object(s) present'
-    FROM expected e
-    WHERE NOT EXISTS (
-        SELECT 1 FROM expected x
-        WHERE x.migration = e.migration
-          AND NOT EXISTS (SELECT 1 FROM live l WHERE l.kind = x.kind AND l.name = x.name)
-    )
-    GROUP BY e.migration
+    SELECT 'PASS', migration || ' complete',
+           expected_count::text || ' object(s) present'
+    FROM migration_state
+    WHERE present_count = expected_count
+
+    UNION ALL
+
+    SELECT 'INFO', migration || ' not applied',
+           expected_count::text || ' object(s) absent — expected until you run it'
+    FROM migration_state
+    WHERE present_count = 0
 
     UNION ALL
 
