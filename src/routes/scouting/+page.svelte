@@ -4,6 +4,7 @@
 	import { session } from '$lib/session.svelte.js';
 	import { role } from '$lib/role.svelte.js';
 	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
+	import { rowScout, scoutRef } from '$lib/scout-identity.js';
 	import { listEntries, getSetting, setSetting } from '$lib/db.js';
 	import {
 		fetchAndCacheSchedule,
@@ -72,10 +73,14 @@
 	// auth.managerCredentials() is the shared form; this local alias stays only
 	// because several call sites here take a bare token rather than a bag.
 	const legacyManagerToken = $derived(auth.managerCredentials().managerToken);
+	// Who authored a reminder or a schedule publish. Same reasoning as the app
+	// bar badge in +layout.svelte: the account name when one exists, because
+	// attributing a manager action to whatever name this device happened to have
+	// typed is how "who published this?" became unanswerable.
 	const managerName = $derived(
 		AUTH_ENFORCED
 			? auth.displayName || auth.profile?.username || ''
-			: session.scoutName
+			: auth.displayName || session.scoutName
 	);
 
 	// ── live coverage (shared with home + manager analytics) ────────────────
@@ -166,6 +171,14 @@
 
 	/** Server-pulled override rows; refreshed by reload() and after edits. */
 	let overrideList = $state(/** @type {any[]} */ ([]));
+	/**
+	 * The account roster, so a typed scout name can be written with the account it
+	 * belongs to. Empty is a normal state — nobody signed in, or the roster read
+	 * failed — and every write still carries the name with a null account, exactly
+	 * as it does today. Resolution improves the data when it can; it never stands
+	 * between a manager and saving an assignment.
+	 */
+	let roster = $state(/** @type {any[]} */ ([]));
 	/** Per-match new-override form state, keyed by match_number → {scout, team}. */
 	let overrideDraft = $state(/** @type {Record<string, {scout: string, team: string}>} */ ({}));
 
@@ -240,20 +253,32 @@
 	 * already pulled by the sync layer.
 	 */
 	const scoutsInEvent = $derived.by(() => {
+		// Grouped on the identity key, not the typed text. This panel exists to
+		// answer "who is recording and who have I assigned", and keying on the raw
+		// string answered it with one row for "Ning" and another for "ning" —
+		// making a scout look unassigned while their entries piled up under a
+		// second name. The label keeps whatever spelling arrived first.
 		const map = new Map();
-		const get = (name) => {
-			if (!map.has(name)) map.set(name, { name, assigned: false, recording: false, count: 0, lastEntry: null });
-			return map.get(name);
+		const get = (ref) => {
+			if (!map.has(ref.key))
+				map.set(ref.key, {
+					name: ref.label,
+					assigned: false,
+					recording: false,
+					count: 0,
+					lastEntry: null
+				});
+			return map.get(ref.key);
 		};
 		for (const r of assignRows) {
-			const n = r.scout_name.trim();
-			if (!n) continue;
-			get(n).assigned = true;
+			const ref = scoutRef(r.scout_name);
+			if (!ref.key) continue;
+			get(ref).assigned = true;
 		}
 		for (const e of entries) {
-			const n = String(e.scoutName ?? '').trim();
-			if (!n) continue;
-			const info = get(n);
+			const ref = rowScout(e);
+			if (!ref.key) continue;
+			const info = get(ref);
 			info.recording = true;
 			info.count += 1;
 			if (!info.lastEntry || e.createdAt > info.lastEntry) info.lastEntry = e.createdAt;
@@ -300,17 +325,17 @@
 		// only those count as "their teams" for this match.
 		const overrideByScout = new Map();
 		for (const o of overrideRows) {
-			const lc = String(o.scout_name).trim().toLowerCase();
-			const set = overrideByScout.get(lc) ?? { displayName: o.scout_name, teams: new Set() };
+			const who = rowScout(o);
+			const set = overrideByScout.get(who.key) ?? { displayName: who.label, teams: new Set() };
 			set.teams.add(Number(o.team_number));
-			overrideByScout.set(lc, set);
+			overrideByScout.set(who.key, set);
 		}
 		// Effective scout → teams map for THIS match: override wins, else base.
 		const scoutTeams = new Map();
 		for (const r of assignRows) {
 			const name = r.scout_name.trim();
 			if (!name) continue;
-			const lc = name.toLowerCase();
+			const lc = scoutRef(name).key;
 			if (overrideByScout.has(lc)) {
 				scoutTeams.set(name, [...overrideByScout.get(lc).teams]);
 			} else {
@@ -336,7 +361,7 @@
 				const watchers = [];
 				for (const [scoutName, teams] of scoutTeams) {
 					if (teams.includes(t)) {
-						const override = overrideByScout.get(scoutName.toLowerCase());
+						const override = overrideByScout.get(scoutRef(scoutName).key);
 						watchers.push({
 							scout: scoutName,
 							viaOverride: Boolean(override)
@@ -383,7 +408,8 @@
 			await addOverride(
 				session.eventCode,
 				{ matchNumber, scoutName: d.scout.trim(), teamNumber: Number(d.team) },
-				legacyManagerToken
+				legacyManagerToken,
+				roster
 			);
 			d.scout = '';
 			d.team = '';
@@ -494,6 +520,7 @@
 				passphraseSetRemote = AUTH_ENFORCED
 					? false
 					: await isPassphraseSet(session.eventCode);
+				roster = auth.signedIn ? await auth.listProfiles().catch(() => []) : [];
 				const all = await listAssignments(session.eventCode);
 				// Group team_number by scout_name for the editor.
 				const byScout = new Map();
@@ -924,7 +951,8 @@
 				for (const t of dedup) rows.push({ scout_name: name, team_number: t });
 			}
 			const inserted = await replaceAssignments(session.eventCode, rows, {
-				managerToken: legacyManagerToken
+				managerToken: legacyManagerToken,
+				roster
 			});
 
 			// Only touch the overrides table when auto-assign actually staged
@@ -933,7 +961,8 @@
 			let overrideNote = '';
 			if (pendingOverrides) {
 				const n = await replaceOverrides(session.eventCode, pendingOverrides, {
-					managerToken: legacyManagerToken
+					managerToken: legacyManagerToken,
+					roster
 				});
 				overrideList = await listOverrides(session.eventCode);
 				pendingOverrides = null;

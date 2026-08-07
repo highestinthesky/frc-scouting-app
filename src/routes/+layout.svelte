@@ -70,7 +70,25 @@
 					role: auth.role ?? 'scout',
 					isManager: auth.isManager
 				}
-			: { name: session.scoutName, role: role.value, isManager: role.isManager }
+			: {
+					// The NAME comes from the account as soon as there is one, before
+					// the cutover. "Am I signed in, and as whom" is the question this
+					// badge exists to answer, and it answered it with the name typed
+					// into Settings on this device — so signing in changed nothing
+					// visible, and a shared phone showed the previous scout.
+					//
+					// Safe to move now, and only now, because the joins no longer
+					// depend on this string: auth.me carries the account alongside
+					// session.scoutName, so what the badge displays and what the
+					// assignment board matches on are finally two different things.
+					//
+					// Role and manager rights deliberately do NOT move with it. Those
+					// still ride the passphrase until 0011 and AUTH_ENFORCED flip
+					// together; auth.canManage owns that decision.
+					name: auth.displayName || session.scoutName,
+					role: role.value,
+					isManager: role.isManager
+				}
 	);
 
 	// Re-scope the sync layer whenever the user changes their event code in

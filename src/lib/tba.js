@@ -18,6 +18,7 @@
 // Free TBA keys: https://www.thebluealliance.com/account
 
 import { getSetting, setSetting } from './db.js';
+import { scoutRef, rowScout, sameScout } from './scout-identity.js';
 import { createSupabaseClient, deriveSessionId } from './supabase.js';
 
 const TBA_BASE = 'https://www.thebluealliance.com/api/v3';
@@ -484,23 +485,23 @@ export function teamsInMatch(match) {
  *
  * The third argument may be either a plain `number[]` (the legacy
  * "watch-these-teams-everywhere" model) or an options object that supplies
- * `assignedTeams` plus `overrides` and `scoutName` for per-match override
+ * `assignedTeams` plus `overrides` and `scout` for per-match override
  * resolution. Overrides win for any (match, scout) they specify; otherwise
  * the base team list applies.
  *
  * @param {TBAMatch[]} qmList
  * @param {object[]} entries
- * @param {number[]|{assignedTeams: number[], overrides?: any[], scoutName?: string}} opts
+ * @param {number[]|{assignedTeams: number[], overrides?: any[], scout?: import('./scout-identity.js').ScoutRef}} opts
  * @returns {{match: TBAMatch, teams: number[]}|null}
  */
 export function nextUnscoutedMatch(qmList, entries, opts) {
-	const { assignedTeams, overrides, scoutName } = normalizeOpts(opts);
+	const { assignedTeams, overrides, scout } = normalizeOpts(opts);
 	if (!qmList.length) return null;
 	const done = new Set(entries.map((e) => `${e.matchNumber}:${e.teamNumber}`));
-	const scoutLc = (scoutName ?? '').trim().toLowerCase();
-	const hasOverrides = scoutLc && Array.isArray(overrides) && overrides.length > 0;
+	const known = Boolean(scout?.key || scout?.profileId);
+	const hasOverrides = known && Array.isArray(overrides) && overrides.length > 0;
 	for (const match of qmList) {
-		const myTeams = resolveMyTeams(match, scoutLc, assignedTeams, overrides, hasOverrides);
+		const myTeams = resolveMyTeams(match, scout, assignedTeams, overrides, hasOverrides);
 		const pending = myTeams.filter((t) => !done.has(`${match.match_number}:${t}`));
 		if (pending.length > 0) return { match, teams: pending };
 	}
@@ -509,24 +510,20 @@ export function nextUnscoutedMatch(qmList, entries, opts) {
 
 function normalizeOpts(opts) {
 	if (Array.isArray(opts)) {
-		return { assignedTeams: opts, overrides: [], scoutName: '' };
+		return { assignedTeams: opts, overrides: [], scout: scoutRef('') };
 	}
 	return {
 		assignedTeams: opts?.assignedTeams ?? [],
 		overrides: opts?.overrides ?? [],
-		scoutName: opts?.scoutName ?? ''
+		scout: opts?.scout ?? scoutRef('')
 	};
 }
 
-function resolveMyTeams(match, scoutLc, baseAssignments, overrides, hasOverrides) {
+function resolveMyTeams(match, scout, baseAssignments, overrides, hasOverrides) {
 	const playing = teamsInMatchSet(match);
 	if (hasOverrides) {
 		const overrideTeams = overrides
-			.filter(
-				(o) =>
-					o.match_number === match.match_number &&
-					String(o.scout_name ?? '').trim().toLowerCase() === scoutLc
-			)
+			.filter((o) => o.match_number === match.match_number && sameScout(rowScout(o), scout))
 			.map((o) => Number(o.team_number))
 			.filter((t) => Number.isFinite(t) && playing.has(t));
 		if (overrideTeams.length > 0) {

@@ -15,6 +15,7 @@
 
 import { createSupabaseClient, deriveSessionId } from './supabase.js';
 import { getSetting, setSetting } from './db.js';
+import { scoutRef, resolveScout, identityFields } from './scout-identity.js';
 import { teamsInMatch } from './tba.js';
 
 const DISMISSED_KEY = 'dismissedReminders';
@@ -36,7 +37,7 @@ export async function listReminders(eventCode) {
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
 		.from('reminders')
-		.select('id, scout_name, match_number, message, author, created_at, expires_at')
+		.select('id, scout_name, profile_id, match_number, message, author, created_at, expires_at')
 		.eq('session_id', sid)
 		.order('created_at', { ascending: false });
 	if (error) throw mapErr(error, 'load reminders');
@@ -64,10 +65,17 @@ export async function createReminder(eventCode, opts) {
 	const sid = await deriveSessionId(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
+	// A reminder with no scout is a broadcast and must stay NULL in both identity
+	// columns — identityFields() yields '' for an unnamed ref, and an empty string
+	// is not null, so it would quietly turn "everyone" into "the scout called
+	// nothing" and the banner would show for no one.
+	const target = opts.scoutName?.trim()
+		? identityFields(scoutRef(opts.scoutName, resolveScout(opts.scoutName, opts.roster)))
+		: { scout_name: null, profile_id: null };
 	const row = {
 		session_id: sid,
 		event_code: code,
-		scout_name: opts.scoutName?.trim() || null,
+		...target,
 		match_number: Number.isFinite(opts.matchNumber) ? opts.matchNumber : null,
 		message: opts.message.trim(),
 		author: opts.author?.trim() || null,
@@ -78,7 +86,7 @@ export async function createReminder(eventCode, opts) {
 	const { data, error } = await client
 		.from('reminders')
 		.insert(row)
-		.select('id, scout_name, match_number, message, author, created_at, expires_at')
+		.select('id, scout_name, profile_id, match_number, message, author, created_at, expires_at')
 		.single();
 	if (error) throw mapErr(error, 'create reminder');
 	return data;

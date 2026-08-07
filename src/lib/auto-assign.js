@@ -35,6 +35,8 @@
 // change — the overrides table already exists and already wins over the base
 // assignment during resolution.
 
+import { scoutRef, rowScout } from './scout-identity.js';
+
 /** @param {object} m TBA match object */
 function teamsIn(m) {
 	const out = [];
@@ -266,7 +268,7 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 	//
 	// The subtlety that matters, and that a first version of this got wrong:
 	// an override row does not add a team to a scout, it REPLACES that scout's
-	// whole list for that match (see resolveTeamsForMatch). So handing a shed
+	// whole list for that match (see resolveMyTeams in tba.js). So handing a shed
 	// team to an idle scout is only half the job — without a matching row
 	// pinning the original scout to what they kept, they are still told to
 	// watch both robots and the clash survives in exactly the place the fix
@@ -352,7 +354,8 @@ export function autoAssignTeams(qmList, scoutNames, opts = {}) {
 /**
  * How many robots does this plan actually get eyes on?
  *
- * Resolution here must mirror resolveTeamsForMatch exactly, per (match, scout):
+ * Resolution here must mirror resolveMyTeams() in tba.js exactly, per
+ * (match, scout):
  * if a scout has ANY override row for a match, those rows replace their base
  * list for that match; otherwise their base list applies. Resolving per
  * (match, team) instead — asking "who owns this robot" rather than "what is
@@ -375,7 +378,7 @@ export function evaluateCoverage(qmList, assignments, overrides = []) {
 	/** `match:scout` → Set<team> */
 	const ovBy = new Map();
 	for (const o of overrides ?? []) {
-		const k = `${o.match_number}:${String(o.scout_name ?? '').trim().toLowerCase()}`;
+		const k = `${o.match_number}:${rowScout(o).key}`;
 		if (!ovBy.has(k)) ovBy.set(k, new Set());
 		ovBy.get(k).add(Number(o.team_number));
 	}
@@ -388,7 +391,7 @@ export function evaluateCoverage(qmList, assignments, overrides = []) {
 		total += playing.size;
 		const watched = new Set();
 		for (const [scout, base] of baseOf) {
-			const ov = ovBy.get(`${m.match_number}:${scout.trim().toLowerCase()}`);
+			const ov = ovBy.get(`${m.match_number}:${scoutRef(scout).key}`);
 			const effective =
 				ov && ov.size > 0
 					? [...ov].filter((t) => playing.has(t))

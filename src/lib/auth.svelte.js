@@ -26,6 +26,7 @@
 import { getAuthClient } from './supabase.js';
 // session.svelte.js imports only db.js, so this direction is acyclic.
 import { session } from './session.svelte.js';
+import { scoutRef } from './scout-identity.js';
 
 /**
  * Does the app REQUIRE an account yet?
@@ -156,6 +157,25 @@ export const auth = {
 	get displayName() {
 		const p = state.profile;
 		return p ? `${p.first_name} ${p.last_name}`.trim() : '';
+	},
+
+	/**
+	 * Who this device is, as something the planning tables can be joined on.
+	 *
+	 * Lives here for the same reason canManage does: it combines the account with
+	 * the local session, and every call site that re-derived it would drift.
+	 *
+	 * The label is deliberately `session.scoutName` and NOT `displayName`. Until
+	 * profile_id is what the joins actually use, the typed name is still the key,
+	 * and a device that started announcing itself as "Haolun Ning" would stop
+	 * matching every assignment, override and reminder addressed to "Ning". The
+	 * account rides along as profileId, which is the half that is always right;
+	 * the name is the half that still has to agree with what a manager typed.
+	 *
+	 * Display is a different question with a different answer — see displayName.
+	 */
+	get me() {
+		return scoutRef(session.scoutName, state.profile?.id ?? null);
 	},
 
 	/**

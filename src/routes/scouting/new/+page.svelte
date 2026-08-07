@@ -5,6 +5,8 @@
 	import { page } from '$app/state';
 	import { addEntry, listEntries } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
+	import { rowScout, sameScout } from '$lib/scout-identity.js';
+	import { auth } from '$lib/auth.svelte.js';
 	import { kick as kickSync } from '$lib/sync.svelte.js';
 	import {
 		IDENTITY_FIELDS,
@@ -77,7 +79,7 @@
 		try {
 			const all = await listEntries();
 			const mine = all.filter(
-				(e) => e.eventCode === session.eventCode && e.scoutName === session.scoutName
+				(e) => e.eventCode === session.eventCode && sameScout(rowScout(e), auth.me)
 			);
 
 			const cached = session.eventCode ? await getCachedSchedule(session.eventCode) : null;
@@ -111,13 +113,8 @@
 				values.matchNumber = String(qMatch);
 				const match = qmList.find((m) => m.match_number === qMatch);
 				if (match) {
-					const scoutLc = (session.scoutName ?? '').trim().toLowerCase();
 					const ovTeams = (session.overrides ?? [])
-						.filter(
-							(o) =>
-								o.match_number === qMatch &&
-								String(o.scout_name ?? '').trim().toLowerCase() === scoutLc
-						)
+						.filter((o) => o.match_number === qMatch && sameScout(rowScout(o), auth.me))
 						.map((o) => Number(o.team_number))
 						.filter(Number.isFinite);
 					const { red, blue } = teamsInMatch(match);
@@ -143,7 +140,7 @@
 				const next = nextUnscoutedMatch(qmList, all, {
 					assignedTeams: teams,
 					overrides: session.overrides ?? [],
-					scoutName: session.scoutName
+					scout: auth.me
 				});
 				if (next) {
 					suggestion = next;

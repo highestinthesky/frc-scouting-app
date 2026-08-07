@@ -6,6 +6,7 @@
 	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { exportToCsv } from '$lib/csv.js';
 	import { session } from '$lib/session.svelte.js';
+	import { rowScout, sameScout, scoutRef } from '$lib/scout-identity.js';
 	import { syncState } from '$lib/sync.svelte.js';
 
 	let summary = $state(null);
@@ -113,7 +114,7 @@
 			metrics,
 			hasMetrics: hasAnyMetrics(metrics),
 			matchesCovered: new Set(entries.map((e) => e.matchNumber)).size,
-			scoutsCovered: new Set(entries.map((e) => e.scoutName)).size,
+			scoutsCovered: new Set(entries.map((e) => rowScout(e).key)).size,
 			redCount,
 			blueCount,
 			breakdownCount,
@@ -196,7 +197,8 @@
 				.map((t) => {
 					let sub = t.entries;
 					if (eventFilter) sub = sub.filter((e) => e.eventCode === eventFilter);
-					if (scoutFilter) sub = sub.filter((e) => e.scoutName === scoutFilter);
+					if (scoutFilter)
+						sub = sub.filter((e) => sameScout(rowScout(e), scoutRef(scoutFilter)));
 					if (allianceFilter !== 'all')
 						sub = sub.filter((e) => e.allianceColor === allianceFilter);
 					return recompute(t.teamNumber, sub);

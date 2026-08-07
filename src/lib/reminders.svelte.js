@@ -9,6 +9,8 @@
 // Sync layer calls `reminders.pull()` on its throttled tick.
 
 import { session } from './session.svelte.js';
+import { auth } from './auth.svelte.js';
+import { rowScout, sameScout } from './scout-identity.js';
 import {
 	listReminders,
 	autoReminders,
@@ -35,7 +37,7 @@ class RemindersStore {
 
 	/** Everything the banner should currently show, after dismissal + target filtering. */
 	get visible() {
-		const myName = (session.scoutName ?? '').trim().toLowerCase();
+		const me = auth.me;
 		const out = [];
 		// Auto first so banner ordering is "imminent match" at the top, then
 		// manager-authored notes.
@@ -47,8 +49,8 @@ class RemindersStore {
 			if (this.dismissed.has(r.id)) continue;
 			// Broadcast reminders (null scout_name) reach everyone. Targeted
 			// ones only show for the matching scout.
-			if (r.scout_name) {
-				if (r.scout_name.trim().toLowerCase() !== myName) continue;
+			if (r.scout_name || r.profile_id) {
+				if (!sameScout(rowScout(r), me)) continue;
 			}
 			out.push({ ...r, kind: 'manager' });
 		}

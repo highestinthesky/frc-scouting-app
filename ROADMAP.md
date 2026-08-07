@@ -147,10 +147,24 @@ The cutover is **not ready**. Complete these steps in order.
    backfill only after the intended profiles exist. Never guess a UUID for an
    ambiguous person.
 
-4. **Convert client identity to profile UUIDs.** Dual-write
-   `submitted_by`/`profile_id` while compatibility names remain. Prefer UUIDs for
-   assignment, override and targeted-reminder reads, and display the signed-in
-   account identity rather than the locally typed scout name.
+4. **Convert client identity to profile UUIDs.** ✅ Done — `src/lib/scout-identity.js`
+   is the single seam, with 46 assertions.
+
+   `entries.submitted_by` was already dual-written. The three planning tables
+   were not: nothing filled `0010`'s `profile_id` columns, so the whole burden
+   sat on one backfill's guesses. Assignments, per-match overrides and targeted
+   reminders now write both, resolving a typed name against the roster with the
+   same conservative rule as `profile_for_name()` — one unambiguous match or
+   null, never a guess. Reads prefer the account and fall back to the name, so
+   rows recorded before accounts existed keep matching their author.
+
+   The app bar now shows the account name when signed in. Safe only because
+   `auth.me` still *joins* on `session.scoutName` — display and join key are
+   deliberately different values.
+
+   Remaining before `0011`: no policy reads `profile_id` yet, and the columns
+   are populated only going forward. Re-run `0010`'s backfill once everyone has
+   registered, then review what stayed null.
 
 5. **Convert every shared-data request to the account authorization path.**
    Remove `managerToken` parameters, `x-manager-token` construction and

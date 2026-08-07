@@ -1,6 +1,7 @@
 // Pure helpers for slicing the entries collection in different ways.
 // Used by the manager view to summarise and group records.
 
+import { rowScout } from './scout-identity.js';
 import { listEntries } from './db.js';
 import { allMetricStats, hasAnyMetrics } from './metrics.js';
 
@@ -105,7 +106,7 @@ export async function summarize() {
 				metrics,
 				hasMetrics: hasAnyMetrics(metrics),
 				matchesCovered: new Set(list.map((e) => e.matchNumber)).size,
-				scoutsCovered: new Set(list.map((e) => e.scoutName)).size,
+				scoutsCovered: new Set(list.map((e) => rowScout(e).key)).size,
 				redCount,
 				blueCount,
 				breakdownCount,

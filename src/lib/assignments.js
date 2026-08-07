@@ -18,7 +18,7 @@
 
 import { createSupabaseClient, deriveSessionId } from './supabase.js';
 import { session } from './session.svelte.js';
-import { teamsInMatch } from './tba.js';
+import { scoutRef, rowScout, sameScout, resolveScout, identityFields } from './scout-identity.js';
 
 /**
  * Manager-only: replace the entire assignment list for an event with the
@@ -29,6 +29,7 @@ import { teamsInMatch } from './tba.js';
  * @param {{scout_name: string, team_number: number}[]} rows
  * @param {object} opts
  * @param {string} opts.managerToken  hex hash; required after passphrase set
+ * @param {any[]} [opts.roster]  profiles, so typed names can carry an account
  * @returns {Promise<number>}  number of rows inserted
  */
 export async function replaceAssignments(eventCode, rows, opts) {
@@ -45,7 +46,7 @@ export async function replaceAssignments(eventCode, rows, opts) {
 		.map((r) => ({
 			session_id: sid,
 			event_code: code,
-			scout_name: String(r.scout_name ?? '').trim(),
+			...identityFields(refFor(r.scout_name, opts?.roster)),
 			team_number: Number(r.team_number)
 		}))
 		.filter((r) => r.scout_name && Number.isFinite(r.team_number) && r.team_number > 0);
@@ -65,6 +66,22 @@ export async function replaceAssignments(eventCode, rows, opts) {
 }
 
 /**
+ * A typed name plus whatever account the roster says it belongs to.
+ *
+ * Resolution is best-effort by design. Without a roster — offline, or nobody
+ * signed in — every row still writes the name and a null account, which is
+ * exactly what a pre-accounts device produces today. The dual-write improves
+ * the data when it can and never blocks a manager who cannot reach the roster
+ * ten minutes before quals start.
+ *
+ * @param {unknown} name
+ * @param {any[]|undefined} roster
+ */
+function refFor(name, roster) {
+	return scoutRef(name, resolveScout(name, roster));
+}
+
+/**
  * Read all assignments for an event. Anyone scoped to the event_code can
  * read; the RLS policy only requires `x-session-id`.
  *
@@ -79,7 +96,7 @@ export async function listAssignments(eventCode) {
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
 		.from('assignments')
-		.select('id, scout_name, team_number')
+		.select('id, scout_name, profile_id, team_number')
 		.eq('session_id', sid)
 		.order('scout_name', { ascending: true })
 		.order('team_number', { ascending: true });
@@ -96,18 +113,17 @@ export async function listAssignments(eventCode) {
  * want to react to changes.
  *
  * @param {string} eventCode
- * @param {string} scoutName
+ * @param {import('./scout-identity.js').ScoutRef} me
  * @returns {Promise<number[]>}
  */
-export async function pullAndApplyForScout(eventCode, scoutName) {
-	const name = (scoutName ?? '').trim().toLowerCase();
-	if (!name) return session.assignedTeams ?? [];
+export async function pullAndApplyForScout(eventCode, me) {
+	if (!me?.key && !me?.profileId) return session.assignedTeams ?? [];
 	const [all, overrideRows] = await Promise.all([
 		listAssignments(eventCode),
 		listOverrides(eventCode)
 	]);
 	const mine = all
-		.filter((r) => String(r.scout_name ?? '').trim().toLowerCase() === name)
+		.filter((r) => sameScout(rowScout(r), me))
 		.map((r) => Number(r.team_number))
 		.filter(Number.isFinite);
 	const dedup = [...new Set(mine)].sort((a, b) => a - b);
@@ -123,6 +139,7 @@ export async function pullAndApplyForScout(eventCode, scoutName) {
 		id: r.id,
 		match_number: Number(r.match_number),
 		scout_name: String(r.scout_name ?? ''),
+		profile_id: r.profile_id ?? null,
 		team_number: Number(r.team_number)
 	}));
 	const curOv = session.overrides ?? [];
@@ -132,6 +149,7 @@ export async function pullAndApplyForScout(eventCode, scoutName) {
 			(v, i) =>
 				v.match_number === ov[i].match_number &&
 				v.scout_name === ov[i].scout_name &&
+				(v.profile_id ?? null) === ov[i].profile_id &&
 				v.team_number === ov[i].team_number
 		);
 	if (!sameOv) await session.update({ overrides: ov });
@@ -160,7 +178,7 @@ export async function listOverrides(eventCode) {
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
 		.from('assignment_overrides')
-		.select('id, match_number, scout_name, team_number')
+		.select('id, match_number, scout_name, profile_id, team_number')
 		.eq('session_id', sid)
 		.order('match_number', { ascending: true });
 	if (error) throw mapErr(error, 'load overrides');
@@ -174,7 +192,12 @@ export async function listOverrides(eventCode) {
  * @param {{matchNumber: number, scoutName: string, teamNumber: number}} args
  * @param {string} managerToken
  */
-export async function addOverride(eventCode, { matchNumber, scoutName, teamNumber }, managerToken) {
+export async function addOverride(
+	eventCode,
+	{ matchNumber, scoutName, teamNumber },
+	managerToken,
+	roster
+) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	const sid = await deriveSessionId(code);
 	if (!sid) throw new Error('Could not derive session id.');
@@ -183,7 +206,7 @@ export async function addOverride(eventCode, { matchNumber, scoutName, teamNumbe
 		session_id: sid,
 		event_code: code,
 		match_number: Number(matchNumber),
-		scout_name: String(scoutName ?? '').trim(),
+		...identityFields(refFor(scoutName, roster)),
 		team_number: Number(teamNumber)
 	});
 	// Dedupe-index 23505: caller probably already has this override; safe to ignore.
@@ -206,6 +229,7 @@ export async function addOverride(eventCode, { matchNumber, scoutName, teamNumbe
  * @param {{match_number: number, scout_name: string, team_number: number}[]} rows
  * @param {object} opts
  * @param {string} opts.managerToken
+ * @param {any[]} [opts.roster]  profiles, so typed names can carry an account
  * @returns {Promise<number>} rows inserted
  */
 export async function replaceOverrides(eventCode, rows, opts) {
@@ -220,7 +244,7 @@ export async function replaceOverrides(eventCode, rows, opts) {
 			session_id: sid,
 			event_code: code,
 			match_number: Number(r.match_number),
-			scout_name: String(r.scout_name ?? '').trim(),
+			...identityFields(refFor(r.scout_name, opts?.roster)),
 			team_number: Number(r.team_number)
 		}))
 		.filter(
@@ -265,41 +289,13 @@ export async function removeOverride(eventCode, id, managerToken) {
 	if (error) throw mapErr(error, 'remove override');
 }
 
-/**
- * Pure resolution: for a single match, return the set of team numbers this
- * scout is responsible for. Overrides win; otherwise base ∩ teams-in-match.
- *
- * @param {object} match  TBA match object
- * @param {string} scoutName
- * @param {number[]} baseAssignments
- * @param {{match_number: number, scout_name: string, team_number: number}[]} overrides
- * @returns {number[]}
- */
-export function resolveTeamsForMatch(match, scoutName, baseAssignments, overrides) {
-	if (!match) return [];
-	const name = (scoutName ?? '').trim().toLowerCase();
-	const mn = match.match_number;
-	const playing = teamsInMatchSet(match);
-	const override = (overrides ?? [])
-		.filter((o) => o.match_number === mn && String(o.scout_name).trim().toLowerCase() === name)
-		.map((o) => Number(o.team_number))
-		.filter((t) => Number.isFinite(t) && playing.has(t));
-	if (override.length > 0) return [...new Set(override)].sort((a, b) => a - b);
-	return (baseAssignments ?? [])
-		.filter((t) => Number.isFinite(t) && playing.has(t))
-		.sort((a, b) => a - b);
-}
-
-function teamsInMatchSet(match) {
-	const out = new Set();
-	for (const arr of [match?.alliances?.red?.team_keys, match?.alliances?.blue?.team_keys]) {
-		for (const k of arr ?? []) {
-			const n = parseInt(String(k).replace(/^frc/, ''), 10);
-			if (Number.isFinite(n)) out.add(n);
-		}
-	}
-	return out;
-}
+// resolveTeamsForMatch() lived here and nothing called it. tba.js's
+// resolveMyTeams() is the copy that actually runs, and auto-assign.js carries a
+// third that must agree with it — its comment pointed here, at the dead one, as
+// the reference to mirror. Two implementations of one rule is a bug waiting to
+// happen; three, where the documented reference is the unused one, is a trap.
+// Removed rather than updated for the identity seam, so the remaining two are
+// the only places the rule exists.
 
 function mapErr(err, action) {
 	const msg = err?.message || String(err);

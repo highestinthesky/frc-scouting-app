@@ -408,7 +408,7 @@ async function pullScheduleAndAssignments() {
 	// schedule is mandatory for any pre-fill to work).
 	const fresh = await pullScheduleIfStale(code);
 	if (session.scoutName) {
-		await pullAndApplyForScout(code, session.scoutName);
+		await pullAndApplyForScout(code, auth.me);
 	}
 	// Refresh the reminders store too. Server reminders are cheap (small rows,
 	// short list). If the schedule was refreshed, also recompute the cached

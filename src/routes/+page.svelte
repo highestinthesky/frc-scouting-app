@@ -4,6 +4,7 @@
 	import { base } from '$app/paths';
 	import { listEntries, deleteEntry } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
+	import { auth } from '$lib/auth.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import {
 		getCachedSchedule,
@@ -66,7 +67,7 @@
 		return nextUnscoutedMatch(qmList, entries, {
 			assignedTeams: teams,
 			overrides,
-			scoutName: session.scoutName
+			scout: auth.me
 		});
 	});
 

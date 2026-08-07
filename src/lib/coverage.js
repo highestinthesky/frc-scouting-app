@@ -12,6 +12,7 @@
 //   - No quality gate: a saved-but-sparse entry still counts as submitted.
 // (See IMPROVEMENTS.md §1B for the rationale.)
 
+import { rowScout } from './scout-identity.js';
 import { teamsInMatch } from './tba.js';
 
 /** Stable key for a (match, team) cell. */
@@ -39,8 +40,8 @@ export function buildEntryIndex(entries, eventCode) {
 		const cur = idx.get(k) ?? { count: 0, lastAt: null, scouts: new Set() };
 		cur.count += 1;
 		if (!cur.lastAt || (e.createdAt && e.createdAt > cur.lastAt)) cur.lastAt = e.createdAt ?? cur.lastAt;
-		const name = String(e.scoutName ?? '').trim();
-		if (name) cur.scouts.add(name);
+		const who = rowScout(e).key;
+		if (who) cur.scouts.add(who);
 		idx.set(k, cur);
 	}
 	return idx;

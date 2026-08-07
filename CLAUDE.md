@@ -42,11 +42,23 @@ raising `23505` so it can adopt the existing row's id. Identity stays out of it:
 adding `submitted_by` or `profile_id` would turn two devices' record of one
 observation into two rows.
 
-**`scout_name` is a join key, not a label.** Assignments, coverage, auto-assign,
-reminders and CSV all match on it, and nothing makes two phones spell it the
-same way — "Ning", "ning" and "Haolun" are three scouts to every one of those
-call sites. `profile_id` is meant to retire it. Reach for the identity helpers
-rather than comparing the string in a new place.
+**`scout_name` is a join key, not a label, and `scout-identity.js` owns it.**
+Never compare the string in a new place. `sameScout()` decides whether two rows
+describe one person — two accounts compare accounts, anything else compares
+normalised names — and `rowScout()` absorbs the three column names the same
+concept travels under (`profile_id`, `entries.submitted_by`, and camelCase in
+IndexedDB). Writes go through `identityFields()` so both columns are filled.
+
+The rule has to live in one place because the codebase used to disagree with
+itself: the assignment join, override filter and reminder targeting compared
+`trim().toLowerCase()` while the insights filter, duplicate-entry warning and
+distinct-scout count compared raw strings, so "Ning" and "ning" were one scout
+to three call sites and two to the other three.
+
+`auth.me` is who this device is. Its **label stays `session.scoutName`**, not
+`displayName` — the typed name is still what most rows join on, and a device
+announcing itself as "Haolun Ning" would stop matching everything addressed to
+"Ning". Display is a separate question: use `auth.displayName` for that.
 
 ## Svelte traps that already shipped
 
