@@ -262,6 +262,21 @@ Before either switch:
 
 ### Re-running 0008 is safe — rehearsed, not assumed
 
+```bash
+scripts/apply_0008.sh
+```
+
+Five stages, run from the repo root. It reads the project ref out of
+`src/lib/supabase.js` rather than asking, so it cannot be pointed at the wrong
+database by a typo; refuses to start unless a preflight query confirms the
+original `0008` is live and `0010` is not; opens the SQL editor at each step;
+and finishes by checking `mailer_autoconfirm` over HTTP. Every expected result
+it quotes was measured against a local database rebuilt to the live shape, not
+predicted.
+
+It applies `0008` and nothing else. `0011` is the one-way door and the client
+is not converted.
+
 `0008` is live in its **pre-hardening** form. The corrected version can simply be
 re-run; it does not need a forward corrective migration.
 
