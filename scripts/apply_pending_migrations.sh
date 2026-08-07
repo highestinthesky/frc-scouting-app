@@ -208,6 +208,49 @@ finish() {
 
 TOTAL_STAGES=8
 
+# ─── clipboard, so nothing has to be copied out of this terminal ───────────
+#
+# Earlier versions printed SQL here for the human to copy. That is actively
+# unsafe: pause() is sitting on `read`, so pasting multi-line text into this
+# window feeds line one to read and hands every remaining line to the shell,
+# which tries to run SELECT as a command. Put it on the clipboard instead —
+# then the only paste target is the browser, where it belongs.
+CLIP=""
+if   command -v pbcopy   >/dev/null 2>&1; then CLIP="pbcopy"
+elif command -v wl-copy  >/dev/null 2>&1; then CLIP="wl-copy"
+elif command -v xclip    >/dev/null 2>&1; then CLIP="xclip -selection clipboard"
+elif command -v clip.exe >/dev/null 2>&1; then CLIP="clip.exe"
+fi
+
+# clip_file PATH "label" — copy a file to the clipboard, or say where it is.
+clip_file() {
+  local path="$1" label="$2"
+  if [[ ! -f "$path" ]]; then
+    warn "missing: $path"; return 1
+  fi
+  if [[ -n "$CLIP" ]]; then
+    $CLIP < "$path"
+    printf '  %s\xe2\x9c\x93 copied%s %s to the clipboard (%s lines)\n' \
+      "$GREEN" "$RESET" "$label" "$(wc -l < "$path" | tr -d ' ')"
+    step "Paste into the SQL editor and press Run."
+  else
+    warn "no clipboard tool found."
+    step "Open $path, select all, copy, paste into the SQL editor, Run."
+  fi
+}
+
+# clip_text "sql" "label" — same, for a query written inline here.
+clip_text() {
+  if [[ -n "$CLIP" ]]; then
+    printf '%s' "$1" | $CLIP
+    printf '  %s\xe2\x9c\x93 copied%s %s to the clipboard\n' "$GREEN" "$RESET" "$2"
+    step "Paste into the SQL editor and press Run."
+  else
+    warn "no clipboard tool found — the query is in $2 of supabase/README.md."
+  fi
+}
+
+
 if [[ ! -f supabase/migrations/0008_auth.sql ]]; then
   printf '\n  %sRun this from the repo root%s — supabase/migrations/ is not here.\n\n' "$RED" "$RESET"
   exit 1
@@ -265,19 +308,7 @@ say "One statement, because the SQL editor shows only the LAST result and a"
 say "three-query preflight would silently report just the third."
 printf '\n'
 open_url "$SQL_EDITOR"
-step "Paste this, press Run, read the two columns:"
-cat <<'SQL'
-
-    SELECT
-      CASE WHEN EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-                        WHERE n.nspname = 'public' AND p.proname = 'guard_profile_update')
-           THEN 'done - the corrected 0008 is already present'
-           ELSE 'ready - the original 0008 is live' END   AS state_0008,
-      CASE WHEN to_regclass('public.profiles') IS NULL
-           THEN 'STOP - 0008 was never applied at all'
-           ELSE 'ok - accounts exist' END                  AS accounts;
-
-SQL
+clip_text "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'guard_profile_update') THEN 'done - the corrected 0008 is already present' ELSE 'ready - the original 0008 is live' END AS state_0008, CASE WHEN to_regclass('public.profiles') IS NULL THEN 'STOP - 0008 was never applied at all' ELSE 'ok - accounts exist' END AS accounts;" "the 0008 preflight"
 printf '\n'
 NEED_0008=yes
 if confirm "Does state_0008 say 'done' (0008 already corrected)?"; then
@@ -306,8 +337,7 @@ else
   note "while looking overwritten."
   printf '\n'
   open_url "$SQL_EDITOR"
-  step "Open supabase/migrations/0008_auth.sql, select the WHOLE file, copy."
-  step "Paste into the SQL editor and press Run."
+  clip_file "supabase/migrations/0008_auth.sql" "the corrected 0008"
   printf '\n'
   note "Expect 'Success. No rows returned.' NOTICE lines about triggers that do"
   note "not exist are the IF EXISTS guards doing their job."
@@ -332,7 +362,7 @@ else
   step "It changes no policy and touches no scouting observation."
   printf '\n'
   open_url "$SQL_EDITOR"
-  step "Open supabase/migrations/0010_identity.sql, copy the WHOLE file, Run."
+  clip_file "supabase/migrations/0010_identity.sql" "0010"
   printf '\n'
   pause "Press Enter once it has run."
 fi
@@ -354,7 +384,7 @@ say "  clock. A server default yields a fingerprint no peer matches, so the"
 say "  row duplicates instead of deduplicating."
 printf '\n'
 open_url "$SQL_EDITOR"
-step "Open supabase/migrations/0014_entries_column_defaults.sql, copy it, Run."
+clip_file "supabase/migrations/0014_entries_column_defaults.sql" "0014"
 printf '\n'
 note "Two ALTER statements. Existing rows are untouched — a default only applies"
 note "to inserts that omit the column."
@@ -364,7 +394,7 @@ pause "Press Enter once it has run."
 # ── 6 ─────────────────────────────────────────────────────────────────────
 stage "Verify the migrations landed"
 open_url "$SQL_EDITOR"
-step "Paste the whole of supabase/verify_migrations.sql and Run."
+clip_file "supabase/verify_migrations.sql" "verify_migrations.sql"
 printf '\n'
 say "Failures sort to the top, so row one tells you everything. Expect:"
 step "NO rows with status FAIL."
@@ -390,17 +420,7 @@ say "answer was ambiguous, so what stayed NULL is the interesting part — those
 say "are names no account claims."
 printf '\n'
 open_url "$SQL_EDITOR"
-step "Run this to see who did not resolve:"
-cat <<'SQL'
-
-    SELECT scout_name,
-           count(*) FILTER (WHERE submitted_by IS NULL) AS unmatched,
-           count(*)                                     AS total
-      FROM public.entries
-     GROUP BY scout_name
-     ORDER BY unmatched DESC;
-
-SQL
+clip_text "SELECT scout_name, count(*) FILTER (WHERE submitted_by IS NULL) AS unmatched, count(*) AS total FROM public.entries GROUP BY scout_name ORDER BY unmatched DESC;" "the backfill report"
 printf '\n'
 note "unmatched > 0 means either a scout who has not registered yet, or a"
 note "spelling nobody uses any more. Neither is an error right now — the client"
@@ -412,7 +432,7 @@ pause "Press Enter when you have looked."
 # ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Confirm the entries table, then deploy"
 open_url "$SQL_EDITOR"
-step "Paste the whole of supabase/verify_entries.sql and Run."
+clip_file "supabase/verify_entries.sql" "verify_entries.sql"
 printf '\n'
 say "Expect zero FAILs and a 'stage' row reading:"
 step "'accounts applied, cutover not — 0001 policy set expected'"
