@@ -260,6 +260,32 @@ Before either switch:
 6. Apply `0011` and deploy the converted client with `AUTH_ENFORCED = true` as
    one coordinated release.
 
+### Re-running 0008 is safe — rehearsed, not assumed
+
+`0008` is live in its **pre-hardening** form. The corrected version can simply be
+re-run; it does not need a forward corrective migration.
+
+Rehearsed 2026-08-06 on a disposable local database built to the live shape —
+`0001`–`0007`, the 335-line `0008` from `d5cb14e`, then `0009` — seeded with a
+profile, an invite and an entry. The current `0008` applied on top cleanly, kept
+all three rows, and installed `guard_profile_update` and its two triggers. It
+works because `0008` drops every policy on `profiles` and `invites` before
+recreating them, so the original's broad UPDATE policy is *replaced*. Left
+beside the new ones it would still grant, because permissive policies OR
+together.
+
+Continuing that same database through `0010`–`0012` passed all 59 RLS
+assertions and both verifiers, so the upgrade path and a from-scratch build
+end in the same state.
+
+### Still unverified
+
+Registration to a `.invalid` address was confirmed working locally, and
+`GET /auth/v1/settings` returns `mailer_autoconfirm: true` as documented above.
+The *negative* half — that turning Confirm email on makes registration
+impossible — has not been executed here; it remains reasoning plus the
+production incident that produced it.
+
 The current client conversion is incomplete, so the cutover is **not ready**.
 See [`../ROADMAP.md`](../ROADMAP.md) for the dependency-ordered checklist. Once
 policies require a member profile, an unsigned device stops syncing; schedule

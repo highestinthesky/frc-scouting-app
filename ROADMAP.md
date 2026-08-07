@@ -118,10 +118,24 @@ to exist in production.
 
 The cutover is **not ready**. Complete these steps in order.
 
-1. **Choose the forward-migration shape.** Preserve a record of the live schema
-   and move hardening for already-applied `0008` into a forward migration, or
-   prove a rerun is safe in a disposable clone. Do not rely on edited historical
-   SQL magically reaching production.
+1. **Choose the forward-migration shape.** ✅ Answered — **re-run the corrected
+   `0008`**. No forward corrective migration is needed.
+
+   Rehearsed on 2026-08-06 against a disposable local database built to the live
+   project's exact shape: `0001`–`0007`, then the *pre-hardening* `0008` from
+   `d5cb14e` (335 lines, no `guard_profile_update`), then `0009`. Seeded with a
+   profile, an invite and an entry. Applying the current 442-line `0008` on top
+   succeeded with no errors, left all three rows intact, and installed
+   `guard_profile_update` with both triggers.
+
+   It is safe because `0008` already opens by dropping every policy on
+   `profiles` and `invites` before recreating them, so the original's broad
+   UPDATE policy is replaced rather than left beside the new one — which matters,
+   since permissive policies OR together.
+
+   That database was then carried through `0010`, `0011` and `0012` and passed
+   all 59 RLS assertions plus both verifiers, so the upgrade path lands in the
+   same place as a build from scratch.
 
 2. **Build a real staging environment and account fixtures.** Create anon,
    orphaned-auth, scout, manager and super identities across at least two event
