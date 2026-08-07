@@ -17,6 +17,12 @@ Last audited: 2026-08-03.
 > SQL was never the problem; the scripts that verify it were. This says nothing
 > about the live project, which still has the original `0008`.
 >
+> **⚠ Live bug, 2026-08-07:** production's `entries` table has no UPDATE policy,
+> so scout corrections have never reached the cloud — observation edits are
+> silently discarded, match/team edits duplicate the row. `0013` fixes it and is
+> the most urgent pending migration. `0001` already contained the fix but CREATEs
+> the table, so it can never be applied.
+>
 > **⚠ Deploy order, 2026-08-07:** `0010` must be applied to the live project
 > **before the next `git push`**. The committed client selects and inserts
 > `profile_id` on the planning tables and production does not have those columns

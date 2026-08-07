@@ -206,7 +206,7 @@ finish() {
 # Rehearsed 2026-08-06 against a disposable database rebuilt to the live shape.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=7
+TOTAL_STAGES=8
 
 if [[ ! -f supabase/migrations/0008_auth.sql ]]; then
   printf '\n  %sRun this from the repo root%s — supabase/migrations/ is not here.\n\n' "$RED" "$RESET"
@@ -338,7 +338,30 @@ else
 fi
 
 # ── 5 ─────────────────────────────────────────────────────────────────────
-stage "Verify both migrations landed"
+stage "Apply 0013 — the UPDATE policy entries never had"
+warn "This one fixes a live data-loss bug. It is the most urgent of the three."
+say "Production has DELETE, INSERT and SELECT policies on entries, and no"
+say "UPDATE policy. With RLS on and no UPDATE policy, every edit matches zero"
+say "rows — no error, just nothing."
+printf '\n'
+step "pushUpdate() reads that as 'the row was deleted server-side' and"
+say "  re-inserts, so a corrected count is silently dropped (the fingerprint"
+say "  is unchanged, the insert hits 23505, the client adopts the old row) and"
+say "  a corrected match or team number produces a DUPLICATE instead."
+step "0001 already fixes this and says so in its comments — but 0001 CREATEs"
+say "  the table, so it can never run against the table it describes. 0013"
+say "  carries just those two repairs forward."
+printf '\n'
+open_url "$SQL_EDITOR"
+step "Open supabase/migrations/0013_entries_update_policy.sql, copy it all, Run."
+printf '\n'
+note "It adds entries_session_update, drops the stray entries_session_delete"
+note "that nothing in the app uses, and re-asserts the table grant."
+printf '\n'
+pause "Press Enter once it has run."
+
+# ── 6 ─────────────────────────────────────────────────────────────────────
+stage "Verify the migrations landed"
 open_url "$SQL_EDITOR"
 step "Paste the whole of supabase/verify_migrations.sql and Run."
 printf '\n'
@@ -359,7 +382,7 @@ if ! confirm "Zero FAILs?"; then
   exit 1
 fi
 
-# ── 6 ─────────────────────────────────────────────────────────────────────
+# ── 7 ─────────────────────────────────────────────────────────────────────
 stage "Read the backfill report"
 say "0010 guessed identities from typed names. It refused to guess where the"
 say "answer was ambiguous, so what stayed NULL is the interesting part — those"
@@ -385,15 +408,20 @@ note "once everyone has an account, and the number should fall."
 printf '\n'
 pause "Press Enter when you have looked."
 
-# ── 7 ─────────────────────────────────────────────────────────────────────
+# ── 8 ─────────────────────────────────────────────────────────────────────
 stage "Confirm the entries table, then deploy"
 open_url "$SQL_EDITOR"
 step "Paste the whole of supabase/verify_entries.sql and Run."
 printf '\n'
 say "Expect zero FAILs and a 'stage' row reading:"
 step "'accounts applied, cutover not — 0001 policy set expected'"
-note "That file detects which stage the database is at. Post-cutover here would"
-note "mean 0011 has run and the live state is not what anyone thinks."
+step "'policy set matches' listing entries_session_insert, _select, _update."
+printf '\n'
+note "This is the check that would have caught the missing UPDATE policy, and it"
+note "had never been run here. If it still reports a missing or unexpected policy"
+note "after stage 5, 0013 did not take — stop and say so before deploying."
+note "Post-cutover as the stage would mean 0011 has run and the live state is not"
+note "what anyone thinks."
 printf '\n'
 pause "Press Enter when you have read it."
 

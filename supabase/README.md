@@ -209,6 +209,7 @@ still parses fine.
 | `migrations/0010_identity.sql` | `profile_id` beside `scout_name` — **not applied; expand/backfill stage** |
 | `migrations/0011_policies.sql` | hardened membership + event RLS and role cutover — **not applied; one-way door** |
 | `migrations/0012_passphrase_cleanup.sql` | drops the inert `has_manager_token()` and `manager_token` — **not applied; after 0011 has soaked** |
+| `migrations/0013_entries_update_policy.sql` | the UPDATE policy `entries` never had, and the stray DELETE — **not applied; fixes a live data-loss bug** |
 | `verify_entries.sql` | drift assertions for `entries`, read-only |
 | `verify_migrations.sql` | did 0007/0008/0009 land? read-only |
 
@@ -260,11 +261,33 @@ Before either switch:
 6. Apply `0011` and deploy the converted client with `AUTH_ENFORCED = true` as
    one coordinated release.
 
-### Two migrations are pending, and one of them blocks the next deploy
+### Three migrations are pending. One fixes a live data-loss bug.
 
 ```bash
 scripts/apply_pending_migrations.sh
 ```
+
+**`0013` is the urgent one.** Verified on the live project 2026-08-07: `entries`
+has `entries_session_delete`, `entries_session_insert` and
+`entries_session_select`, and **no UPDATE policy**. With RLS on and no
+permissive UPDATE policy, every edit matches zero rows — no error, nothing
+written.
+
+`pushUpdate()` reads a zero-row update as "the remote row was deleted
+server-side" and re-inserts, so:
+
+| A scout corrects… | Fingerprint | What actually happens |
+|---|---|---|
+| a count, a note (observations) | unchanged → `23505` | the client adopts the existing row; **the correction is discarded** and the UI says it saved |
+| a wrong match or team number | changes → insert succeeds | **a duplicate row appears**; the stale original is never fixed |
+
+`0001` already repairs both halves and names the bug in its own comments — but
+`0001` CREATEs the table, so it can never be run against the table it describes,
+and its repairs never reached production. `0013` carries just those two changes
+forward.
+
+`verify_entries.sql` does detect this. It had never been run against the live
+project.
 
 Seven stages, run from the repo root. It reads the project ref out of
 `src/lib/supabase.js` rather than asking, so it cannot be pointed at the wrong
