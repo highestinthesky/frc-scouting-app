@@ -15,7 +15,7 @@
 
 import { createSupabaseClient, deriveSessionId } from './supabase.js';
 import { getSetting, setSetting } from './db.js';
-import { scoutRef, resolveScout, identityFields } from './scout-identity.js';
+import { reminderTarget } from './planning-rows.js';
 import { teamsInMatch } from './tba.js';
 
 const DISMISSED_KEY = 'dismissedReminders';
@@ -56,6 +56,7 @@ export async function listReminders(eventCode) {
  * @param {string} [opts.author]
  * @param {string} [opts.expiresAt]      ISO; default = +2h
  * @param {string} opts.managerToken
+ * @param {any[]} [opts.roster]    profiles, so a targeted reminder carries an account
  * @returns {Promise<Reminder>}
  */
 export async function createReminder(eventCode, opts) {
@@ -65,13 +66,7 @@ export async function createReminder(eventCode, opts) {
 	const sid = await deriveSessionId(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
-	// A reminder with no scout is a broadcast and must stay NULL in both identity
-	// columns — identityFields() yields '' for an unnamed ref, and an empty string
-	// is not null, so it would quietly turn "everyone" into "the scout called
-	// nothing" and the banner would show for no one.
-	const target = opts.scoutName?.trim()
-		? identityFields(scoutRef(opts.scoutName, resolveScout(opts.scoutName, opts.roster)))
-		: { scout_name: null, profile_id: null };
+	const target = reminderTarget(opts.scoutName, opts.roster);
 	const row = {
 		session_id: sid,
 		event_code: code,

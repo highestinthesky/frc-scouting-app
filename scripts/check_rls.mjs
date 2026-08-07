@@ -153,10 +153,12 @@ async function reset() {
 	}
 	await sql(`delete from public.invites where code like $1`, [`${MARK}%`]);
 	await sql(`delete from public.profiles where username like $1`, [`${MARK}%`]);
-	const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-	for (const u of data?.users ?? []) {
-		if (u.email?.startsWith(MARK)) await admin.auth.admin.deleteUser(u.id);
-	}
+	// Auth users go through SQL rather than the admin API. Cleanup used to call
+	// admin.deleteUser() for every listed account and it left every one of them
+	// behind — the profiles were gone, the logins were not, and the next run died
+	// on "already registered" instead of on anything it was testing. The FK from
+	// profiles.id and the auth.identities/sessions cascades make this exact.
+	await sql(`delete from auth.users where email like $1`, [`${MARK}%`]);
 }
 
 async function seed() {
@@ -499,6 +501,47 @@ const scoutB = await clientFor(scout, EVENT_B);
 
 	const { data: superInvites } = await superA.from('invites').select('code, role');
 	ok('a super sees every invite', (superInvites ?? []).some((i) => i.role === 'super'));
+}
+
+// ─── the dual-write has somewhere to land ───────────────────────────────────
+//
+// 0010 added profile_id to the planning tables and 0011 rebuilt every grant and
+// policy on them. The client now writes that column on every assignment,
+// override and targeted reminder. entries proves the failure mode is real:
+// UPDATE(submitted_by) is deliberately withheld there, so a column being
+// present is not the same as a column being writable — and a dual-write that
+// is silently refused looks exactly like one that works until the cutover
+// needs the data.
+{
+	for (const [table, extra] of [
+		['assignments', { team_number: 1234 }],
+		['assignment_overrides', { match_number: 3, team_number: 1234 }],
+		['reminders', { message: 'targeted at an account' }]
+	]) {
+		const { error } = await managerA.from(table).insert({
+			session_id: EVENT_A.session,
+			event_code: EVENT_A.code,
+			scout_name: 'dualwrite',
+			profile_id: scout.id,
+			...extra
+		});
+		ok(`a manager can write profile_id on ${table}`, !error, error?.message);
+
+		const [back] = await sql(
+			`select profile_id from public.${table}
+			  where session_id = $1 and scout_name = 'dualwrite'`,
+			[EVENT_A.session]
+		);
+		ok(`and ${table}.profile_id survives the round trip`, back?.profile_id === scout.id);
+	}
+
+	// The account is what a scout will eventually be found by, so it has to be
+	// readable back by an ordinary member, not just by the manager who wrote it.
+	const { data: seen } = await scoutA.from('assignments').select('scout_name, profile_id');
+	ok(
+		'a scout can read the account on their own assignment',
+		(seen ?? []).some((r) => r.profile_id === scout.id)
+	);
 }
 
 // ─── archive / reset ────────────────────────────────────────────────────────

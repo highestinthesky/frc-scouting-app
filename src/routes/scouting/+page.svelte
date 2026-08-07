@@ -785,7 +785,8 @@
 				matchNumber: Number.isFinite(matchNum) && matchNum > 0 ? matchNum : undefined,
 				message: reminderText,
 				author: managerName || null,
-				managerToken: legacyManagerToken
+				managerToken: legacyManagerToken,
+				roster
 			});
 			reminderText = '';
 			reminderMatch = '';

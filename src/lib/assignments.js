@@ -18,7 +18,8 @@
 
 import { createSupabaseClient, deriveSessionId } from './supabase.js';
 import { session } from './session.svelte.js';
-import { scoutRef, rowScout, sameScout, resolveScout, identityFields } from './scout-identity.js';
+import { rowScout, sameScout } from './scout-identity.js';
+import { assignmentRows, overrideRows } from './planning-rows.js';
 
 /**
  * Manager-only: replace the entire assignment list for an event with the
@@ -42,14 +43,7 @@ export async function replaceAssignments(eventCode, rows, opts) {
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken: opts?.managerToken ?? '' });
 
-	const cleaned = (rows ?? [])
-		.map((r) => ({
-			session_id: sid,
-			event_code: code,
-			...identityFields(refFor(r.scout_name, opts?.roster)),
-			team_number: Number(r.team_number)
-		}))
-		.filter((r) => r.scout_name && Number.isFinite(r.team_number) && r.team_number > 0);
+	const cleaned = assignmentRows(rows, { sessionId: sid, eventCode: code, roster: opts?.roster });
 
 	// Wipe existing, then insert. Two round-trips, but assignments tables are
 	// tiny so the cost is negligible — and it avoids upsert-on-composite gotchas.
@@ -63,22 +57,6 @@ export async function replaceAssignments(eventCode, rows, opts) {
 	const { error: insErr } = await client.from('assignments').insert(cleaned);
 	if (insErr) throw mapErr(insErr, 'save assignments');
 	return cleaned.length;
-}
-
-/**
- * A typed name plus whatever account the roster says it belongs to.
- *
- * Resolution is best-effort by design. Without a roster — offline, or nobody
- * signed in — every row still writes the name and a null account, which is
- * exactly what a pre-accounts device produces today. The dual-write improves
- * the data when it can and never blocks a manager who cannot reach the roster
- * ten minutes before quals start.
- *
- * @param {unknown} name
- * @param {any[]|undefined} roster
- */
-function refFor(name, roster) {
-	return scoutRef(name, resolveScout(name, roster));
 }
 
 /**
@@ -118,7 +96,7 @@ export async function listAssignments(eventCode) {
  */
 export async function pullAndApplyForScout(eventCode, me) {
 	if (!me?.key && !me?.profileId) return session.assignedTeams ?? [];
-	const [all, overrideRows] = await Promise.all([
+	const [all, overrideList] = await Promise.all([
 		listAssignments(eventCode),
 		listOverrides(eventCode)
 	]);
@@ -135,7 +113,7 @@ export async function pullAndApplyForScout(eventCode, me) {
 
 	// Overrides: cache the whole list (managers want it all; scouts only
 	// care about their own rows but the volume is tiny so we don't filter).
-	const ov = overrideRows.map((r) => ({
+	const ov = overrideList.map((r) => ({
 		id: r.id,
 		match_number: Number(r.match_number),
 		scout_name: String(r.scout_name ?? ''),
@@ -202,13 +180,12 @@ export async function addOverride(
 	const sid = await deriveSessionId(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken });
-	const { error } = await client.from('assignment_overrides').insert({
-		session_id: sid,
-		event_code: code,
-		match_number: Number(matchNumber),
-		...identityFields(refFor(scoutName, roster)),
-		team_number: Number(teamNumber)
-	});
+	const [row] = overrideRows(
+		[{ match_number: matchNumber, scout_name: scoutName, team_number: teamNumber }],
+		{ sessionId: sid, eventCode: code, roster }
+	);
+	if (!row) throw new Error('That override needs a scout, a match and a team.');
+	const { error } = await client.from('assignment_overrides').insert(row);
 	// Dedupe-index 23505: caller probably already has this override; safe to ignore.
 	if (error && error.code !== '23505') throw mapErr(error, 'add override');
 }
@@ -239,21 +216,7 @@ export async function replaceOverrides(eventCode, rows, opts) {
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken: opts?.managerToken ?? '' });
 
-	const cleaned = (rows ?? [])
-		.map((r) => ({
-			session_id: sid,
-			event_code: code,
-			match_number: Number(r.match_number),
-			...identityFields(refFor(r.scout_name, opts?.roster)),
-			team_number: Number(r.team_number)
-		}))
-		.filter(
-			(r) =>
-				r.scout_name &&
-				Number.isFinite(r.match_number) &&
-				Number.isFinite(r.team_number) &&
-				r.team_number > 0
-		);
+	const cleaned = overrideRows(rows, { sessionId: sid, eventCode: code, roster: opts?.roster });
 
 	const { error: delErr } = await client
 		.from('assignment_overrides')
