@@ -338,25 +338,26 @@ else
 fi
 
 # ── 5 ─────────────────────────────────────────────────────────────────────
-stage "Apply 0013 — the UPDATE policy entries never had"
-warn "This one fixes a live data-loss bug. It is the most urgent of the three."
-say "Production has DELETE, INSERT and SELECT policies on entries, and no"
-say "UPDATE policy. With RLS on and no UPDATE policy, every edit matches zero"
-say "rows — no error, just nothing."
+stage "Apply 0014 — the two column defaults that should not exist"
+say "0013 is already applied (2026-08-07). This is the rest of the same drift."
+say "entries carries created_at default now() and schema_version default 2."
+say "Neither fires today — the client always supplies both — so this is a trap"
+say "armed for the next writer who forgets, not a bug losing data now."
 printf '\n'
-step "pushUpdate() reads that as 'the row was deleted server-side' and"
-say "  re-inserts, so a corrected count is silently dropped (the fingerprint"
-say "  is unchanged, the insert hits 23505, the client adopts the old row) and"
-say "  a corrected match or team number produces a DUPLICATE instead."
-step "0001 already fixes this and says so in its comments — but 0001 CREATEs"
-say "  the table, so it can never run against the table it describes. 0013"
-say "  carries just those two repairs forward."
+step "schema_version 2 is the dangerous one. SCHEMA_VERSION is 3, so a"
+say "  defaulted row claims to predate every counter metric, readMetric()"
+say "  excludes it from their sample, and a scout's work quietly stops"
+say "  counting toward the averages a pick is made from. That exact bug has"
+say "  already happened once."
+step "created_at is part of the dedupe fingerprint and must carry the CLIENT"
+say "  clock. A server default yields a fingerprint no peer matches, so the"
+say "  row duplicates instead of deduplicating."
 printf '\n'
 open_url "$SQL_EDITOR"
-step "Open supabase/migrations/0013_entries_update_policy.sql, copy it all, Run."
+step "Open supabase/migrations/0014_entries_column_defaults.sql, copy it, Run."
 printf '\n'
-note "It adds entries_session_update, drops the stray entries_session_delete"
-note "that nothing in the app uses, and re-asserts the table grant."
+note "Two ALTER statements. Existing rows are untouched — a default only applies"
+note "to inserts that omit the column."
 printf '\n'
 pause "Press Enter once it has run."
 

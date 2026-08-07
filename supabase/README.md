@@ -91,11 +91,17 @@ querying the live database to find out what we had actually built.
 
 Three specific things had drifted, and none of them announced itself:
 
-| | Live | Should have been |
-|---|---|---|
-| `created_at` | `default now()` | no default |
-| `schema_version` | `default 2` | no default |
-| policies | included a `DELETE` grant | no delete |
+| | Live | Should have been | Fixed by |
+|---|---|---|---|
+| `created_at` | `default now()` | no default | `0014` |
+| `schema_version` | `default 2` | no default | `0014` |
+| policies | included a `DELETE` grant | no delete | `0013` |
+| policies | **no UPDATE policy at all** | update allowed | `0013` |
+| `current_session_header()` | **absent** | present, `0011` needs it | `0013` |
+
+The last two rows were not in the original audit. Both were found on 2026-08-07
+by asking the live database instead of reading `0001`, and the missing UPDATE
+policy had been losing scout corrections the whole time.
 
 The `schema_version` default is the one that had already caused a real bug: the
 client hardcoded `2` while `form-config.js` moved to `3`, so entries containing
@@ -209,7 +215,8 @@ still parses fine.
 | `migrations/0010_identity.sql` | `profile_id` beside `scout_name` — **not applied; expand/backfill stage** |
 | `migrations/0011_policies.sql` | hardened membership + event RLS and role cutover — **not applied; one-way door** |
 | `migrations/0012_passphrase_cleanup.sql` | drops the inert `has_manager_token()` and `manager_token` — **not applied; after 0011 has soaked** |
-| `migrations/0013_entries_update_policy.sql` | the UPDATE policy `entries` never had, and the stray DELETE — **not applied; fixes a live data-loss bug** |
+| `migrations/0013_entries_update_policy.sql` | the UPDATE policy `entries` never had, the stray DELETE, and `current_session_header()` — **applied 2026-08-07** |
+| `migrations/0014_entries_column_defaults.sql` | drops the `created_at` and `schema_version` defaults — **not applied; dormant trap, not an active bug** |
 | `verify_entries.sql` | drift assertions for `entries`, read-only |
 | `verify_migrations.sql` | did 0007/0008/0009 land? read-only |
 
