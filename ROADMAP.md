@@ -13,9 +13,16 @@ Last audited: 2026-08-03.
 > the live project as part of this work.
 >
 > **Local, 2026-08-06:** `0001`–`0012` now apply cleanly to a real Postgres and
-> pass 59 behavioural RLS assertions (`supabase start && npm run test:rls`). The
+> pass 66 behavioural RLS assertions (`supabase start && npm run test:rls`). The
 > SQL was never the problem; the scripts that verify it were. This says nothing
 > about the live project, which still has the original `0008`.
+>
+> **⚠ Deploy order, 2026-08-07:** `0010` must be applied to the live project
+> **before the next `git push`**. The committed client selects and inserts
+> `profile_id` on the planning tables and production does not have those columns
+> — verified by HTTP, `42703`. Deploying first breaks assignment reads for
+> scouts, not just manager writes. `scripts/apply_pending_migrations.sh` does it,
+> and carries `0008`'s hardening along with it.
 
 ## Where the app is now
 

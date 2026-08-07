@@ -99,6 +99,13 @@ unroutable, and GoTrue validates the recipient before sending. The error names
 the address, and the address is fine. Read the real setting with
 `GET /auth/v1/settings` → `mailer_autoconfirm: true` means Confirm email is off.
 
+**`0010` must reach production before the next `git push`.** The client already
+selects and inserts `profile_id` on `assignments`, `assignment_overrides` and
+`reminders`; production does not have those columns, so deploying first breaks
+assignment *reads* and every sync tick throws. Run
+`scripts/apply_pending_migrations.sh`. It also carries `0008`'s hardening, which
+is not urgent but is ready.
+
 Migrations `0010`–`0012` are written and unapplied **on the live project**.
 `0011` is a one-way door; read its header before touching it.
 

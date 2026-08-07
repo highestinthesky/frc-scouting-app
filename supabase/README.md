@@ -260,22 +260,34 @@ Before either switch:
 6. Apply `0011` and deploy the converted client with `AUTH_ENFORCED = true` as
    one coordinated release.
 
-### Re-running 0008 is safe — rehearsed, not assumed
+### Two migrations are pending, and one of them blocks the next deploy
 
 ```bash
-scripts/apply_0008.sh
+scripts/apply_pending_migrations.sh
 ```
 
-Five stages, run from the repo root. It reads the project ref out of
+Seven stages, run from the repo root. It reads the project ref out of
 `src/lib/supabase.js` rather than asking, so it cannot be pointed at the wrong
-database by a typo; refuses to start unless a preflight query confirms the
-original `0008` is live and `0010` is not; opens the SQL editor at each step;
-and finishes by checking `mailer_autoconfirm` over HTTP. Every expected result
-it quotes was measured against a local database rebuilt to the live shape, not
-predicted.
+database by a typo; probes the live schema over HTTP to decide what still needs
+doing; opens the SQL editor at each step; and skips whatever is already applied.
 
-It applies `0008` and nothing else. `0011` is the one-way door and the client
-is not converted.
+**`0010` must be applied before the next `git push`.** This is not a preference.
+The client selects and inserts `profile_id` on `assignments`,
+`assignment_overrides` and `reminders`. Production does not have those columns
+yet — confirmed 2026-08-07:
+
+    GET /rest/v1/assignments?select=profile_id
+    → 400  {"code":"42703","message":"column assignments.profile_id does not exist"}
+
+Deploying the current client against that schema breaks assignment **reads**,
+so scouts lose their team lists and every sync tick throws. `0010` is additive,
+changes no policy, and is safe mid-season.
+
+`0008` is the other one, and it is not urgent — production simply keeps the
+original broad UPDATE policy on `profiles` until it runs.
+
+Neither is the cutover. `0011` is the one-way door and the client still ships
+`AUTH_ENFORCED = false`.
 
 `0008` is live in its **pre-hardening** form. The corrected version can simply be
 re-run; it does not need a forward corrective migration.
