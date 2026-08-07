@@ -87,8 +87,21 @@ unroutable, and GoTrue validates the recipient before sending. The error names
 the address, and the address is fine. Read the real setting with
 `GET /auth/v1/settings` → `mailer_autoconfirm: true` means Confirm email is off.
 
-Migrations `0010`–`0012` are written and unapplied. `0011` is a one-way door;
-read its header before touching it.
+Migrations `0010`–`0012` are written and unapplied **on the live project**.
+`0011` is a one-way door; read its header before touching it.
+
+Locally they all apply cleanly and are covered by behavioural tests:
+
+```bash
+supabase start && npm run test:rls
+```
+
+That suite signs in as anon, an orphaned account, a scout, a manager and a super
+across two events and makes real HTTP requests, because `current_session_header()`
+reads `request.headers` and psql has none. It skips and exits 0 with no stack
+running, so `npm test` stays green offline. Every assertion has been
+mutation-tested; if you add one, break the policy it covers and watch it go red
+before trusting it.
 
 ## Where the reasoning lives
 

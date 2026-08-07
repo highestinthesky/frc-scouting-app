@@ -9,8 +9,13 @@ Last audited: 2026-08-03.
 > **Live state, verified read-only:** migrations `0007`, `0008` and `0009` are
 > applied. `0010` and `0011` are not. `AUTH_ENFORCED` is `false`, so the manager
 > passphrase remains the production authorization path. The hardening changes in
-> the local working tree have not been deployed and no migration was run as part
-> of this work.
+> the local working tree have not been deployed and no migration was run against
+> the live project as part of this work.
+>
+> **Local, 2026-08-06:** `0001`–`0012` now apply cleanly to a real Postgres and
+> pass 59 behavioural RLS assertions (`supabase start && npm run test:rls`). The
+> SQL was never the problem; the scripts that verify it were. This says nothing
+> about the live project, which still has the original `0008`.
 
 ## Where the app is now
 
@@ -139,8 +144,9 @@ The cutover is **not ready**. Complete these steps in order.
    event metadata, picklist and archive/reset flows. Remove the passphrase UI in
    the same client release that expects role policies.
 
-6. **Implement live Postgres/RLS tests.** Static SQL inspection is not enough.
-   Prove:
+6. **Implement live Postgres/RLS tests.** ✅ Done — `npm run test:rls`, 59
+   assertions against a real local stack, mutation-tested. Static SQL inspection
+   is not enough. It proves:
 
    - anon and orphaned users see and change no event data;
    - members cannot cross event scopes by changing either headers or row data;

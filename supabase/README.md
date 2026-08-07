@@ -154,10 +154,30 @@ triggers, grants and the role-based reset RPC.
 
 Those checks do not connect to Postgres. `npm run check:sql` proves grammar, and
 the verification scripts prove selected live objects exist, but neither proves
-RLS behavior. Before `0011`, test with anon, an authenticated user without a
-profile, scout, manager and super JWTs across two event IDs. Include role
-changes, entry insert/update attribution, all manager writes, revocation and
-`reset_event_data()`.
+RLS behavior.
+
+```bash
+supabase start && npm run test:rls
+```
+
+`scripts/check_rls.mjs` does prove it. It applies every migration to a real
+local Postgres, then signs in as anon, an authenticated user with no profile,
+a scout, a second scout, a manager and a super across two event IDs, and makes
+the requests the app makes — through PostgREST, because `current_session_header()`
+reads `request.headers` and only an HTTP request has any. 59 assertions covering
+event scoping in both directions, attribution forging and clearing, role
+transitions, invite visibility and `reset_event_data()`.
+
+It is kept out of `npm test` on purpose: a missing local stack means Docker is
+not running, which is not a failing test, so it skips and exits 0.
+
+Every assertion has been mutation-tested — the policies were deliberately broken
+and the suite confirmed red — because a security test that cannot fail is worse
+than none. One assertion did not survive that: `a scout cannot write schedules`
+inserted into a table keyed on `session_id` alone, collided with the row the
+event already had, and stayed green while `is_manager()` was stubbed to return
+`true`. It now updates instead, and `denied()` distinguishes a policy refusal
+from a unique violation.
 
 ## Checking syntax
 
