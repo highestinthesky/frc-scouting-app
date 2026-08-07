@@ -13,6 +13,19 @@
 --   4. `AUTH_ENFORCED = true` ships in the SAME deploy. Not before, not after.
 --   5. It is the off-season, with a week of ordinary use ahead of it before
 --      anything matters.
+--   6. 0013 has been applied, so public.current_session_header() EXISTS.
+--      This file calls it 38 times and 0001 is what creates it — and 0001
+--      CREATEs the entries table, so it can never run against production. Every
+--      other pre-cutover migration inlines the expression instead, which is how
+--      0002 through 0010 applied without anyone noticing the function was
+--      absent. Confirmed missing on the live project 2026-08-07, by this exact
+--      failure on 0013:
+--
+--          42883: function public.current_session_header() does not exist
+--
+--      Without it this migration aborts on its first policy, inside its own
+--      transaction, in the middle of the release window. It would roll back
+--      cleanly — but "cleanly" is not what anyone wants to discover then.
 --
 -- Applying this while the client still has AUTH_ENFORCED = false leaves an app
 -- that offers passphrase entry, accepts the passphrase, and silently rejects

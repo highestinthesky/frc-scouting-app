@@ -17,6 +17,11 @@ Last audited: 2026-08-03.
 > SQL was never the problem; the scripts that verify it were. This says nothing
 > about the live project, which still has the original `0008`.
 >
+> **⚠ Cutover blocker, 2026-08-07:** `public.current_session_header()` does not
+> exist on the live project — `0001` creates it and `0001` can never run. `0011`
+> calls it **38 times**, so the cutover would abort on its first policy. `0013`
+> now creates it, which makes `0013` a prerequisite for `0011`.
+>
 > **⚠ Live bug, 2026-08-07:** production's `entries` table has no UPDATE policy,
 > so scout corrections have never reached the cloud — observation edits are
 > silently discarded, match/team edits duplicate the row. `0013` fixes it and is

@@ -289,6 +289,20 @@ forward.
 `verify_entries.sql` does detect this. It had never been run against the live
 project.
 
+**`0013` also creates `current_session_header()`, and that is not incidental.**
+The first attempt at `0013` failed on the live project with
+
+    42883: function public.current_session_header() does not exist
+
+`0001` is what creates that function, and `0001` can never run. Every other
+pre-cutover migration inlines the expression instead — which is exactly why
+`0002`–`0010` applied without anyone noticing it was missing, and why the live
+`entries` policies carry the inlined form.
+
+**`0011` calls it 38 times.** Without `0013` first, the cutover aborts on its
+first policy, inside its own transaction, in the middle of the release window.
+It would roll back cleanly; that is not the moment to find out.
+
 Seven stages, run from the repo root. It reads the project ref out of
 `src/lib/supabase.js` rather than asking, so it cannot be pointed at the wrong
 database by a typo; probes the live schema over HTTP to decide what still needs

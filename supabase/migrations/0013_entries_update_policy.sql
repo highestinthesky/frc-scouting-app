@@ -60,6 +60,39 @@
 
 BEGIN;
 
+-- ─── the helper 0001 defines and production has never had ──────────────────
+--
+-- First attempt at this migration failed on the live project with
+--
+--     42883: function public.current_session_header() does not exist
+--
+-- because 0001 is what creates it and 0001 has never run. Every other
+-- pre-cutover migration inlines the expression instead — 0001 says so itself:
+-- "the other migrations inline this expression across a dozen policies" — which
+-- is exactly why 0002 through 0010 applied to production without noticing the
+-- function was absent. Production's existing entries policies carry the inlined
+-- form, which is why they work.
+--
+-- That matters well beyond this file. 0011 calls this function 38 times. The
+-- cutover would have failed on its first policy, inside its own transaction, in
+-- the middle of the release window it is supposed to be a one-way door for.
+-- Creating it here means 0011 stops depending on a migration that can never run.
+--
+-- CREATE OR REPLACE, so this is a no-op wherever it already exists.
+
+CREATE OR REPLACE FUNCTION public.current_session_header() RETURNS text
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT (current_setting('request.headers', true)::json ->> 'x-session-id')
+$$;
+
+-- A policy calls this as the querying role, so without EXECUTE every read and
+-- write would fail with "permission denied for function" — a worse outcome than
+-- the missing function, because it looks like an auth problem.
+REVOKE ALL ON FUNCTION public.current_session_header() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.current_session_header() TO anon, authenticated;
+
 -- Idempotent: safe to re-run, and safe on a database where someone has already
 -- fixed this by hand through the dashboard.
 DROP POLICY IF EXISTS entries_session_update ON public.entries;
