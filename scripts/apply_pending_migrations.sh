@@ -371,26 +371,32 @@ else
 fi
 
 # ── 5 ─────────────────────────────────────────────────────────────────────
-stage "Apply 0014 — the two column defaults that should not exist"
-say "0013 is already applied (2026-08-07). This is the rest of the same drift."
-say "entries carries created_at default now() and schema_version default 2."
-say "Neither fires today — the client always supplies both — so this is a trap"
-say "armed for the next writer who forgets, not a bug losing data now."
+stage "Apply 0001 — the corrective migration nobody ever ran"
+say "0001 was written to repair this exact table. It is not a create-from-empty"
+say "migration: CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR"
+say "REPLACE FUNCTION, and a DO block that drops every policy by name first."
+say "Its own comments say so — \"no-ops once applied\", \"name matches the live"
+say "index so re-running does not build a second copy\"."
 printf '\n'
-step "schema_version 2 is the dangerous one. SCHEMA_VERSION is 3, so a"
-say "  defaulted row claims to predate every counter metric, readMetric()"
-say "  excludes it from their sample, and a scout's work quietly stops"
-say "  counting toward the averages a pick is made from. That exact bug has"
-say "  already happened once."
-step "created_at is part of the dedupe fingerprint and must carry the CLIENT"
-say "  clock. A server default yields a fingerprint no peer matches, so the"
-say "  row duplicates instead of deduplicating."
+step "It drops the created_at and schema_version defaults."
+step "It creates entries_session_idx if missing."
+step "It re-asserts the policy set 0013 already produced, so that part no-ops."
+step "It REVOKEs DELETE from anon and authenticated, which 0013 did not."
 printf '\n'
-open_url "$SQL_EDITOR"
-clip_file "supabase/migrations/0014_entries_column_defaults.sql" "0014"
+warn "0001 is NOT wrapped in a transaction, and one statement can fail on real"
+warn "data: ALTER COLUMN alliance_color SET NOT NULL."
 printf '\n'
-note "Two ALTER statements. Existing rows are untouched — a default only applies"
-note "to inserts that omit the column."
+clip_text "SELECT (SELECT count(*) FROM public.entries WHERE alliance_color IS NULL) AS null_alliance_color, (SELECT count(*) FROM public.entries) AS total_entries, CASE WHEN EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'entries' AND indexname = 'entries_session_idx') THEN 'present' ELSE 'absent - 0001 will create it' END AS entries_session_idx;" "the 0001 preflight"
+printf '\n'
+if ! confirm "Does null_alliance_color read 0?"; then
+  warn "Stop. Fix those rows first, or 0001 aborts partway through with no"
+  warn "transaction to roll it back."
+  note "Find them: SELECT id, event_code, match_number, team_number FROM"
+  note "public.entries WHERE alliance_color IS NULL;"
+  exit 1
+fi
+printf '\n'
+clip_file "supabase/migrations/0001_entries.sql" "0001"
 printf '\n'
 pause "Press Enter once it has run."
 

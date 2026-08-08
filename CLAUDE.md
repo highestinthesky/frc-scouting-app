@@ -99,16 +99,24 @@ unroutable, and GoTrue validates the recipient before sending. The error names
 the address, and the address is fine. Read the real setting with
 `GET /auth/v1/settings` → `mailer_autoconfirm: true` means Confirm email is off.
 
-**`0013` fixes a live data-loss bug — apply it before the next event.**
-Production's `entries` table has no UPDATE policy, so every edit matches zero
-rows. `pushUpdate()` reads that as "deleted server-side" and re-inserts, which
-silently discards an observation correction and duplicates a match/team
-correction. `0001` repairs this and can never run, because it CREATEs the table
-it describes.
+**`0001` is corrective and re-runnable — run it on production.** It is not a
+create-from-empty migration: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT
+EXISTS`, `CREATE OR REPLACE FUNCTION`, and a `DO` block that drops every policy
+by name before recreating the set. Its comments say so directly — "no-ops once
+applied". It was written to repair the dashboard-built `entries` table and had
+never been run against it.
 
-Run `scripts/apply_pending_migrations.sh`; it carries `0013`, `0010` and
-`0008`'s hardening. `0010` in particular must land before the next `git push` —
-the client already selects and inserts `profile_id` on the planning tables.
+That single file is the fix for everything found on 2026-08-07: the missing
+`current_session_header()`, the missing UPDATE policy that was losing scout
+corrections, the stray DELETE policy, and both column defaults. `0013` did a
+subset of it and is applied; `0014` duplicated it and was withdrawn.
+
+`0001` is **not** wrapped in a transaction, and `ALTER COLUMN alliance_color SET
+NOT NULL` fails if any row has a null there. Check first.
+
+Run `scripts/apply_pending_migrations.sh`. `0010` must land before the next
+`git push` — the client already selects and inserts `profile_id` on the planning
+tables.
 
 Migrations `0010`–`0012` are written and unapplied **on the live project**.
 `0011` is a one-way door; read its header before touching it.

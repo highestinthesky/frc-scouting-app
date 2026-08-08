@@ -203,7 +203,7 @@ still parses fine.
 
 | File | |
 |---|---|
-| `migrations/0001_entries.sql` | scouting entries + the session-scope helper |
+| `migrations/0001_entries.sql` | scouting entries + the session-scope helper — **corrective and re-runnable; run it on production** |
 | `migrations/0002_schedule_and_assignments.sql` | event meta, schedules, assignments, `has_manager_token()` |
 | `migrations/0003_reset_event_data.sql` | clears scheduling state, preserves entries |
 | `migrations/0004_reminders.sql` | manager-authored reminders |
@@ -216,7 +216,6 @@ still parses fine.
 | `migrations/0011_policies.sql` | hardened membership + event RLS and role cutover — **not applied; one-way door** |
 | `migrations/0012_passphrase_cleanup.sql` | drops the inert `has_manager_token()` and `manager_token` — **not applied; after 0011 has soaked** |
 | `migrations/0013_entries_update_policy.sql` | the UPDATE policy `entries` never had, the stray DELETE, and `current_session_header()` — **applied 2026-08-07** |
-| `migrations/0014_entries_column_defaults.sql` | drops the `created_at` and `schema_version` defaults — **not applied; dormant trap, not an active bug** |
 | `verify_entries.sql` | drift assertions for `entries`, read-only |
 | `verify_migrations.sql` | did 0007/0008/0009 land? read-only |
 
