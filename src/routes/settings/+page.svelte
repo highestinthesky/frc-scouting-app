@@ -3,7 +3,6 @@
 	import Button from '$lib/components/Button.svelte';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { session } from '$lib/session.svelte.js';
-	import { role } from '$lib/role.svelte.js';
 	import { clearEntries } from '$lib/db.js';
 	import { syncState, resync } from '$lib/sync.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
@@ -30,9 +29,6 @@
 		}
 	}
 
-	async function setRole(newRole) {
-		await role.set(newRole);
-	}
 
 	async function signOut() {
 		const ok = await dialog.confirm({
@@ -111,35 +107,6 @@
 	</section>
 
 	<section>
-		<h2 id="role-label">Role</h2>
-		<!-- A group of mutually-exclusive options is a radiogroup, not a row of
-		     buttons. Without this a screen reader reads two unrelated buttons
-		     and never says which one is active. -->
-		<div class="roles" role="radiogroup" aria-labelledby="role-label">
-			<button
-				type="button"
-				role="radio"
-				aria-checked={role.isScout}
-				class:selected={role.isScout}
-				onclick={() => setRole('scout')}
-			>
-				<strong>Scout</strong>
-				<small>Records matches.</small>
-			</button>
-			<button
-				type="button"
-				role="radio"
-				aria-checked={role.isManager}
-				class:selected={role.isManager}
-				onclick={() => setRole('manager')}
-			>
-				<strong>Manager</strong>
-				<small>Records matches, plus analysis and scheduling.</small>
-			</button>
-		</div>
-	</section>
-
-	<section>
 		<h2>Identity</h2>
 		<form onsubmit={saveSession}>
 			<label class="field">
@@ -152,7 +119,15 @@
 
 			<label class="field">
 				<span class="label">Your name</span>
-				<small class="help">Match what the manager typed when assigning you teams.</small>
+				<small class="help">
+					{#if auth.signedIn}
+						Filled from your account. Still editable, because assignments,
+						overrides and reminders are matched on this name until every
+						device is signed in — so it has to match what the manager typed.
+					{:else}
+						Match what the manager typed when assigning you teams.
+					{/if}
+				</small>
 				<input bind:value={scoutName} autocomplete="name" />
 			</label>
 

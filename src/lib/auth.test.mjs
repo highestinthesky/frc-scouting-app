@@ -15,7 +15,7 @@
 //     If the form is laxer than the constraint, a scout fills in the whole
 //     registration form and gets a raw Postgres error at the end.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -139,6 +139,55 @@ const ok = (name, cond, detail = '') => {
 		/event === 'SIGNED_OUT'[\s\S]*?clearCachedProfile\(\)/.test(src));
 	ok('post-cutover peer entries are read-only for ordinary scouts',
 		/AUTH_ENFORCED[\s\S]*?entry\.submittedBy === auth\.profile\?\.id/.test(editSrc));
+}
+
+// ─── the local role toggle is gone ─────────────────────────────────────────
+//
+// It was a self-asserted checkbox in IndexedDB that revealed the manager
+// surfaces to anyone who ticked it, and its own header still described the
+// file-import workflow that was removed. The account answers the question now.
+{
+	const shellSrc = readFileSync(path.join(here, '../routes/+layout.svelte'), 'utf8');
+	const settingsSrc = readFileSync(path.join(here, '../routes/settings/+page.svelte'), 'utf8');
+	const scoutingSrc = readFileSync(path.join(here, '../routes/scouting/+page.svelte'), 'utf8');
+
+	ok('role.svelte.js is gone', !existsSync(path.join(here, 'role.svelte.js')));
+	for (const [label, text] of [
+		['the layout', shellSrc],
+		['settings', settingsSrc],
+		['the scouting page', scoutingSrc]
+	]) {
+		ok(`${label} no longer imports the local role store`, !/role\.svelte\.js/.test(text));
+	}
+
+	// Showing the surface and being allowed to write it are different questions,
+	// and conflating them locks the passphrase form inside the surface it unlocks.
+	ok('auth owns whether manager surfaces render', /get showsManagerTools\(\)/.test(src));
+	ok(
+		'the surface gate prefers the account over the passphrase',
+		/showsManagerTools\(\) \{[\s\S]*?state\.signedIn \? this\.isManager/.test(src)
+	);
+	ok(
+		'the scouting page asks auth rather than re-deriving',
+		/isManager = \$derived\(auth\.showsManagerTools\)/.test(scoutingSrc)
+	);
+}
+
+// ─── the scout name fills itself, but never overwrites ─────────────────────
+//
+// scout_name is still the join key for assignments, overrides and targeted
+// reminders. Filling a blank one costs nothing; replacing one that already
+// exists would detach the device from everything addressed to the old spelling.
+{
+	ok('signing in adopts the account name', /adoptScoutName\(/.test(src));
+	ok(
+		'and only when the local name is empty',
+		/adoptScoutName\([\s\S]*?if \(session\.scoutName\?\.trim\(\)\) return;/.test(src)
+	);
+	ok(
+		'it writes "First Last", the form resolveScout matches on',
+		/adoptScoutName\([\s\S]*?first_name[\s\S]*?last_name/.test(src)
+	);
 }
 
 // ─── the cutover flag ──────────────────────────────────────────────────────

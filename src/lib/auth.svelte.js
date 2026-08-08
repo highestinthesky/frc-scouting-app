@@ -142,6 +142,38 @@ export const auth = {
 	},
 
 	/**
+	 * Should this device SHOW the manager surfaces at all?
+	 *
+	 * Deliberately not the same question as canManage, and the difference is why
+	 * the old local role toggle existed. Pre-cutover a manager's writes are gated
+	 * by the passphrase, but the passphrase entry form lives INSIDE the manager
+	 * surface — so gating the surface on already holding it locks the only door
+	 * to it. The toggle was the way in, and it was a self-asserted checkbox that
+	 * revealed buttons which then failed silently for anyone without the
+	 * passphrase.
+	 *
+	 * The account answers it properly. If this device has signed in, the profile
+	 * says whether the person is a manager, and that is not a claim they can
+	 * make about themselves. If it has not, fall back to "does this device hold
+	 * the passphrase" — which is what the server will ask anyway.
+	 *
+	 * After the cutover both branches collapse to the role, and this becomes the
+	 * same answer as canManage.
+	 */
+	get showsManagerTools() {
+		return state.signedIn ? this.isManager : Boolean(session.managerToken);
+	},
+
+	/**
+	 * The word the app bar shows for this device. Lives here for the same reason
+	 * canManage does — computing it in the layout meant the shell deciding what
+	 * "manager" means, which is exactly the drift check_components.mjs forbids.
+	 */
+	get roleLabel() {
+		return this.showsManagerTools ? (state.profile?.role ?? 'manager') : 'scout';
+	},
+
+	/**
 	 * The credential bag every manager-scoped write passes to
 	 * createSupabaseClient().
 	 *
@@ -409,6 +441,31 @@ async function loadProfile(userId = null) {
 	state.orphaned = state.signedIn && !data;
 	if (data) cacheProfile(data);
 	else clearCachedProfile();
+	if (data) await adoptScoutName(data);
+}
+
+/**
+ * Fill the local scout name from the account, but only if it is empty.
+ *
+ * Signing in used to leave you typing your own name into Settings anyway, on
+ * every device, with nothing checking that you spelled it the way the manager
+ * did. The account already knows it.
+ *
+ * Only when EMPTY, and that restriction is load-bearing. `scout_name` is still
+ * the join key for assignments, per-match overrides and targeted reminders, so
+ * overwriting a name a device already had would silently detach it from
+ * everything addressed to the old spelling. A blank one is joined to nothing,
+ * which makes it free to fill.
+ *
+ * "First Last" rather than the username because that is what a manager types
+ * into the assignment editor, and because resolveScout() matches on exactly
+ * that form — so the name this writes is one the roster can resolve back to
+ * this same account.
+ */
+async function adoptScoutName(profile) {
+	if (session.scoutName?.trim()) return;
+	const name = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || profile.username;
+	if (name) await session.update({ scoutName: name });
 }
 
 function rememberAuthIdentity(data) {

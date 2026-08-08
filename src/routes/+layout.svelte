@@ -5,7 +5,6 @@
 	import { base } from '$app/paths';
 	import favicon from '$lib/assets/favicon.svg';
 	import { session } from '$lib/session.svelte.js';
-	import { role } from '$lib/role.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
 	import {
 		syncState,
@@ -21,7 +20,7 @@
 	let { children } = $props();
 
 	onMount(async () => {
-		await Promise.all([session.load(), role.load(), theme.load(), auth.init()]);
+		await Promise.all([session.load(), theme.load(), auth.init()]);
 		await syncInit();
 		await reminders.init();
 	});
@@ -86,8 +85,10 @@
 					// still ride the passphrase until 0011 and AUTH_ENFORCED flip
 					// together; auth.canManage owns that decision.
 					name: auth.displayName || session.scoutName,
-					role: role.value,
-					isManager: role.isManager
+					// Both from auth. This used to read a local toggle anybody could
+					// set to 'manager'.
+					role: auth.roleLabel,
+					isManager: auth.showsManagerTools
 				}
 	);
 
@@ -148,7 +149,7 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if !session.loaded || !role.loaded || auth.loading}
+{#if !session.loaded || auth.loading}
 	<p class="boot">Loading…</p>
 {:else if onPublicRoute}
 	{@render children()}

@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { session } from '$lib/session.svelte.js';
-	import { role } from '$lib/role.svelte.js';
 	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
 	import { rowScout, scoutRef } from '$lib/scout-identity.js';
 	import { listEntries, getSetting, setSetting } from '$lib/db.js';
@@ -69,7 +68,10 @@
 	let err = $state('');
 
 	const qmList = $derived(cached ? qualMatches(cached.matches) : []);
-	const isManager = $derived(AUTH_ENFORCED ? auth.isManager : role.isManager);
+	// Whether the manager surfaces render at all. auth owns it — see
+	// showsManagerTools, which replaced a local self-asserted role toggle that
+	// revealed buttons for anyone who ticked it.
+	const isManager = $derived(auth.showsManagerTools);
 	// auth.managerCredentials() is the shared form; this local alias stays only
 	// because several call sites here take a bare token rather than a bag.
 	const legacyManagerToken = $derived(auth.managerCredentials().managerToken);

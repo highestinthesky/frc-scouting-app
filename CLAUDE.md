@@ -55,6 +55,26 @@ itself: the assignment join, override filter and reminder targeting compared
 distinct-scout count compared raw strings, so "Ning" and "ning" were one scout
 to three call sites and two to the other three.
 
+**There is no local role toggle.** `role.svelte.js` was a self-asserted setting
+in IndexedDB that revealed the manager surfaces to anyone who ticked it, and its
+own header still described the file-import workflow that had been removed. Two
+questions replaced it, both owned by `auth.svelte.js`: `canManage` is *may this
+write succeed* (the passphrase now, the role after `0011`), and
+`showsManagerTools` is *should the surface render at all*. They differ
+pre-cutover because the passphrase form lives inside the surface it unlocks —
+gate the surface on holding the passphrase and you seal the only door to it.
+
+**Signing in fills `session.scoutName`, but only when it is blank.** That
+restriction is load-bearing: the name is still the join key, so overwriting one
+a device already had would silently detach it from every assignment, override
+and reminder addressed to the old spelling.
+
+**The event code is not going away.** It is the `session_id` partition on every
+shared table and `docs/adr-001-auth.md` is explicit that accounts replace the
+passphrase, not the event code. Turning it into a picker instead of a typed
+field needs `0011`: before the cutover you need the code to read `event_meta` at
+all, so discovering events you have access to is circular.
+
 `auth.me` is who this device is. Its **label stays `session.scoutName`**, not
 `displayName` — the typed name is still what most rows join on, and a device
 announcing itself as "Haolun Ning" would stop matching everything addressed to

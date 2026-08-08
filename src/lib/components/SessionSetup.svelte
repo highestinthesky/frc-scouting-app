@@ -1,9 +1,17 @@
 <script>
 	import { session } from '$lib/session.svelte.js';
+	import { base } from '$app/paths';
+	import { auth } from '$lib/auth.svelte.js';
 
 	let eventCode = $state(session.eventCode);
 	let scoutName = $state(session.scoutName);
 	let saving = $state(false);
+
+	// A signed-in device already knows who is holding it — auth fills scoutName
+	// from the profile the moment it loads. Asking again is asking someone to
+	// retype something the app just told them, and every retype is a chance to
+	// spell it differently from the manager's assignment sheet.
+	const knowsMe = $derived(auth.signedIn && Boolean(auth.displayName));
 
 	async function save(e) {
 		e.preventDefault();
@@ -29,10 +37,18 @@
 			<input bind:value={eventCode} required autocomplete="off" autocapitalize="none" placeholder="2026xxxx" />
 		</label>
 
-		<label class="field">
-			<span class="label">Your name</span>
-			<input bind:value={scoutName} required autocomplete="name" placeholder="Your name" />
-		</label>
+		{#if knowsMe}
+			<p class="as">Scouting as <strong>{auth.displayName}</strong></p>
+		{:else}
+			<label class="field">
+				<span class="label">Your name</span>
+				<small class="help">
+					Match what the manager typed when assigning you teams — or
+					<a href="{base}/login/">sign in</a> and it fills itself.
+				</small>
+				<input bind:value={scoutName} required autocomplete="name" placeholder="Your name" />
+			</label>
+		{/if}
 
 		<button type="submit" disabled={saving}>
 			{saving ? 'Saving…' : 'Start scouting'}
@@ -48,6 +64,12 @@
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	h1 { margin: 0 0 var(--space-5); }
+	.as {
+		margin: 0 0 var(--space-5);
+		color: var(--text-muted);
+	}
+	.as strong { color: var(--text-primary); }
+	a { color: var(--accent); }
 	.field {
 		display: flex;
 		flex-direction: column;

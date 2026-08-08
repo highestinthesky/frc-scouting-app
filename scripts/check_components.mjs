@@ -168,7 +168,8 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
 		);
 
-	ok('Settings: role picker meets the tap floor', floors('.roles button'));
+	// The role picker was removed — a self-asserted local toggle that revealed
+	// manager surfaces to anyone who ticked it. auth.showsManagerTools decides now.
 	ok('Settings: theme picker meets the tap floor', floors('.theme-btn'));
 	ok('Settings: text inputs meet the tap floor', floors('input'));
 	ok(
