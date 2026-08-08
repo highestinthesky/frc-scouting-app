@@ -6,34 +6,26 @@ plan.
 
 Last audited: 2026-08-03.
 
-> **Live state, verified read-only:** migrations `0007`, `0008` and `0009` are
-> applied. `0010` and `0011` are not. `AUTH_ENFORCED` is `false`, so the manager
-> passphrase remains the production authorization path. The hardening changes in
-> the local working tree have not been deployed and no migration was run against
-> the live project as part of this work.
+> **Live state, verified 2026-08-07.** `0001`, `0002`–`0010` and the corrected
+> `0008` are applied; `verify_migrations.sql` and `verify_entries.sql` both
+> return zero FAILs against the live project. `0011` and `0012` remain unapplied
+> and `AUTH_ENFORCED` is still `false`, so the manager passphrase is still the
+> production authorization path. The committed client is safe to deploy.
 >
-> **Local, 2026-08-06:** `0001`–`0012` now apply cleanly to a real Postgres and
-> pass 66 behavioural RLS assertions (`supabase start && npm run test:rls`). The
-> SQL was never the problem; the scripts that verify it were. This says nothing
-> about the live project, which still has the original `0008`.
+> Three things were found and fixed that day, none of which the previous audit
+> knew about, and all of which trace to `entries` having been built by clicking:
 >
-> **⚠ Cutover blocker, 2026-08-07:** `public.current_session_header()` does not
-> exist on the live project — `0001` creates it and `0001` can never run. `0011`
-> calls it **38 times**, so the cutover would abort on its first policy. `0013`
-> now creates it, which makes `0013` a prerequisite for `0011`.
+> - **`entries` had no UPDATE policy.** Scout corrections had never reached the
+>   cloud — observation edits were silently discarded, match/team edits
+>   duplicated the row. `0001` contained the fix the whole time.
+> - **`current_session_header()` did not exist.** `0011` calls it 38 times, so
+>   the cutover would have aborted on its first policy.
+> - **`0001` was believed unrunnable** and is not: `IF NOT EXISTS` throughout.
+>   It was always the repair for that table and had simply never been run.
 >
-> **⚠ Live bug, 2026-08-07:** production's `entries` table has no UPDATE policy,
-> so scout corrections have never reached the cloud — observation edits are
-> silently discarded, match/team edits duplicate the row. `0013` fixes it and is
-> the most urgent pending migration. `0001` already contained the fix but CREATEs
-> the table, so it can never be applied.
->
-> **⚠ Deploy order, 2026-08-07:** `0010` must be applied to the live project
-> **before the next `git push`**. The committed client selects and inserts
-> `profile_id` on the planning tables and production does not have those columns
-> — verified by HTTP, `42703`. Deploying first breaks assignment reads for
-> scouts, not just manager writes. `scripts/apply_pending_migrations.sh` does it,
-> and carries `0008`'s hardening along with it.
+> Rehearse future migrations with `scripts/rebuild_prod_replica.sh`, not
+> `supabase db reset` — the latter applies `0001`, which production had not, and
+> that gap is what made three earlier rehearsals worthless.
 
 ## Where the app is now
 

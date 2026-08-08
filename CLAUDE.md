@@ -99,24 +99,24 @@ unroutable, and GoTrue validates the recipient before sending. The error names
 the address, and the address is fine. Read the real setting with
 `GET /auth/v1/settings` → `mailer_autoconfirm: true` means Confirm email is off.
 
-**`0001` is corrective and re-runnable — run it on production.** It is not a
-create-from-empty migration: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT
-EXISTS`, `CREATE OR REPLACE FUNCTION`, and a `DO` block that drops every policy
-by name before recreating the set. Its comments say so directly — "no-ops once
-applied". It was written to repair the dashboard-built `entries` table and had
-never been run against it.
+**`0001` is corrective and re-runnable.** It is not a create-from-empty
+migration: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `CREATE OR
+REPLACE FUNCTION`, and a `DO` block that drops every policy by name first. It was
+written to repair the dashboard-built `entries` table and went years without ever
+being run against it — which is why production had no UPDATE policy on `entries`
+(silently discarding every scout correction) and no `current_session_header()`
+(which `0011` calls 38 times). Applied 2026-08-07.
 
-That single file is the fix for everything found on 2026-08-07: the missing
-`current_session_header()`, the missing UPDATE policy that was losing scout
-corrections, the stray DELETE policy, and both column defaults. `0013` did a
-subset of it and is applied; `0014` duplicated it and was withdrawn.
+**Rehearse against `scripts/rebuild_prod_replica.sh`, never `supabase db reset`.**
+`db reset` applies `0001`, so it builds the repo's idea of production rather than
+production, and it will pass migrations that fail on the real thing. Three
+rehearsals were worthless for exactly this reason.
 
-`0001` is **not** wrapped in a transaction, and `ALTER COLUMN alliance_color SET
-NOT NULL` fails if any row has a null there. Check first.
-
-Run `scripts/apply_pending_migrations.sh`. `0010` must land before the next
-`git push` — the client already selects and inserts `profile_id` on the planning
-tables.
+**Filename order is semantic.** A corrective migration numbered after `0011`
+runs after the cutover and undoes it — `0013` re-granted `anon` access, restored
+write access to `submitted_by`, and added an unscoped 30th policy beside 29
+scoped ones. It now lives outside `migrations/`. Check both orderings: a full
+`supabase db reset` and the production replica.
 
 Migrations `0010`–`0012` are written and unapplied **on the live project**.
 `0011` is a one-way door; read its header before touching it.

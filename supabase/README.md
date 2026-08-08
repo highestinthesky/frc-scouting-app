@@ -5,21 +5,21 @@ Applied in filename order, they rebuild it from nothing.
 
 ## Audited live state
 
-Read-only probes on 2026-08-03 found this deployment state:
+Verified against the live project on 2026-08-07:
 
 | Migration | Live state |
 |---|---|
-| `0001`–`0006` | Existing baseline; not individually re-verified in this audit |
-| `0007_entry_updated_at.sql` | Applied (`entries.updated_at` exists) |
-| `0008_auth.sql` | Applied (profiles/invites/RPCs and `submitted_by` exist) |
-| `0009_picklist.sql` | Applied (picklist and alliance schedule fields exist) |
-| `0010_identity.sql` | Not applied (`profile_id` fields are absent) |
-| `0011_policies.sql` | Not applied (legacy anonymous/session policies still answer) |
-| `0012_passphrase_cleanup.sql` | Not applied (removes the inert passphrase objects after 0011 soaks) |
+| `0001_entries.sql` | **Applied 2026-08-07** — the corrective run it had never had |
+| `0002`–`0007` | Applied |
+| `0008_auth.sql` | **Corrected version applied 2026-08-07** (guards + both triggers) |
+| `0009_picklist.sql` | Applied |
+| `0010_identity.sql` | Applied 2026-08-07 |
+| `0011_policies.sql` | Not applied — the one-way door |
+| `0012_passphrase_cleanup.sql` | Not applied — after `0011` soaks |
 
-The client also has `AUTH_ENFORCED = false`. Accounts are therefore additive,
-not the production authorization boundary. The local migration edits described
-below have **not** been run against Supabase.
+Both `verify_migrations.sql` and `verify_entries.sql` return zero FAILs.
+`AUTH_ENFORCED` is still `false`, so accounts remain additive rather than the
+production authorization boundary.
 
 ## Project settings the migrations cannot set
 
