@@ -335,13 +335,21 @@ Neither is the cutover. `0011` is the one-way door and the client still ships
 `0008` is live in its **pre-hardening** form. The corrected version can simply be
 re-run; it does not need a forward corrective migration.
 
-Rehearsed 2026-08-06 on a disposable local database — though **not one built to
-production's real shape**, which is a correction worth reading before trusting
-any rehearsal in this repo. `supabase db reset --version 0007` applies `0001`,
-and production has never run `0001`. `supabase/live_baseline.sql` records what
-production actually had and how to build a database that matches it.
+```bash
+scripts/rebuild_prod_replica.sh    # needs supabase start
+```
 
-The rehearsal seeded a profile, an invite and an entry. The current `0008` applied on top cleanly, kept
+**Rehearse against that, not against `supabase db reset`.** `db reset` applies
+`0001`, and production never has, so it starts from a database where the repairs
+already happened — which is why `0013` rehearsed clean and then failed on the
+live project. The replica script builds `supabase/live_baseline.sql` (the
+dashboard-built `entries` table, defects included) then `0002`–`0007`, the
+pre-hardening `0008`, `0009`, `0010` and `0013`.
+
+Verified 2026-08-07: the replica matched production on every observable — same
+policy set, same two column defaults, same two `0008` FAILs, same `0010 complete`.
+Then, on it, `0001` and the corrected `0008` both applied clean, kept every
+seeded row, and left both verifiers at zero FAILs. The current `0008` applied on top cleanly, kept
 all three rows, and installed `guard_profile_update` and its two triggers. It
 works because `0008` drops every policy on `profiles` and `invites` before
 recreating them, so the original's broad UPDATE policy is *replaced*. Left

@@ -6,12 +6,15 @@
 --
 -- ─── why this file had to exist ────────────────────────────────────────────
 --
--- 0001_entries.sql is a fiction. It was written retroactively to describe a
--- table that had been created by clicking, and it CREATEs that table, so it has
--- never run and can never run. Every rehearsal that started from
--- `db reset --version 0007` therefore started from a database where 0001 HAD
--- run: with current_session_header() defined, with an UPDATE policy on entries,
--- without the stray DELETE policy, and without the two column defaults.
+-- 0001_entries.sql was written retroactively to repair a table created by
+-- clicking, and it is genuinely re-runnable against it — CREATE TABLE IF NOT
+-- EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, and a DO block
+-- that drops every policy by name first. It had simply never been run.
+--
+-- The problem is what that does to rehearsals. `db reset --version 0007` applies
+-- 0001, so every rehearsal started from a database where the repairs had already
+-- happened: current_session_header() defined, an UPDATE policy on entries, no
+-- stray DELETE policy, no column defaults.
 --
 -- Production had none of that. So a rehearsal built that way tests the repo's
 -- idea of production, not production, and it will keep reporting success for
@@ -34,13 +37,38 @@
 --   · schema_version                   DEFAULT 2
 --   · RLS                              enabled
 --
--- Not confirmed, and therefore not asserted below: whether entries_session_idx
--- exists. 0001 creates it; nothing has ever checked production for it. Add it
--- here once somebody looks.
+-- Not confirmed, and therefore assumed pessimistically below:
+--   · whether entries_session_idx exists — 0001 creates it IF NOT EXISTS
+--   · whether alliance_color is nullable — 0001 SETs NOT NULL on it
+--
+-- ─── measured against this baseline, 2026-08-07 ────────────────────────────
+--
+-- Rebuilt to this shape, then 0002-0007, the pre-hardening 0008, 0009, 0010 and
+-- 0013 applied on top. The result matched production on every observable: same
+-- policy set, same two column defaults, same two 0008 FAILs, same 0010 complete.
+--
+-- Then, on that replica:
+--
+--   0001            applied clean. Dropped both defaults, created
+--                   entries_session_idx, revoked DELETE from anon and
+--                   authenticated, left every seeded row intact.
+--   0008 corrected  applied clean on top, installed both guard triggers,
+--                   left every seeded row intact.
+--   verify_migrations.sql / verify_entries.sql   zero FAILs, both.
+--
+-- With one NULL alliance_color present, 0001 stops at SET NOT NULL with
+-- "column alliance_color of relation entries contains null values". It is not
+-- transactional, so the function and both DROP DEFAULTs are already applied and
+-- the indexes, policies and grants are not. Fixing the rows and re-running
+-- completes it — every statement before the failure is idempotent.
 --
 -- ─── how to build a production-shaped database ─────────────────────────────
 --
---   supabase db reset --version 0000     # empty; 0001 must NOT run
+--   -- `db reset --version 0000` does NOT work; it needs a matching file. Empty
+--   -- the schema directly instead, which leaves auth intact for 0008:
+--   psql -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;
+--            GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+--            GRANT ALL ON SCHEMA public TO postgres;"
 --   psql < supabase/live_baseline.sql    # this file: entries as it really is
 --   psql < supabase/migrations/0002_schedule_and_assignments.sql
 --   ... 0003 through 0007 ...
@@ -58,12 +86,18 @@ CREATE TABLE IF NOT EXISTS public.entries (
     event_code      text NOT NULL,
     match_number    integer NOT NULL,
     team_number     integer NOT NULL,
-    alliance_color  text NOT NULL,
+    -- Nullable, deliberately. 0001 does ALTER COLUMN alliance_color SET NOT NULL
+    -- under the comment "bring an older table up to the current shape", which
+    -- only makes sense if the dashboard-built column was nullable. Nobody has
+    -- checked production. Declaring it NOT NULL here would make 0001's one
+    -- genuinely risky statement a silent no-op in every rehearsal — which is
+    -- exactly the class of mistake this whole file exists to stop.
+    alliance_color  text,
     scout_name      text NOT NULL,
     observations    jsonb NOT NULL DEFAULT '{}'::jsonb,
     -- The two defaults that should not be here. Reproduced deliberately: a
-    -- rehearsal that omits them cannot catch what they break, and 0014 exists
-    -- to remove them.
+    -- rehearsal that omits them cannot catch what they break, and 0001 is what
+    -- removes them.
     schema_version  integer NOT NULL DEFAULT 2,
     client_id       text,
     created_at      timestamptz NOT NULL DEFAULT now(),
