@@ -139,12 +139,19 @@ The cutover is **not ready**. Complete these steps in order.
 1. **Choose the forward-migration shape.** ✅ Answered — **re-run the corrected
    `0008`**. No forward corrective migration is needed.
 
-   Rehearsed on 2026-08-06 against a disposable local database built to the live
-   project's exact shape: `0001`–`0007`, then the *pre-hardening* `0008` from
-   `d5cb14e` (335 lines, no `guard_profile_update`), then `0009`. Seeded with a
-   profile, an invite and an entry. Applying the current 442-line `0008` on top
-   succeeded with no errors, left all three rows intact, and installed
-   `guard_profile_update` with both triggers.
+   Rehearsed on 2026-08-06 — but **not against production's real shape**, and
+   that correction matters. The rehearsal ran `supabase db reset --version 0007`,
+   which applies `0001`. Production has never run `0001` and cannot. The
+   rehearsal database therefore had `current_session_header()`, an UPDATE policy
+   on `entries`, no stray DELETE policy and no column defaults; production had
+   the opposite of all four. See `supabase/live_baseline.sql`.
+
+   What the rehearsal does still show: applying the corrected 442-line `0008`
+   over the pre-hardening one from `d5cb14e` succeeded, left a seeded profile,
+   invite and entry intact, and installed `guard_profile_update` with both
+   triggers. And `0008` touches nothing `0001` creates — it only `ALTER`s
+   `public.entries` — so the gap does not affect it. That is reasoning, not
+   rehearsal, and it is worth less.
 
    It is safe because `0008` already opens by dropping every policy on
    `profiles` and `invites` before recreating them, so the original's broad

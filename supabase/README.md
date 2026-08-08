@@ -336,9 +336,13 @@ Neither is the cutover. `0011` is the one-way door and the client still ships
 `0008` is live in its **pre-hardening** form. The corrected version can simply be
 re-run; it does not need a forward corrective migration.
 
-Rehearsed 2026-08-06 on a disposable local database built to the live shape —
-`0001`–`0007`, the 335-line `0008` from `d5cb14e`, then `0009` — seeded with a
-profile, an invite and an entry. The current `0008` applied on top cleanly, kept
+Rehearsed 2026-08-06 on a disposable local database — though **not one built to
+production's real shape**, which is a correction worth reading before trusting
+any rehearsal in this repo. `supabase db reset --version 0007` applies `0001`,
+and production has never run `0001`. `supabase/live_baseline.sql` records what
+production actually had and how to build a database that matches it.
+
+The rehearsal seeded a profile, an invite and an entry. The current `0008` applied on top cleanly, kept
 all three rows, and installed `guard_profile_update` and its two triggers. It
 works because `0008` drops every policy on `profiles` and `invites` before
 recreating them, so the original's broad UPDATE policy is *replaced*. Left

@@ -203,7 +203,10 @@ finish() {
 # the client still ships AUTH_ENFORCED = false. Applying it here would leave an
 # app that offers the passphrase, accepts it, and silently rejects every write.
 #
-# Rehearsed 2026-08-06 against a disposable database rebuilt to the live shape.
+# Rehearsed 2026-08-06 — against a database rebuilt from the migrations, NOT
+# from production's real shape. `db reset --version 0007` applies 0001, which
+# production has never run. See supabase/live_baseline.sql. Treat the expected
+# results below as strong expectations, not transcripts of your database.
 # ──────────────────────────────────────────────────────────────────────────
 
 TOTAL_STAGES=8
