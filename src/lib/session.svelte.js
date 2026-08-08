@@ -60,6 +60,18 @@ class Session {
 	 * re-fetch without retyping. Falls back to `eventCode` when empty.
 	 */
 	tbaEventKey = $state('');
+	/**
+	 * Has this device explicitly chosen to carry on without signing in?
+	 *
+	 * The login screen is the landing page, so a device that has never signed in
+	 * gets sent there from anywhere else. That is a nudge, not a lock — declining
+	 * it is what keeps "recording never depends on auth" true, and a scout who
+	 * cannot sign in at the venue must still be able to record.
+	 *
+	 * AUTH_ENFORCED overrides this. After the cutover there is no offline path to
+	 * defer to, so the flag stops being consulted rather than being cleared.
+	 */
+	loginDeferred = $state(false);
 	loaded = $state(false);
 
 	get isConfigured() {
@@ -76,6 +88,7 @@ class Session {
 		this.managerToken = (await getSetting('managerToken')) ?? '';
 		this.tbaApiKey = (await getSetting('tbaApiKey')) ?? '';
 		this.tbaEventKey = (await getSetting('tbaEventKey')) ?? '';
+		this.loginDeferred = (await getSetting('loginDeferred')) === true;
 		// One-time migration cleanup: drop obsolete settings so they don't sit in
 		// IndexedDB forever. Safe to remove these a few months after release.
 		for (const key of ['scoutPosition', 'localExtraTeams']) {
@@ -115,6 +128,10 @@ class Session {
 		if (patch.tbaEventKey !== undefined) {
 			this.tbaEventKey = patch.tbaEventKey;
 			await setSetting('tbaEventKey', patch.tbaEventKey);
+		}
+		if (patch.loginDeferred !== undefined) {
+			this.loginDeferred = patch.loginDeferred === true;
+			await setSetting('loginDeferred', this.loginDeferred);
 		}
 	}
 }

@@ -41,7 +41,7 @@
 	const onPublicRoute = $derived(PUBLIC_ROUTES.some((r) => isActive(r)));
 
 	$effect(() => {
-		if (auth.loading) return;
+		if (auth.loading || !session.loaded) return;
 		// A signed-in user never needs /login. A complete account never needs
 		// /register either, but an orphaned auth user MUST be allowed to stay
 		// there and retry the invite redemption that failed after signUp().
@@ -49,11 +49,21 @@
 			goto(`${base}/`, { replaceState: true });
 			return;
 		}
-		// Signed out: only redirect once accounts are actually required. While
-		// AUTH_ENFORCED is false the app works exactly as it did, and /login is
-		// reachable but optional — that is what lets accounts be tested before
-		// anyone depends on them.
-		if (AUTH_ENFORCED && !auth.signedIn && !onPublicRoute) {
+		// Signed out: the login screen is where you land. A device that has never
+		// signed in gets sent there from anywhere else, so the account is the
+		// first thing anyone sees rather than a thing they have to go looking for
+		// in Settings.
+		//
+		// It is a nudge, not a lock, and the difference is the whole invariant:
+		// recording never depends on auth. A scout who cannot sign in at the
+		// venue — forgotten password, no signal, a phone that never registered —
+		// must still be able to record. "Log in later" on that screen sets
+		// loginDeferred and they are not asked again.
+		//
+		// AUTH_ENFORCED ignores the deferral entirely. After the cutover there is
+		// no offline path left to defer to, so the escape hatch stops working
+		// rather than needing to be found and cleared on every device.
+		if (!auth.signedIn && !onPublicRoute && (AUTH_ENFORCED || !session.loginDeferred)) {
 			goto(`${base}/login/`, { replaceState: true });
 		}
 	});

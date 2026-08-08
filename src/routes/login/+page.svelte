@@ -2,12 +2,22 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import Button from '$lib/components/Button.svelte';
-	import { auth } from '$lib/auth.svelte.js';
+	import { session } from '$lib/session.svelte.js';
+	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
 
 	let username = $state('');
 	let password = $state('');
 	let busy = $state(false);
 	let error = $state('');
+
+	// Declining is remembered, so this asks once rather than on every load. It
+	// exists because a scout who cannot sign in at the venue must still be able
+	// to record — that is the invariant, not a convenience. AUTH_ENFORCED hides
+	// it: after the cutover there is nothing left to carry on without.
+	async function later() {
+		await session.update({ loginDeferred: true });
+		goto(`${base}/`, { replaceState: true });
+	}
 
 	async function submit(e) {
 		e.preventDefault();
@@ -55,6 +65,14 @@
 		Got an invite code? <a href="{base}/register/">Create your account</a>.
 	</p>
 
+	{#if !AUTH_ENFORCED}
+		<p class="later">
+			<button type="button" class="later-btn" onclick={later}>
+				Log in later <span class="warn">(not recommended)</span>
+			</button>
+		</p>
+	{/if}
+
 	<p class="hint">
 		Sign in before you leave for an event. Once you have, the app keeps working
 		without signal — matches you record are saved on the phone and sent when
@@ -63,6 +81,20 @@
 </main>
 
 <style>
+	.later { margin: var(--space-4) 0 0; text-align: center; }
+	.later-btn {
+		font: inherit;
+		background: none;
+		border: none;
+		padding: var(--space-2) var(--space-3);
+		min-height: var(--tap-min);
+		color: var(--text-muted);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	.later-btn:hover { color: var(--text-primary); }
+	.warn { color: var(--warning); text-decoration: none; }
+
 	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
 	 * design-system: design.md · designed-as-app
 	 */
