@@ -305,6 +305,16 @@ else
   note "Authentication → Email before anyone tries to register."
   SKIPPED+=("Turn Confirm email OFF, and Secure email change OFF")
 fi
+# Session length is not readable from /auth/v1/settings, so it cannot be checked
+# here — only reminded about. An hour-long token in a gym with no wifi is a scout
+# locked out mid-match.
+if true; then
+  printf '\n'
+  note "Not checkable over HTTP, so verify by eye in Authentication -> Sessions:"
+  note "  JWT expiry              345600  (4 days)"
+  note "  Refresh token rotation  on, reuse interval 60s"
+  note "  Session timebox         unset, and inactivity timeout unset"
+fi
 printf '\n'
 pause "Press Enter to check 0008."
 

@@ -162,7 +162,19 @@ site_url = "http://127.0.0.1:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
 additional_redirect_urls = ["https://127.0.0.1:3000"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
-jwt_expiry = 3600
+#
+# 4 days. Long enough that a device signed in on Friday night holds a valid
+# access token through a Sunday event without ever refreshing — which is the
+# point, because a competition gym has no usable wifi and the alternative is a
+# scout discovering mid-match that their hour-old token expired.
+#
+# Not the full week: a stolen token stays valid for its whole life, and four
+# days covers the event with margin rather than trading a week of exposure for
+# three days nobody needs.
+#
+# [auth.sessions] is deliberately left commented out below — no timebox, no
+# inactivity timeout — so nothing force-logs-out a device between events.
+jwt_expiry = 345600
 # JWT issuer URL. If not set, defaults to auth.external_url.
 # jwt_issuer = ""
 # Path to JWT signing key. DO NOT commit your signing keys file to git.
@@ -171,7 +183,17 @@ jwt_expiry = 3600
 enable_refresh_token_rotation = true
 # Allows refresh tokens to be reused after expiry, up to the specified interval in seconds.
 # Requires enable_refresh_token_rotation = true.
-refresh_token_reuse_interval = 10
+#
+# 60s, not 10. Rotation stays ON — with a 4-day access token a device refreshes
+# roughly never during an event, so the usual argument for disabling rotation
+# (avoiding a lost-refresh lockout on bad wifi) has almost nothing left to bite
+# on, and permanent refresh tokens are a real cost for no remaining benefit.
+#
+# The grace window is widened anyway. The failure it covers is a refresh whose
+# RESPONSE is lost: the server rotated, the client never heard, and the token it
+# still holds is revoked. Ten seconds is optimistic in a building where a page
+# load can take that long.
+refresh_token_reuse_interval = 60
 # Allow/disallow new user signups to your project.
 enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.

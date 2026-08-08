@@ -25,9 +25,13 @@ of `auth.svelte.js`; keep that import absent. A scout with an expired token, a
 revoked account or no signal still writes to IndexedDB. Only sync waits.
 
 **A failed token refresh keeps the session.** It marks sync stale and retries.
-Access tokens last about an hour, and a scout in a dead corner of the gym when
-that fires is holding unsaved work — signing them out is how it gets lost. Route
-guards ask "has this device ever signed in", not "is this token valid now".
+A scout in a dead corner of the gym when a refresh fires is holding unsaved work,
+and signing them out is how it gets lost. Route guards ask "has this device ever
+signed in", not "is this token valid now".
+
+Access tokens last **four days**, not the Supabase default hour — see the session
+settings below. That makes a refresh during an event unlikely rather than
+hourly, which is belt to this braces, not a replacement for it.
 
 **`AUTH_ENFORCED` and migration `0011` flip in the same deploy.** The flag alone
 locks the UI while the data stays open to anyone holding the event code, which
@@ -111,8 +115,23 @@ clicking, which is why migrations start at `0002` and why three of its columns
 had drifted before anyone noticed. One of those, a `schema_version` default,
 had already corrupted the blank-vs-zero distinction above.
 
-**Two dashboard toggles are load-bearing and no SQL can set them:** Confirm
-email **OFF**, Secure email change **OFF** (Authentication → Email). With
+**Four dashboard settings are load-bearing and no SQL can set them.** Two are
+correctness, two are the difference between a scout recording all weekend and a
+scout locked out mid-match. `supabase/config.toml` carries all four so the local
+stack matches, but the live project only changes in the dashboard.
+
+*Sessions* (Authentication → Sessions): **JWT expiry 345600** — four days, so a
+device that signs in the night before holds a valid access token through the
+whole event without ever refreshing. A competition gym has no usable wifi, and
+the default hour means discovering that mid-match. **Refresh token rotation
+stays on**, with the reuse window widened to 60s: with a four-day token a device
+refreshes roughly never, so the usual case for disabling rotation has nothing
+left to bite on, while the wider window still covers a refresh whose *response*
+was lost. **`[auth.sessions]` stays unset** — a timebox or inactivity timeout
+would force-log-out devices between events.
+
+*Email* (Authentication → Email): **Confirm email OFF**, **Secure email change
+OFF**. With
 Confirm email on, registration is not tedious — it is impossible. Every address
 is `<username>@scout.invalid`, RFC 2606 reserves `.invalid` as permanently
 unroutable, and GoTrue validates the recipient before sending. The error names
