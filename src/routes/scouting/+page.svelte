@@ -3,6 +3,7 @@
 	import { base } from '$app/paths';
 	import { session } from '$lib/session.svelte.js';
 	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
+	import { syncState } from '$lib/sync.svelte.js';
 	import { rowScout, scoutRef } from '$lib/scout-identity.js';
 	import { listEntries, getSetting, setSetting } from '$lib/db.js';
 	import {
@@ -512,6 +513,43 @@
 	onMount(async () => {
 		await reload();
 	});
+
+	// Pull fresh entries whenever sync brings some in. Every other data page has
+	// done this since it was written; this one never did, so the coverage board,
+	// the roster and the roll-up bar were frozen at page load. The comment above
+	// entryIndex claimed "sync tick bumps them" and nothing bumped them. With one
+	// scout that is mild staleness. With twenty streaming in it means the manager
+	// spends the event looking at 9am.
+	//
+	// Only entries, deliberately — NOT reload(). Everything here that shows
+	// coverage derives from `entries`, a single indexed local read, while reload()
+	// also refetches assignments, overrides, the account roster and the passphrase
+	// state over the network. inboundChanges increments once per ROW, so a
+	// cold-start backfill would fire that hundreds of times.
+	let entriesInFlight = false;
+	let entriesStale = false;
+	$effect(() => {
+		syncState.inboundChanges; // tracked dependency
+		if (!session.eventCode) return;
+		if (entriesInFlight) {
+			// Arrived mid-read. Remember, so the last write still wins.
+			entriesStale = true;
+			return;
+		}
+		void refreshEntries();
+	});
+
+	async function refreshEntries() {
+		entriesInFlight = true;
+		try {
+			do {
+				entriesStale = false;
+				entries = await listEntries();
+			} while (entriesStale);
+		} finally {
+			entriesInFlight = false;
+		}
+	}
 
 	async function reload() {
 		err = '';

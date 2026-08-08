@@ -49,6 +49,31 @@ db.version(3).stores({
 	picklist: 'key, eventCode, teamNumber, status, [eventCode+status]'
 });
 
+// v4: index remoteId. The pull path looks a row up by it once PER INBOUND ROW,
+// and without an index each lookup is a full table scan.
+//
+// That cost is quadratic in entries and it never showed up, because it scales
+// with how much the WHOLE TEAM has recorded, not with this device. Measured
+// cold-start backfill:
+//
+//     100 entries  (a few scouts, part of an event)   0.23s
+//     480 entries  (20 scouts covering 40 teams)      4.65s
+//     720 entries  (60-team event)                   10.98s
+//
+// 480 is the ordinary shape of a full event with a real scouting crew, and the
+// backfill runs on EVERY cold start: lastSeenAt lives in a module-level
+// variable, so a reload, a PWA relaunch or an event-code change re-pulls the
+// entire event. While it runs the outbox is stalled behind it and the sync
+// indicator reads "connecting" — the app looks broken at exactly the moment a
+// scout opens it to record.
+db.version(4).stores({
+	entries:
+		'++id, eventCode, matchNumber, teamNumber, scoutName, createdAt, remoteId, ' +
+		'[eventCode+matchNumber+teamNumber+scoutName+createdAt]',
+	settings: 'key',
+	picklist: 'key, eventCode, teamNumber, status, [eventCode+status]'
+});
+
 /**
  * Add a new scouting entry. New rows are stamped with a stable per-device
  * `clientId` and a null `remoteId` — the sync layer fills the `remoteId` in
@@ -173,7 +198,15 @@ export async function applyRemoteUpdate(localId, fields) {
 /** The local row holding a given remote UUID, or undefined. */
 export async function getEntryByRemoteId(remoteId) {
 	if (!remoteId) return undefined;
-	return db.entries.filter((e) => e.remoteId === remoteId).first();
+	// where(), not filter(). filter() walks every row, and the pull path calls
+	// this once per inbound row — so a backfill was O(entries²) and took eleven
+	// seconds on a large event. The v4 index makes it a lookup.
+	//
+	// The null guard above is load-bearing now: Dexie leaves rows whose indexed
+	// property is undefined out of the index entirely, so an unsynced row is
+	// unreachable this way. Nothing wants to find one by a remoteId it has not
+	// got, but the guard is what makes that explicit rather than a silent miss.
+	return db.entries.where('remoteId').equals(remoteId).first();
 }
 
 /** Fetch a single entry by its local id. Returns undefined if not found. */
@@ -208,9 +241,7 @@ export async function updateEntry(id, patch) {
 export async function insertRemoteEntry(remoteRow) {
 	// Same row arriving twice (via realtime echo, or two import paths) — skip.
 	if (remoteRow.remoteId) {
-		const byRemote = await db.entries
-			.filter((e) => e.remoteId === remoteRow.remoteId)
-			.first();
+		const byRemote = await db.entries.where('remoteId').equals(remoteRow.remoteId).first();
 		if (byRemote) return { inserted: false };
 	}
 	const byCompound = await db.entries
