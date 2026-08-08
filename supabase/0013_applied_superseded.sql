@@ -1,3 +1,36 @@
+-- APPLIED TO PRODUCTION 2026-08-07, THEN REMOVED FROM THE MIGRATION SEQUENCE.
+--
+-- Kept only as the record of what the live project received. Do not run it, and
+-- do not move it back into migrations/.
+--
+-- ─── why it left ───────────────────────────────────────────────────────────
+--
+-- Migrations run in filename order, so this one ran AFTER 0011 — and undid the
+-- cutover it was supposed to precede:
+--
+--   · GRANT SELECT, INSERT, UPDATE ... TO anon        re-granted what 0011 revoked
+--   · table-wide GRANT UPDATE ON entries              restored write access to
+--                                                     submitted_by, which 0011
+--                                                     withholds so a correction
+--                                                     cannot forge the submitter
+--   · CREATE POLICY entries_session_update            became a 30th policy with
+--                                                     no membership check, beside
+--                                                     29 that have one
+--
+-- Measured on a full `supabase db reset`: verify_migrations went to 3 FAILs,
+-- verify_entries to 1, and check_rls.mjs failed "a scout cannot rewrite another
+-- scout's entry". Permissive policies OR together, which is the whole reason
+-- 0011 rebuilds the set rather than adding to it.
+--
+-- ─── and it was never needed ───────────────────────────────────────────────
+--
+-- Every statement here also exists in 0001_entries.sql, which is re-runnable
+-- against the dashboard-built table and ordered first. 0013 was written because
+-- I had asserted 0001 could never run, without checking it for IF NOT EXISTS.
+-- Applying it did no harm — its effects are a strict subset of 0001's — but it
+-- should never have existed, and leaving it in the sequence was a live hazard
+-- for anyone rebuilding from migrations.
+
 -- Migration: give entries the UPDATE policy it was always supposed to have
 --
 -- ═══════════════════════════════════════════════════════════════════════════

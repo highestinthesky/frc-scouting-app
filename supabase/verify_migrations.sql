@@ -39,6 +39,12 @@ WITH expected(migration, kind, name, why) AS (
          'keeps profile ids and usernames immutable and blocks role escalation'),
         ('0008', 'trigger',  'profiles_guard_identity',
          'enforces the profile security fields on every API update'),
+        -- b997f26 added THREE objects to 0008 — the function and both triggers —
+        -- and two rows here. The INSERT half went unasserted, so a re-run that
+        -- landed the UPDATE guard and not this one reported "0008 complete".
+        ('0008', 'trigger',  'profiles_guard_insert_identity',
+         'binds a new profile to auth.uid() and its username to the account'),
+        ('0008', 'index',    'invites_open_idx', 'unredeemed invites, for the accounts page'),
         ('0008', 'function', 'redeem_invite', 'the only path from an invite code to an account'),
         ('0008', 'function', 'create_invite', 'manager-side invite minting'),
         ('0008', 'function', 'peek_invite',   'lets the register form validate before asking for a password'),
@@ -58,6 +64,11 @@ WITH expected(migration, kind, name, why) AS (
          'same, for weights'),
         ('0009', 'index',    'picklist_session_updated_idx', 'the pull index'),
         ('0009', 'index',    'picklist_session_rank_idx',    'ordering the list'),
+        -- 0009 calls these "corrective, for a table that already exists from an
+        -- earlier run", so it explicitly contemplates a picklist without them —
+        -- which is precisely the state that was reporting "0009 complete".
+        ('0009', 'column',   'picklist.note',       'why this team is ranked here'),
+        ('0009', 'column',   'picklist.updated_by', 'who moved it, for the merge'),
 
         -- ── 0010: real identity beside the typed name ──────────────────────
         ('0010', 'column',   'assignments.profile_id',
@@ -76,7 +87,25 @@ WITH expected(migration, kind, name, why) AS (
         ('0010', 'index',    'overrides_profile_idx',          'per-match override lookup'),
         ('0010', 'index',    'overrides_profile_team_idx',     'audits one-override-per-person-per-match collisions'),
         ('0010', 'index',    'reminders_profile_idx',          'reminder targeting'),
-        ('0010', 'index',    'entries_submitted_by_idx',       'attribution lookup')
+        ('0010', 'index',    'entries_submitted_by_idx',       'attribution lookup'),
+
+        -- ── 0001: the corrective migration for a table built by clicking ──
+        --
+        -- Never asserted before, because 0001 was assumed unrunnable. It is
+        -- runnable — IF NOT EXISTS throughout — and had simply never been run,
+        -- which is why production lacked all of this.
+        --
+        -- current_session_header() is the one that bites: 0011 calls it 38 times
+        -- and lists it as precondition 6, and nothing here or in
+        -- verify_entries.sql asserted it. Its absence on the live project is
+        -- what produced
+        --     42883: function public.current_session_header() does not exist
+        ('0001', 'table',    'entries',    'every observation the app has recorded'),
+        ('0001', 'function', 'current_session_header',
+         '0011 precondition: 38 policies call it'),
+        ('0001', 'index',    'entries_dedupe_idx',
+         'sync relies on this raising 23505 and adopting the existing row'),
+        ('0001', 'index',    'entries_session_idx', 'the incremental pull index')
 ),
 
 -- ── what is actually there ─────────────────────────────────────────────────
@@ -87,13 +116,25 @@ live_tables AS (
     WHERE n.nspname = 'public' AND c.relkind = 'r'
 ),
 live_columns AS (
-    SELECT table_name || '.' || column_name AS name
-    FROM information_schema.columns WHERE table_schema = 'public'
+    -- pg_attribute, not information_schema.columns. That view filters by
+    -- privilege (has_column_privilege), so what it returns depends on WHO runs
+    -- this file. Harmless while the SQL editor runs as the table owner, but
+    -- 0011 revokes everything from anon on the eight event tables, and a drift
+    -- check whose answer changes with the caller is not a check.
+    SELECT c.relname || '.' || a.attname AS name
+    FROM pg_attribute a
+    JOIN pg_class c ON c.oid = a.attrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+      AND a.attnum > 0 AND NOT a.attisdropped
 ),
 live_functions AS (
+    -- prokind 'f' only. Without it an aggregate or procedure of the same name
+    -- satisfies a check meant for a function — over-inclusive, so it can only
+    -- ever produce a false PASS, which is the harder kind to notice.
     SELECT p.proname AS name
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public'
+    WHERE n.nspname = 'public' AND p.prokind = 'f'
 ),
 live_triggers AS (
     SELECT t.tgname AS name

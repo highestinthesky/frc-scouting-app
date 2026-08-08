@@ -215,7 +215,7 @@ still parses fine.
 | `migrations/0010_identity.sql` | `profile_id` beside `scout_name` — **not applied; expand/backfill stage** |
 | `migrations/0011_policies.sql` | hardened membership + event RLS and role cutover — **not applied; one-way door** |
 | `migrations/0012_passphrase_cleanup.sql` | drops the inert `has_manager_token()` and `manager_token` — **not applied; after 0011 has soaked** |
-| `migrations/0013_entries_update_policy.sql` | the UPDATE policy `entries` never had, the stray DELETE, and `current_session_header()` — **applied 2026-08-07** |
+| `0013_applied_superseded.sql` | applied to production 2026-08-07, then removed from the sequence — it ran after `0011` and undid the cutover. Superseded by `0001`. |
 | `verify_entries.sql` | drift assertions for `entries`, read-only |
 | `verify_migrations.sql` | did 0007/0008/0009 land? read-only |
 
@@ -267,13 +267,13 @@ Before either switch:
 6. Apply `0011` and deploy the converted client with `AUTH_ENFORCED = true` as
    one coordinated release.
 
-### Three migrations are pending. One fixes a live data-loss bug.
+### Two migrations are pending. `0001` fixes a live data-loss bug.
 
 ```bash
 scripts/apply_pending_migrations.sh
 ```
 
-**`0013` is the urgent one.** Verified on the live project 2026-08-07: `entries`
+**`0001` is the urgent one.** Verified on the live project 2026-08-07: `entries`
 has `entries_session_delete`, `entries_session_insert` and
 `entries_session_select`, and **no UPDATE policy**. With RLS on and no
 permissive UPDATE policy, every edit matches zero rows — no error, nothing

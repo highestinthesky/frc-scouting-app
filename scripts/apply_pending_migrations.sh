@@ -413,8 +413,8 @@ clip_file "supabase/verify_migrations.sql" "verify_migrations.sql"
 printf '\n'
 say "Failures sort to the top, so row one tells you everything. Expect:"
 step "NO rows with status FAIL."
-step "'0008 complete' — 12 object(s) present."
-step "'0010 complete' — 10 object(s) present."
+step "'0008 complete' — 14 object(s) present."
+step "'0010 complete' — 10 object(s), and '0001 complete' — 4 object(s)."
 step "'auth cutover state is internally consistent' — still PRE-cutover."
 printf '\n'
 note "Pre-cutover is correct and must stay that way: 0011 has not run, and the"

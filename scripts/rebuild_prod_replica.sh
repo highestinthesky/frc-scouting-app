@@ -56,6 +56,6 @@ fi
 run "0008 (pre-hardening, d5cb14e)" "$ORIG_0008" || exit 1
 run "0009_picklist"  supabase/migrations/0009_picklist.sql  || exit 1
 run "0010_identity"  supabase/migrations/0010_identity.sql  || exit 1
-run "0013_entries_update_policy" supabase/migrations/0013_entries_update_policy.sql || exit 1
+run "0013 (applied out of band, superseded by 0001)" supabase/0013_applied_superseded.sql || exit 1
 echo
 echo "Rebuilt to production's shape as of 2026-08-07."
