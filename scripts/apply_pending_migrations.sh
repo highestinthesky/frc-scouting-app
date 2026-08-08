@@ -268,6 +268,9 @@ SQL_EDITOR="https://supabase.com/dashboard/project/${PROJECT_REF}/sql/new"
 
 banner "Pending migrations — project ${PROJECT_REF}"
 
+# Convention, stated once: Enter always continues. Every y/N gate asks about the
+# exception, so you only type y to stop.
+
 # ── 1 ─────────────────────────────────────────────────────────────────────
 stage "Check what is actually live"
 say "Asked over HTTP, so it costs nothing and cannot be wrong about the target."
@@ -314,17 +317,18 @@ open_url "$SQL_EDITOR"
 clip_text "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'guard_profile_update') THEN 'done - the corrected 0008 is already present' ELSE 'ready - the original 0008 is live' END AS state_0008, CASE WHEN to_regclass('public.profiles') IS NULL THEN 'STOP - 0008 was never applied at all' ELSE 'ok - accounts exist' END AS accounts;" "the 0008 preflight"
 printf '\n'
 NEED_0008=yes
-if confirm "Does state_0008 say 'done' (0008 already corrected)?"; then
+if confirm "Does state_0008 say 'done' — is 0008 already corrected?"; then
   NEED_0008=no
   note "Skipping stage 3. Nothing to do for 0008."
 fi
-if [[ "$NEED_0008" == "yes" ]]; then
-  if ! confirm "Then it says 'ready', and accounts says 'ok' — correct?"; then
-    warn "Stopping. Nothing has been changed."
-    note "Anything other than 'ready'/'ok' means live state is not what ROADMAP.md"
-    note "records. Reconcile that before applying SQL."
-    exit 0
-  fi
+# Every gate in this wizard asks about the EXCEPTION, so Enter continues.
+# This one used to ask "is it correct?", which meant Enter — the [y/N] default,
+# and what every pause() in this file trains you to press — answered No, printed
+# "Stopping", and exited 0. Silent, success-looking, and it applied nothing.
+if [[ "$NEED_0008" == "yes" ]] && confirm "Did EITHER column say STOP?"; then
+  warn "Stopping. Nothing has been changed."
+  note "Live state is not what ROADMAP.md records. Reconcile before applying SQL."
+  exit 1
 fi
 
 # ── 3 ─────────────────────────────────────────────────────────────────────
@@ -388,11 +392,13 @@ warn "data: ALTER COLUMN alliance_color SET NOT NULL."
 printf '\n'
 clip_text "SELECT (SELECT count(*) FROM public.entries WHERE alliance_color IS NULL) AS null_alliance_color, (SELECT count(*) FROM public.entries) AS total_entries, CASE WHEN EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'entries' AND indexname = 'entries_session_idx') THEN 'present' ELSE 'absent - 0001 will create it' END AS entries_session_idx;" "the 0001 preflight"
 printf '\n'
-if ! confirm "Does null_alliance_color read 0?"; then
+if confirm "Is null_alliance_color anything OTHER than 0?"; then
   warn "Stop. Fix those rows first, or 0001 aborts partway through with no"
   warn "transaction to roll it back."
   note "Find them: SELECT id, event_code, match_number, team_number FROM"
   note "public.entries WHERE alliance_color IS NULL;"
+  note "Everything before the failure is idempotent, so fixing the rows and"
+  note "re-running 0001 completes it."
   exit 1
 fi
 printf '\n'
@@ -414,7 +420,7 @@ printf '\n'
 note "Pre-cutover is correct and must stay that way: 0011 has not run, and the"
 note "client still ships AUTH_ENFORCED = false."
 printf '\n'
-if ! confirm "Zero FAILs?"; then
+if confirm "Did ANY row say FAIL?"; then
   warn "Do not re-run blindly."
   note "A PARTIAL migration is the one genuinely dangerous state — it means a"
   note "transaction did not finish. Copy the failing rows and work out which"
