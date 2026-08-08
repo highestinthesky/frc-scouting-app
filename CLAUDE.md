@@ -154,6 +154,25 @@ running, so `npm test` stays green offline. Every assertion has been
 mutation-tested; if you add one, break the policy it covers and watch it go red
 before trusting it.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `highestinthesky/frc-scouting-app`, via the `gh` CLI. See
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, unrenamed — `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`. See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context. No `CONTEXT.md`, deliberately — this file already carries the
+vocabulary one would hold. ADRs are `docs/adr-NNN-*.md`, flat, not `docs/adr/`.
+See `docs/agents/domain.md`.
+
 ## Where the reasoning lives
 
 | | |
