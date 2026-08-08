@@ -5,10 +5,12 @@
 	// through the proxy propagates back without an explicit binding.
 
 	import { relativeTime } from '$lib/format.js';
+	import { resolveScout } from '$lib/scout-identity.js';
 	import Button from '$lib/components/Button.svelte';
 
 	let {
 		assignRows,
+		roster = [],
 		busy,
 		qmList,
 		draftRestored,
@@ -21,6 +23,33 @@
 		onSave,
 		onDiscardDraft
 	} = $props();
+
+	// Names offered as a datalist rather than a select, so typing still works.
+	// Not every scout has an account yet, an offline manager has no roster at
+	// all, and the pre-cutover app has to keep working for both — a picker that
+	// refused unknown names would break the case it is meant to help.
+	//
+	// "First Last" is the value because that is the form resolveScout() matches,
+	// so a picked name resolves to the account it came from. The username rides
+	// along as the option label to tell two people with the same name apart.
+	const rosterNames = $derived(
+		(roster ?? [])
+			.map((p) => ({
+				value: `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username,
+				hint: p.username
+			}))
+			.filter((n) => n.value)
+			.sort((a, b) => a.value.localeCompare(b.value))
+	);
+
+	// Which rows are joined to a real account. This is the onboarding progress
+	// bar: with 20+ scouts registering over a fortnight, "who has signed up yet"
+	// is the question a manager asks daily, and the assignment editor already
+	// holds both halves of the answer.
+	const linked = $derived(
+		assignRows.filter((r) => r.scout_name?.trim() && resolveScout(r.scout_name, roster)).length
+	);
+	const named = $derived(assignRows.filter((r) => r.scout_name?.trim()).length);
 </script>
 
 <section>
@@ -33,13 +62,26 @@
 			<button type="button" class="draft-discard" onclick={onDiscardDraft}>Discard</button>
 		</p>
 	{/if}
+	<datalist id="scout-roster">
+		{#each rosterNames as n}
+			<option value={n.value}>{n.hint}</option>
+		{/each}
+	</datalist>
+
 	{#each assignRows as r, i}
 		<div class="assign-row">
-			<input
-				class="scout-name"
-				placeholder="Scout name"
-				bind:value={r.scout_name}
-			/>
+			<div class="name-cell">
+				<input
+					class="scout-name"
+					placeholder="Scout name"
+					list="scout-roster"
+					autocomplete="off"
+					bind:value={r.scout_name}
+				/>
+				{#if r.scout_name?.trim() && resolveScout(r.scout_name, roster)}
+					<span class="linked" title="Matches an account — assignments will carry it">✓</span>
+				{/if}
+			</div>
 			<input
 				class="team-list"
 				placeholder="e.g. 1234, 5678, 9012"
@@ -56,6 +98,14 @@
 			</button>
 		</div>
 	{/each}
+	{#if rosterNames.length > 0}
+		<p class="muted small">
+			<strong>{linked}</strong> of {named} linked to an account. Pick from the
+			suggestions to link the rest — a linked name survives someone spelling it
+			differently on their phone.
+		</p>
+	{/if}
+
 	<p class="muted small">
 		Tap <strong>Auto-assign</strong> after assigning members to evenly distribute 
 		scouting taks across the team. There should be no schedule conflicts. 
@@ -136,6 +186,15 @@
 		margin-top: var(--space-2);
 	}
 	/* ── manager: assignment editor ─────────────────────────────────── */
+	.name-cell { position: relative; display: flex; align-items: center; min-width: 0; }
+	.name-cell .scout-name { width: 100%; padding-right: var(--space-5); }
+	.linked {
+		position: absolute;
+		right: var(--space-2);
+		color: var(--success);
+		font-size: var(--fs-sm);
+		pointer-events: none;
+	}
 	.assign-row {
 		display: grid;
 		grid-template-columns: 1fr 2fr auto;

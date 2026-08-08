@@ -1080,6 +1080,7 @@
 
 			<AssignScouts
 				{assignRows}
+				{roster}
 				{busy}
 				{qmList}
 				{now}
