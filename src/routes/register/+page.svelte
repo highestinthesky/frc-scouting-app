@@ -77,7 +77,7 @@
 			lastName
 		});
 		busy = false;
-		if (res.ok) await goto(`${base}/`);
+		if (res.ok) await goto(`${base}/home/`);
 		else error = res.message;
 	}
 </script>
@@ -170,7 +170,7 @@
 			<button type="button" class="text-button" onclick={() => auth.signOut()}>Sign out</button>
 		</p>
 	{:else}
-		<p class="alt">Already have one? <a href="{base}/login/">Sign in</a>.</p>
+		<p class="alt">Already have one? <a href="{base}/">Sign in</a>.</p>
 	{/if}
 </main>
 

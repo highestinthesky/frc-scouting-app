@@ -122,7 +122,7 @@
 
 <main>
 	<header class="page-head">
-		<a class="back" href="{base}/" aria-label="Back">←</a>
+		<a class="back" href="{base}/home/" aria-label="Back">←</a>
 		<h1>Accounts</h1>
 	</header>
 

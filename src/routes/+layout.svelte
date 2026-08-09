@@ -35,8 +35,10 @@
 	// token valid this second". Validity is the sync layer's problem. Guarding
 	// on validity is how a scout in a dead corner gets bounced to a login
 	// screen mid-match, which is the failure this whole design avoids.
-	const PUBLIC_ROUTES = ['/login', '/register'];
-	const onLoginRoute = $derived(isActive('/login'));
+	// Login is the landing page now, so '/' itself is public and renders without
+	// the app chrome. Home moved to /home.
+	const PUBLIC_ROUTES = ['/', '/register'];
+	const onLoginRoute = $derived(isActive('/'));
 	const onRegisterRoute = $derived(isActive('/register'));
 	const onPublicRoute = $derived(PUBLIC_ROUTES.some((r) => isActive(r)));
 
@@ -46,7 +48,7 @@
 		// /register either, but an orphaned auth user MUST be allowed to stay
 		// there and retry the invite redemption that failed after signUp().
 		if (auth.signedIn && (onLoginRoute || (onRegisterRoute && !auth.orphaned))) {
-			goto(`${base}/`, { replaceState: true });
+			goto(`${base}/home/`, { replaceState: true });
 			return;
 		}
 		// Signed out: the login screen is where you land. A device that has never
@@ -64,7 +66,7 @@
 		// no offline path left to defer to, so the escape hatch stops working
 		// rather than needing to be found and cleared on every device.
 		if (!auth.signedIn && !onPublicRoute && (AUTH_ENFORCED || !session.loginDeferred)) {
-			goto(`${base}/login/`, { replaceState: true });
+			goto(`${base}/`, { replaceState: true });
 		}
 	});
 
@@ -198,7 +200,7 @@
 	<!-- Bottom-docked on phones, top strip from 40rem up. See design.md
 	     § Three deviations — a scout holds this one-handed. -->
 	<nav class="tabs" aria-label="Main">
-		<a href="{base}/" class:active={isActive('/')} aria-current={isActive('/') ? 'page' : undefined}>
+		<a href="{base}/home/" class:active={isActive('/home')} aria-current={isActive('/home') ? 'page' : undefined}>
 			Home
 		</a>
 		<a href="{base}/scouting/" class:active={isActive('/scouting')} aria-current={isActive('/scouting') ? 'page' : undefined}>

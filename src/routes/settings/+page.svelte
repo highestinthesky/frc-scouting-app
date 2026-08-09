@@ -74,7 +74,7 @@
 
 <main>
 	<header class="page-head">
-		<a class="back" href="{base}/" aria-label="Back">←</a>
+		<a class="back" href="{base}/home/" aria-label="Back">←</a>
 		<h1>Settings</h1>
 	</header>
 
@@ -100,7 +100,7 @@
 			<Button onclick={signOut}>Sign out</Button>
 		{:else}
 			<p class="muted">
-				Not signed in. <a href="{base}/login/">Sign in</a> or
+				Not signed in. <a href="{base}/">Sign in</a> or
 				<a href="{base}/register/">create an account</a> with an invite code.
 			</p>
 		{/if}

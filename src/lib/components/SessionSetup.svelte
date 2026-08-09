@@ -44,7 +44,7 @@
 				<span class="label">Your name</span>
 				<small class="help">
 					Match what the manager typed when assigning you teams — or
-					<a href="{base}/login/">sign in</a> and it fills itself.
+					<a href="{base}/">sign in</a> and it fills itself.
 				</small>
 				<input bind:value={scoutName} required autocomplete="name" placeholder="Your name" />
 			</label>

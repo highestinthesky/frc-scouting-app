@@ -207,7 +207,7 @@
 
 			kickSync();
 
-			await goto(`${base}/`);
+			await goto(`${base}/home/`);
 		} catch (err) {
 			error = err.message ?? String(err);
 		} finally {
@@ -222,7 +222,7 @@
 
 <main>
 	<header class="page-head">
-		<a href="{base}/" class="back" aria-label="Back to entries">←</a>
+		<a href="{base}/home/" class="back" aria-label="Back to entries">←</a>
 		<h1>New entry</h1>
 	</header>
 
@@ -316,7 +316,7 @@
 		{/if}
 
 		<div class="actions">
-			<a href="{base}/" class="cancel">Cancel</a>
+			<a href="{base}/home/" class="cancel">Cancel</a>
 			<button type="submit" disabled={saving}>
 				{saving ? 'Saving…' : 'Save entry'}
 			</button>

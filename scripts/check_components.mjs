@@ -291,16 +291,38 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 }
 
 // ─── auth pages ────────────────────────────────────────────────────────────
-for (const page of ['login', 'register', 'accounts']) {
-	const r = rules(`src/routes/${page}/+page.svelte`);
+//
+// Login lives at the root now — it is the landing page, so its file is
+// routes/+page.svelte rather than routes/login/+page.svelte. Home moved to
+// /home to make room.
+for (const [label, file] of [
+	['login', 'src/routes/+page.svelte'],
+	['register', 'src/routes/register/+page.svelte'],
+	['accounts', 'src/routes/accounts/+page.svelte']
+]) {
+	const r = rules(file);
 	ok(
-		`/${page}: inputs and selects meet the tap floor`,
+		`/${label}: inputs and selects meet the tap floor`,
 		r.some(
 			(x) =>
 				/^(input|select)/.test(unscoped(x.selector)) &&
 				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
 		),
 		'a login field is the first thing anyone touches'
+	);
+}
+
+// Home has no inputs — it is a directory, so its tap targets are links.
+{
+	const r = rules('src/routes/home/+page.svelte');
+	ok(
+		'/home: directory links meet the tap floor',
+		r.some(
+			(x) =>
+				unscoped(x.selector).includes('.directory a') &&
+				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
+		),
+		'the directory is the whole point of the page; its rows are the most-tapped thing in the app'
 	);
 }
 
