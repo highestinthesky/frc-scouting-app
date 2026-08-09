@@ -4,7 +4,7 @@ This is the single planning document. Older improvement drafts and handoff
 documents were folded into it; update this file instead of starting another
 plan.
 
-Last audited: 2026-08-03.
+Last audited: 2026-08-08. Planning v0.6 — see below.
 
 > **Live state, verified 2026-08-07.** `0001`, `0002`–`0010` and the corrected
 > `0008` are applied; `verify_migrations.sql` and `verify_entries.sql` both
@@ -36,8 +36,8 @@ Last audited: 2026-08-03.
 | Metrics and manager analysis | Shipped across Insights, team detail, compare, CSV and picklist scoring |
 | Picklist and alliance selection | Cloud-synced picklist and live taken-team state shipped; real-event refinements remain |
 | Information architecture and design system | Route move and token/contrast enforcement shipped |
-| Accounts and roles | Account UI and database objects exist, but enforcement and identity conversion are incomplete |
-| Studio and expanded Insights | Not started |
+| Accounts and roles | Account UI and database objects exist; v0.6 replaces the invite flow with manager-created accounts |
+| Studio and expanded Insights | Not started — v0.6 Phase 5 |
 
 The current production model is still hybrid:
 
@@ -81,12 +81,17 @@ The current production model is still hybrid:
 - File import/export transport and the `.scout` format removed; CSV remains a
   reporting deliverable rather than a sync mechanism.
 
-## Auth upgrade: current implementation state
+## Auth upgrade: where it got to before v0.6
+
+Kept as the record of what is live and why, not as a plan. The forward plan is
+the v0.6 section below, which supersedes it.
+
+### Original state
 
 Full rationale: [`docs/adr-001-auth.md`](docs/adr-001-auth.md). Database
 operations: [`supabase/README.md`](supabase/README.md).
 
-### Live today
+#### Live today
 
 - `0008_auth.sql` objects are present: `profiles`, `invites`, role helpers,
   invite RPCs and `entries.submitted_by`.
@@ -97,7 +102,7 @@ operations: [`supabase/README.md`](supabase/README.md).
   event-scoped access still works.
 - The client keeps `AUTH_ENFORCED = false` and still sends manager passphrases.
 
-### Hardened locally, not deployed
+#### Hardened locally, not deployed
 
 The current working tree addresses the most serious audit findings:
 
@@ -124,120 +129,169 @@ already applied, its new hardening must be carried forward deliberately — by a
 new corrective migration or a rehearsed, verified rerun — rather than assumed
 to exist in production.
 
-## Auth upgrade: remaining work in dependency order
+## v0.6 — the offseason build
 
-The cutover is **not ready**. Complete these steps in order.
+Source: the v0.6 draft (2026-08-08). **This supersedes the auth-cutover plan
+that stood here.** The cutover was sequenced to harden the event-code model;
+v0.6 replaces that model, so hardening it first would be a one-way door onto an
+architecture with a known expiry date.
 
-1. **Choose the forward-migration shape.** ✅ Answered — **re-run the corrected
-   `0008`**. No forward corrective migration is needed.
+Target: the app is as good as it can be before the offseason event, which is a
+deliberate stress test with 20+ scouts, and in full use for the real season
+after.
 
-   Rehearsed on 2026-08-06 — but **not against production's real shape**, and
-   that correction matters. The rehearsal ran `supabase db reset --version 0007`,
-   which applies `0001`. Production has never run `0001` and cannot. The
-   rehearsal database therefore had `current_session_header()`, an UPDATE policy
-   on `entries`, no stray DELETE policy and no column defaults; production had
-   the opposite of all four. See `supabase/live_baseline.sql`.
+### Already shipped — the draft asks for these and they exist
 
-   What the rehearsal does still show: applying the corrected 442-line `0008`
-   over the pre-hardening one from `d5cb14e` succeeded, left a seeded profile,
-   invite and entry intact, and installed `guard_profile_update` with both
-   triggers. And `0008` touches nothing `0001` creates — it only `ALTER`s
-   `public.entries` — so the gap does not affect it. That is reasoning, not
-   rehearsal, and it is worth less.
+Do not re-plan them: minimal-delta auto-assign on edit, native in-app confirm
+dialogs, upcoming matches with break gaps, the whole-schedule view with a
+scout's own matches highlighted, and basic Insights.
 
-   It is safe because `0008` already opens by dropping every policy on
-   `profiles` and `invites` before recreating them, so the original's broad
-   UPDATE policy is replaced rather than left beside the new one — which matters,
-   since permissive policies OR together.
+### The one hard constraint
 
-   That database was then carried through `0010`, `0011` and `0012` and passed
-   all 59 RLS assertions plus both verifiers, so the upgrade path lands in the
-   same place as a build from scratch.
+The draft has the super create every account directly — proper name, temporary
+password, hand it over. **That needs the Auth admin API and `service_role`, and
+a static GitHub Pages bundle cannot hold that key.** It is why the built version
+uses invite codes and self-registration instead: the idea was not dropped for
+taste, it does not fit static hosting.
 
-2. **Build a real staging environment and account fixtures.** Create anon,
-   orphaned-auth, scout, manager and super identities across at least two event
-   IDs. Exercise invite expiry, concurrent redemption, duplicate usernames,
-   revocation and role changes.
+The draft feels this — *"I am considering making the user database a separate
+supabase"*, *"multiple databases might be needed"* — but a second project does
+not help. The problem is where the key lives, not which project it opens.
 
-3. **Apply and inspect the identity expand step.** Run `0010_identity.sql` in
-   staging, review every unmatched or ambiguous name, and rerun its conservative
-   backfill only after the intended profiles exist. Never guess a UUID for an
-   ambiguous person.
+**Resolution: one Edge Function.** Trusted server-side code that creates
+accounts on a manager's behalf. It keeps static hosting, makes the draft's flow
+work exactly as written including generated `hz123` usernames, and is the same
+trusted context any later admin operation needs.
 
-4. **Convert client identity to profile UUIDs.** ✅ Done — `src/lib/scout-identity.js`
-   is the single seam, with 46 assertions.
+### Migrations 0011, 0012 and 0015 are on hold
 
-   `entries.submitted_by` was already dual-written. The three planning tables
-   were not: nothing filled `0010`'s `profile_id` columns, so the whole burden
-   sat on one backfill's guesses. Assignments, per-match overrides and targeted
-   reminders now write both, resolving a typed name against the roster with the
-   same conservative rule as `profile_for_name()` — one unambiguous match or
-   null, never a guess. Reads prefer the account and fall back to the name, so
-   rows recorded before accounts existed keep matching their author.
+`0011` hardens policies keyed on `session_id` — the hashed event code. Phase 4
+replaces that key with a real `event_id`, so roughly a third of `0011` is about
+to be wrong and the rest gets rewritten around membership. **Do not apply it.**
+Phase 4 writes the replacement, borrowing heavily from it: the membership
+requirement, the attribution trigger, the manager-role gating and the passphrase
+removal are all still right.
 
-   The app bar now shows the account name when signed in. Safe only because
-   `auth.me` still *joins* on `session.scoutName` — display and join key are
-   deliberately different values.
+`0012` drops the passphrase objects and follows the same fate. `0015` extends
+invite expiry, and invites may not survive Phase 3 — **do not apply it either.**
 
-   Remaining before `0011`: no policy reads `profile_id` yet, and the columns
-   are populated only going forward. Re-run `0010`'s backfill once everyone has
-   registered, then review what stayed null.
+None is deleted. All three stay in `migrations/` until Phase 4 decides what
+replaces them, at which point whatever is obsolete leaves the sequence the way
+`0013` did.
 
-5. **Convert every shared-data request to the account authorization path.**
-   Remove `managerToken` parameters, `x-manager-token` construction and
-   passphrase gating from sync, schedules, assignments, overrides, reminders,
-   event metadata, picklist and archive/reset flows. Remove the passphrase UI in
-   the same client release that expects role policies.
+---
 
-6. **Implement live Postgres/RLS tests.** ✅ Done — `npm run test:rls`, 59
-   assertions against a real local stack, mutation-tested. Static SQL inspection
-   is not enough. It proves:
+## v0.6 phases, in dependency order
 
-   - anon and orphaned users see and change no event data;
-   - members cannot cross event scopes by changing either headers or row data;
-   - scouts can record/correct entries but cannot use manager surfaces;
-   - no one can forge or clear entry attribution;
-   - managers cannot promote themselves or anyone else to super;
-   - only super users can promote/demote or delete super users;
-   - every manager table and RPC behaves as intended;
-   - archive/reset clears only the current event's planning state and preserves
-     scouting entries.
+### Phase 1 — routes and Home
 
-7. **Resolve password recovery.** `profiles.recovery_email` is not functional:
-   Supabase recovery sends to `auth.users.email`, which is the derived
-   `<username>@scout.invalid` address, and never reads the profile column. A
-   working self-service reset requires trusted server-side code, most likely an
-   Edge Function using the Auth admin API after verifying the recovery contact.
-   Until then, document recovery as a manual admin operation.
+Independent of everything else, visible immediately, and it is the shell the
+rest lands in.
 
-8. **Rehearse the coordinated release.** Bootstrap a super, create the real
-   invites, make each device sign in while online, verify offline entry capture,
-   then rehearse `0011` plus the client flag against production-like data. Write
-   the rollback and verification queries before starting.
+- `/` becomes **Login**. `/register` stays its subpage.
+- `/home` becomes **Home**: greeting, and a directory to everywhere else — next
+  match, standing, reminders. Role-aware, so managers also see Accounts and
+  Insights entries.
+- `/scouting`, `/insights`, `/accounts` keep their paths.
 
-9. **Cut over between events.** Deploy the UUID/passphrase-converted client with
-   `AUTH_ENFORCED = true` and apply `0011` as one coordinated release. Applying
-   either half alone produces a broken or insecure hybrid.
+The current `/` (entry history, sync status, next match) is most of Home
+already; it moves and grows a directory.
 
-10. **Verify and soak.** Repeat the role/event matrix against the live project,
-    test normal phones offline and online, inspect sync errors, then remove only
-    the compatibility code and columns proven obsolete.
+### Phase 2 — real email addresses
 
-## Target auth model
+Small, and it is the stated pre-offseason requirement.
 
-Accounts replace the manager passphrase; they do not replace event codes.
+`<username>@scout.invalid` is replaced by a real address collected at
+registration. Supabase's built-in recovery then works with no Edge Function and
+no admin flow.
 
-- **Event code:** which event the row belongs to. It remains the `session_id`
-  partition and every policy checks it against `x-session-id`.
-- **Profile:** whether the authenticated user is a team member.
-- **Role:** what that member may do. Scouts record; managers operate event
-  planning surfaces; supers control privileged account transitions.
-- **Attribution:** immutable UUID on the row, not a free-text name supplied by
-  the client.
+**Verification stays off.** `mailer_autoconfirm: true` stamps `email_confirmed_at`
+at signup without sending anything, so the account is confirmed from GoTrue's
+point of view and `/auth/v1/recover` will still send to it. Registration keeps
+its no-round-trip flow *and* recovery works.
 
-Invite-based self-registration remains the static-hosting-compatible account
-flow. Manager-created Auth users require `service_role`, which cannot ship in a
-GitHub Pages bundle.
+The cost is a typo'd address that fails silently until someone needs it. Show
+each scout's address on the Accounts page so a manager can spot `gmial.com`.
+
+Must land before Phase 3: accounts created by a manager have their address set
+at creation, and doing it after means rewriting every account twice.
+
+### Phase 3 — the account model from the draft
+
+The Edge Function, and the flow it unlocks:
+
+- A manager enters a first and last name; the function creates the account with
+  a temporary password and returns it to hand over.
+- Usernames are **generated**, not chosen: first initial, last initial, three
+  digits — `hz123`. This also retires "pick your username carefully, it is
+  immutable", and removes the duplicate-name collision that becomes near-certain
+  at 20 scouts.
+- On first sign-in the scout is prompted to set a real password.
+- Accounts lists who has activated and who has not — the onboarding progress
+  question, answered properly rather than inferred from assignment rows.
+- Supers create managers and promote scouts; managers create scouts. Deletion
+  keeps its confirm dialog.
+
+Invite codes retire here if this fully replaces them.
+
+### Phase 4 — events and identity, in one migration
+
+The largest change, and the two halves are done together because they touch the
+same tables and migrating `entries` twice is not worth avoiding once.
+
+**Events become real rows.** An `events` table with a uuid primary key, and an
+`event_scouts` join table so a manager assigns people to an event by dragging
+them. `session_id` becomes `event_id` on every shared table, and the event code
+retires with it.
+
+This dissolves two problems rather than working around them: the event code is
+published on The Blue Alliance so it was never a secret, and "which events can I
+see" was circular — you needed the code to read `event_meta` at all. Membership
+answers both.
+
+**Identity binds to the account.** `submitted_by` becomes the identity on
+`entries`; `scout_name` retires as a join key. `scout-identity.js` shrinks to
+the display question it should always have been.
+
+**Signed out, you record but do not sync.** The IndexedDB write path stays free
+of auth — that invariant does not move — but the push path requires a session.
+
+**Claim on sign-in.** Rows recorded signed-out carry `client_id` and a null
+`submitted_by`. On sign-in, the client claims its own: `client_id` matches this
+device and `submitted_by` is null. Only unclaimed rows, only this device, so it
+cannot take a teammate's work, and it is idempotent. Because unsynced rows never
+left the phone, claiming happens locally before the first push — no server-side
+claim RPC needed.
+
+`managerToken` removal (62 references across 9 files) happens here, as part of
+the new policy set rather than as a prerequisite for the old one.
+
+### Phase 5 — Manager Studio
+
+New surface, built on everything above. A route group with a left sidebar and
+tabs — Schedule, Graphs, more later — that the draft wants to feel like a
+separate, more futuristic application, opened in a new tab from Insights.
+
+The draft marks the drag-and-drop graph builder *"to be developed later due to
+difficulty"*, which is the right call: start with a small fixed set of
+decision-oriented charts and see what actually gets used at the offseason event.
+
+---
+
+## Target model
+
+**Account** — who you are. Created by a manager, username generated, real email
+for recovery. The only identity; there is no local name to disagree with it.
+
+**Role** — what you may do. Scout records; manager operates event planning and
+Studio; super controls manager accounts. Held on the profile, never asserted by
+the device.
+
+**Event** — a row a manager creates, with scouts assigned to it. Replaces the
+event code as the data partition and as the answer to "what am I allowed to
+see".
+
+**Attribution** — an immutable account id on the row, stamped server-side.
 
 ### Offline rule
 
@@ -246,27 +300,10 @@ Login may require a network. Recording may not.
 - The IndexedDB write path never checks auth.
 - Token refresh failure never discards unsaved work or redirects a scout away
   from the form.
-- Sync waits and retries when a usable session returns.
-- Devices should sign in before leaving for the venue and keep a long-lived,
-  rotating refresh token through the event weekend.
-
-## Product work after the security cutover
-
-Security and identity come first because later manager surfaces would otherwise
-build on the wrong authorization and join keys.
-
-1. **Alliance-selection field test.** Use the current board at a real selection
-   before deciding whether picked teams auto-collapse or a second-pick ranking
-   needs separate state. Improve Compare around the actual “these two are left”
-   decision.
-2. **Page composition pass.** The design system and route move are complete;
-   refine hierarchy and density page by page based on real use.
-3. **Studio and expanded Insights.** Add a desktop-first `/studio/*` route group
-   with shared tokens, a sidebar and a small fixed set of decision-oriented
-   charts. Do not start with a drag-and-drop chart builder.
-4. **Operational polish.** Supply the TBA key through the build environment,
-   retain the paste fallback for forks, and relabel reset scheduling as Archive
-   event with precise preservation copy.
+- Signed out, entries are recorded and held; sync waits for a session and the
+  rows are claimed and pushed when one arrives.
+- Access tokens last four days so a device that signs in before leaving holds a
+  valid session through the whole event without refreshing.
 
 ## Retuning metrics each season
 

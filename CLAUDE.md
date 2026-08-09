@@ -33,6 +33,14 @@ Access tokens last **four days**, not the Supabase default hour — see the sess
 settings below. That makes a refresh during an event unlikely rather than
 hourly, which is belt to this braces, not a replacement for it.
 
+**`0011`, `0012` and `0015` are on hold — do not apply them.** `0011` hardens
+policies keyed on the hashed event code, which v0.6 Phase 4 replaces with a real
+`event_id`, so applying it is a one-way door onto a model with a known expiry
+date. `0012` follows it, and `0015` extends invite expiry when invites may not
+survive Phase 3. Phase 4 writes the replacement and borrows most of `0011`:
+membership, the attribution trigger, role gating and passphrase removal are all
+still right. See `ROADMAP.md`.
+
 **`AUTH_ENFORCED` and migration `0011` flip in the same deploy.** The flag alone
 locks the UI while the data stays open to anyone holding the event code, which
 is published on The Blue Alliance. `0011` alone locks the data while the UI
@@ -73,11 +81,16 @@ restriction is load-bearing: the name is still the join key, so overwriting one
 a device already had would silently detach it from every assignment, override
 and reminder addressed to the old spelling.
 
-**The event code is not going away.** It is the `session_id` partition on every
-shared table and `docs/adr-001-auth.md` is explicit that accounts replace the
-passphrase, not the event code. Turning it into a picker instead of a typed
-field needs `0011`: before the cutover you need the code to read `event_meta` at
-all, so discovering events you have access to is circular.
+**The event code is going away — in v0.6 Phase 4, not before.** It is still the
+`session_id` partition on every shared table, so nothing may assume otherwise
+yet. `docs/adr-001-auth.md` says accounts replace the passphrase and not the
+event code; the v0.6 draft supersedes that, replacing it with an `events` table
+and an `event_scouts` membership join.
+
+That is a change of architecture, not a tidy-up. It dissolves two problems
+rather than working around them: the code is published on The Blue Alliance so
+it was never a secret, and "which events may I see" was circular, because you
+needed the code to read `event_meta` at all.
 
 `auth.me` is who this device is. Its **label stays `session.scoutName`**, not
 `displayName` — the typed name is still what most rows join on, and a device
