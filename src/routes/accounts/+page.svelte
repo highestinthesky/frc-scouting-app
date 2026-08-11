@@ -18,6 +18,16 @@
 	let msg = $state('');
 	let freshCode = $state('');
 	let inviteRole = $state(/** @type {'scout'|'manager'|'super'} */ ('scout'));
+
+	// Create-an-account form. The draft's flow: type a name, hand over what comes
+	// back. Email is ours, not the draft's — an account with no routable address
+	// cannot be recovered, and that has already locked someone out once.
+	let newFirst = $state('');
+	let newLast = $state('');
+	let newEmail = $state('');
+	let newRole = $state(/** @type {'scout'|'manager'|'super'} */ ('scout'));
+	/** Shown once, then gone. Nothing stores the temporary password. */
+	let handover = $state(/** @type {{username: string, temporaryPassword: string}|null} */ (null));
 	let now = $state(new Date());
 
 	$effect(() => {
@@ -35,6 +45,37 @@
 			[profiles, invites] = await Promise.all([auth.listProfiles(), auth.listInvites()]);
 		} catch (e) {
 			err = e.message;
+		}
+	}
+
+	async function createAccount() {
+		err = '';
+		msg = '';
+		handover = null;
+		if (!newFirst.trim() || !newLast.trim()) {
+			err = 'Enter a first and last name.';
+			return;
+		}
+		if (!newEmail.includes('@')) {
+			err = 'Enter the email address their password reset should go to.';
+			return;
+		}
+		busy = true;
+		try {
+			handover = await auth.createAccount({
+				firstName: newFirst,
+				lastName: newLast,
+				email: newEmail,
+				role: newRole
+			});
+			newFirst = '';
+			newLast = '';
+			newEmail = '';
+			await load();
+		} catch (e) {
+			err = e?.message ?? String(e);
+		} finally {
+			busy = false;
 		}
 	}
 
@@ -130,7 +171,58 @@
 		<p class="muted">Only managers can see this page.</p>
 	{:else}
 		<section>
-			<h2>Invite someone</h2>
+			<h2>Add someone</h2>
+			<p class="muted">
+				Type their name and email. You get a username and a one-time password to
+				give them; they choose their own the first time they sign in.
+			</p>
+
+			<div class="new-grid">
+				<label class="field">
+					<span class="label">First name</span>
+					<input bind:value={newFirst} autocomplete="off" />
+				</label>
+				<label class="field">
+					<span class="label">Last name</span>
+					<input bind:value={newLast} autocomplete="off" />
+				</label>
+				<label class="field wide">
+					<span class="label">Email</span>
+					<small class="help">Only ever used for a password reset.</small>
+					<input type="email" bind:value={newEmail} autocomplete="off" />
+				</label>
+				<label class="field">
+					<span class="label">Joins as</span>
+					<select bind:value={newRole}>
+						{#each roleOptions as r (r)}
+							<option value={r}>{r}</option>
+						{/each}
+					</select>
+				</label>
+			</div>
+			<Button variant="primary" disabled={busy} onclick={createAccount}>
+				{busy ? 'Creating…' : 'Create account'}
+			</Button>
+
+			{#if handover}
+				<div class="handover">
+					<p class="handover-lead">Give these to {handover.username ? 'them' : 'them'} now.</p>
+					<dl>
+						<dt>Username</dt>
+						<dd><code>{handover.username}</code></dd>
+						<dt>Temporary password</dt>
+						<dd><code>{handover.temporaryPassword}</code></dd>
+					</dl>
+					<p class="handover-warn">
+						This is the only time the password is shown. Nothing stores it — if it
+						is lost before they sign in, delete the account and make another.
+					</p>
+				</div>
+			{/if}
+		</section>
+
+		<section>
+			<h2>Invite someone instead</h2>
 			<p class="muted">
 				Read the code out to them. They pick their own username and password at
 				<a href="{base}/register/">the sign-up page</a>.
@@ -189,6 +281,11 @@
 								<strong>{p.first_name} {p.last_name}</strong>
 								<span class="uname">{p.username}</span>
 								{#if self}<span class="tag you">you</span>{/if}
+								{#if p.must_change_password}
+									<span class="tag pending" title="Still on the password they were given">
+										not signed in yet
+									</span>
+								{/if}
 							</div>
 							<div class="controls">
 								<select
@@ -226,6 +323,55 @@
 </main>
 
 <style>
+	.new-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--space-3);
+		margin-bottom: var(--space-3);
+	}
+	.new-grid .wide { grid-column: 1 / -1; }
+	.new-grid .field { display: flex; flex-direction: column; gap: var(--space-1); }
+	.new-grid .label { font-weight: 600; font-size: var(--fs-sm); }
+	.new-grid .help { color: var(--text-faint); font-size: var(--fs-xs); }
+	.new-grid input,
+	.new-grid select {
+		font: inherit;
+		min-height: var(--tap-min);
+		padding: var(--space-2) var(--space-3);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--text-primary);
+		min-width: 0;
+	}
+	.handover {
+		margin-top: var(--space-4);
+		padding: var(--space-4);
+		background: var(--success-bg);
+		border: 1px solid var(--success-border);
+		border-radius: var(--radius-md);
+	}
+	.handover-lead { margin: 0 0 var(--space-3); font-weight: 600; color: var(--success); }
+	.handover dl {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: var(--space-2) var(--space-4);
+		margin: 0 0 var(--space-3);
+	}
+	.handover dt { color: var(--text-muted); font-size: var(--fs-sm); }
+	.handover dd { margin: 0; }
+	.handover code {
+		font-family: ui-monospace, monospace;
+		font-size: var(--fs-md);
+		user-select: all;
+	}
+	.handover-warn { margin: 0; color: var(--text-muted); font-size: var(--fs-sm); }
+	.tag.pending {
+		background: var(--warning-bg);
+		color: var(--warning);
+		border: 1px solid var(--warning-border);
+	}
+
 	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
 	 * design-system: design.md · designed-as-app
 	 */

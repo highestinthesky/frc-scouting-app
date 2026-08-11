@@ -16,8 +16,41 @@
 	import SessionSetup from '$lib/components/SessionSetup.svelte';
 	import ReminderBanner from '$lib/components/ReminderBanner.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	let { children } = $props();
+
+	// Forced password change. Handed-over passwords are known to the manager who
+	// handed them over, so the app is unusable until one is replaced. Gated in
+	// the layout rather than nudged on a page, because a nudge is declinable and
+	// this is the whole point of the temporary password being temporary.
+	let newPw = $state('');
+	let newPw2 = $state('');
+	let pwBusy = $state(false);
+	let pwErr = $state('');
+
+	async function choosePassword(e) {
+		e.preventDefault();
+		pwErr = '';
+		if (newPw.length < 8) {
+			pwErr = 'Use a password with at least 8 characters.';
+			return;
+		}
+		if (newPw !== newPw2) {
+			pwErr = 'Those two do not match.';
+			return;
+		}
+		pwBusy = true;
+		try {
+			await auth.setOwnPassword(newPw);
+			newPw = '';
+			newPw2 = '';
+		} catch (error) {
+			pwErr = error?.message ?? String(error);
+		} finally {
+			pwBusy = false;
+		}
+	}
 
 	onMount(async () => {
 		await Promise.all([session.load(), theme.load(), auth.init()]);
@@ -165,6 +198,30 @@
 	<p class="boot">Loading…</p>
 {:else if onPublicRoute}
 	{@render children()}
+{:else if auth.mustChangePassword}
+	<!-- Signed in, but on a password somebody else chose and still knows. -->
+	<main class="gate">
+		<h1>Choose a password</h1>
+		<p>
+			You signed in with the temporary password you were given. Whoever set up
+			your account knows it, so pick your own before you carry on.
+		</p>
+		<form class="pw-form" onsubmit={choosePassword}>
+			<label class="field">
+				<span class="label">New password</span>
+				<small class="help">At least 8 characters.</small>
+				<input type="password" bind:value={newPw} autocomplete="new-password" required />
+			</label>
+			<label class="field">
+				<span class="label">Again</span>
+				<input type="password" bind:value={newPw2} autocomplete="new-password" required />
+			</label>
+			{#if pwErr}<p class="pw-err" role="alert">{pwErr}</p>{/if}
+			<Button variant="primary" type="submit" full disabled={pwBusy}>
+				{pwBusy ? 'Saving…' : 'Save password'}
+			</Button>
+		</form>
+	</main>
 {:else if AUTH_ENFORCED && auth.orphaned}
 	<!-- Signed in, but no profile: the invite was never redeemed, or a manager
 	     revoked access. Say so plainly rather than showing an empty app. -->
@@ -435,6 +492,27 @@
 
 	/* Full-screen boot state — a deliberate optical centre, not spacing on the
 	   scale, so it is written as a multiple of the largest token. */
+	.pw-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+		max-width: 22rem;
+		margin: var(--space-5) auto 0;
+		text-align: left;
+	}
+	.pw-form .field { display: flex; flex-direction: column; gap: var(--space-1); }
+	.pw-form .label { font-weight: 600; }
+	.pw-form .help { color: var(--text-faint); font-size: var(--fs-sm); }
+	.pw-form input {
+		font: inherit;
+		min-height: var(--tap-min);
+		padding: var(--space-2) var(--space-3);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--text-primary);
+	}
+	.pw-err { color: var(--danger); font-size: var(--fs-sm); margin: 0; }
 	.boot {
 		text-align: center;
 		margin-top: calc(2 * var(--space-6));

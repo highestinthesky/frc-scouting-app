@@ -125,7 +125,8 @@ const state = $state({
 	authEmail: /** @type {string|null} */ (null),
 	/** The profile row, or null while loading / if the account was revoked. */
 	profile: /** @type {null | {id: string, username: string, first_name: string,
-	 *  last_name: string, role: 'scout'|'manager'|'super'}} */ (null),
+	 *  last_name: string, role: 'scout'|'manager'|'super',
+	 *  must_change_password?: boolean}} */ (null),
 	/** True until the first session check finishes — pages should wait. */
 	loading: true,
 	/**
@@ -211,6 +212,17 @@ export const auth = {
 	managerCredentials() {
 		return AUTH_ENFORCED ? {} : { managerToken: session.managerToken };
 	},
+	/**
+	 * Is this device still on a password somebody handed over?
+	 *
+	 * A password two people know is not a password. The layout gates the whole
+	 * app on this until it is replaced — the same shape as the orphaned gate,
+	 * because both mean "signed in, but not yet usable".
+	 */
+	get mustChangePassword() {
+		return state.profile?.must_change_password === true;
+	},
+
 	get displayName() {
 		const p = state.profile;
 		return p ? `${p.first_name} ${p.last_name}`.trim() : '';
@@ -411,7 +423,7 @@ export const auth = {
 	async listProfiles() {
 		const { data, error } = await getAuthClient()
 			.from('profiles')
-			.select('id, username, first_name, last_name, role, created_at')
+			.select('id, username, first_name, last_name, role, created_at, must_change_password')
 			.order('last_name', { ascending: true });
 		if (error) throw new Error(error.message);
 		return data ?? [];
@@ -421,6 +433,75 @@ export const auth = {
 	async setRole(id, role) {
 		const { error } = await getAuthClient().from('profiles').update({ role }).eq('id', id);
 		if (error) throw new Error(error.message);
+	},
+
+	/**
+	 * Create an account for someone else. Managers make scouts; supers make
+	 * anyone.
+	 *
+	 * Goes through the create-account Edge Function, because creating an
+	 * auth.users row needs service_role and a static bundle cannot hold that
+	 * key. The function verifies the caller's own token and re-checks the role
+	 * in the database, so nothing here is trusted — this is a request, not an
+	 * instruction.
+	 *
+	 * Returns the generated username and the temporary password ONCE. Neither is
+	 * stored anywhere readable afterwards; if the manager loses it before handing
+	 * it over, the account has to be deleted and remade.
+	 *
+	 * @param {{firstName: string, lastName: string, email: string,
+	 *          role?: 'scout'|'manager'|'super'}} req
+	 * @returns {Promise<{username: string, temporaryPassword: string, role: string}>}
+	 */
+	async createAccount(req) {
+		const { data, error } = await getAuthClient().functions.invoke('create-account', {
+			body: {
+				firstName: req.firstName,
+				lastName: req.lastName,
+				email: req.email,
+				role: req.role ?? 'scout'
+			}
+		});
+		// functions.invoke reports a non-2xx as an error whose body holds the
+		// reason. Surfacing "Edge Function returned a non-2xx status code" instead
+		// of "Only a super user can create a manager" would make every refusal
+		// look like an outage.
+		if (error) {
+			let detail = error.message;
+			try {
+				const body = await error.context?.json?.();
+				if (body?.error) detail = body.error;
+			} catch {
+				// Keep the transport error; the response had no JSON body to read.
+			}
+			throw new Error(detail);
+		}
+		if (data?.error) throw new Error(data.error);
+		return data;
+	},
+
+	/**
+	 * Replace a temporary password with one only this person knows, and clear
+	 * the flag that forces it.
+	 *
+	 * Order matters. The password changes first: if the update to `profiles`
+	 * failed after clearing the flag, the person would be let into the app still
+	 * holding a password their manager knows.
+	 *
+	 * @param {string} password
+	 */
+	async setOwnPassword(password) {
+		const client = getAuthClient();
+		const { error } = await client.auth.updateUser({ password });
+		if (error) throw new Error(error.message);
+		if (state.profile?.id) {
+			const { error: flagErr } = await client
+				.from('profiles')
+				.update({ must_change_password: false })
+				.eq('id', state.profile.id);
+			if (flagErr) throw new Error(flagErr.message);
+			state.profile = { ...state.profile, must_change_password: false };
+		}
 	},
 
 	/**
@@ -459,7 +540,7 @@ async function loadProfile(userId = null) {
 
 	const { data, error } = await client
 		.from('profiles')
-		.select('id, username, first_name, last_name, role')
+		.select('id, username, first_name, last_name, role, must_change_password')
 		.eq('id', userId)
 		.maybeSingle();
 	if (error) {

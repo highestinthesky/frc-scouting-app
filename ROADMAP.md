@@ -216,7 +216,7 @@ each scout's address on the Accounts page so a manager can spot `gmial.com`.
 Must land before Phase 3: accounts created by a manager have their address set
 at creation, and doing it after means rewriting every account twice.
 
-### Phase 3 — the account model from the draft
+### Phase 3 — the account model from the draft ✅ built, not deployed
 
 The Edge Function, and the flow it unlocks:
 
@@ -232,7 +232,20 @@ The Edge Function, and the flow it unlocks:
 - Supers create managers and promote scouts; managers create scouts. Deletion
   keeps its confirm dialog.
 
-Invite codes retire here if this fully replaces them.
+Invite codes retire here if this fully replaces them. Both flows are live side
+by side for now — the Accounts page offers "Add someone" and "Invite someone
+instead" — because the invite path is what already works in production and the
+Edge Function is not deployed yet.
+
+**Deploying it:** `supabase link --project-ref hhvpkgwgkuiemxyarsuk`, then
+`supabase functions deploy create-account`. It needs no secrets set by hand —
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected
+by the platform. `0017` has to be applied first, or the function's two RPCs do
+not exist.
+
+Usernames carry six digits, not the draft's three. `email_for_username()` turns
+a username into a real address for anonymous callers, so three digits is a
+thousand requests to harvest a named scout's email; six is a million.
 
 ### Phase 4 — events and identity, in one migration
 
