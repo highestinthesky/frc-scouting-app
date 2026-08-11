@@ -118,7 +118,21 @@ async function makeUser(username, role) {
 		password: PASSWORD,
 		email_confirm: true
 	});
-	if (error) throw new Error(`create ${username}: ${error.message}`);
+	if (error) {
+		// AuthRetryableFetchError with an empty body means Kong is proxying to an
+		// auth upstream that is not answering — routinely the state `supabase db
+		// reset` leaves behind, since it restarts containers underneath Kong. The
+		// raw message is literally "{}", which names nothing and sends you looking
+		// at your own SQL. Say what it actually is.
+		if (error.name === 'AuthRetryableFetchError' || error.status === 502) {
+			throw new Error(
+				`auth is not reachable (HTTP ${error.status ?? '?'}). The stack is up but Kong ` +
+					'cannot reach GoTrue — usually after `supabase db reset`. ' +
+					'Run `supabase stop && supabase start`, then retry.'
+			);
+		}
+		throw new Error(`create ${username}: ${error.message}`);
+	}
 	const id = data.user.id;
 	// role null means an orphan: an auth user with no profile, which is both an
 	// unfinished registration and a revoked account. Same state, same access.

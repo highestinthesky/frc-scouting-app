@@ -15,16 +15,16 @@
 	let firstName = $state('');
 	let lastName = $state('');
 	let username = $state('');
+	let email = $state('');
 	let password = $state('');
 	let busy = $state(false);
 	let error = $state('');
-	const resuming = $derived(auth.orphaned && Boolean(auth.authUsername));
+	const resuming = $derived(auth.orphaned && Boolean(auth.authEmail));
 
 	// signUp may have succeeded before invite redemption failed. That auth
 	// username is immutable, so make the retry form use it instead of creating
 	// a second account or a profile whose login name would not work.
 	$effect(() => {
-		if (resuming && auth.authUsername) username = auth.authUsername;
 	});
 
 	/** null = not checked yet, otherwise { valid, role }. */
@@ -62,7 +62,7 @@
 			lastName.trim() &&
 			username &&
 			!nameProblem &&
-			(resuming || password.length >= 8)
+			(resuming || (email.includes('@') && password.length >= 8))
 	);
 
 	async function submit(e) {
@@ -72,6 +72,7 @@
 		const res = await auth.register({
 			code,
 			username,
+			email,
 			password,
 			firstName,
 			lastName
@@ -147,9 +148,19 @@
 
 		{#if resuming}
 			<p class="resume-note">
-				Signed in as <strong>{auth.authUsername}</strong>. Your existing password is unchanged.
+				Signed in as <strong>{auth.authEmail}</strong>. Your existing password is unchanged.
 			</p>
 		{:else}
+			<label class="field">
+				<span class="label">Email</span>
+				<small class="help">
+					Where a password reset gets sent. Nothing else is ever sent here, and
+					you do not have to confirm it — but if it is wrong, nobody can get you
+					back into your account.
+				</small>
+				<input type="email" bind:value={email} autocomplete="email" required />
+			</label>
+
 			<label class="field">
 				<span class="label">Password</span>
 				<small class="help">At least 8 characters.</small>
@@ -166,7 +177,7 @@
 
 	{#if resuming}
 		<p class="alt">
-			Not {auth.authUsername}?
+			Not {auth.authEmail}?
 			<button type="button" class="text-button" onclick={() => auth.signOut()}>Sign out</button>
 		</p>
 	{:else}

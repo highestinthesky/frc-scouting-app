@@ -6,22 +6,30 @@
 //   1. Recording NEVER depends on auth. db.js does not import this module.
 //      A scout with an expired token, a revoked account or no radio at all
 //      still writes to IndexedDB. Only sync waits.
-//   2. A failed token refresh NEVER signs anyone out. Access tokens last about
-//      an hour and refresh in the background; a scout in a dead corner when
-//      that fires must not be bounced to a login screen holding unsaved work.
-//      We keep the local session, mark sync stale, and retry.
+//   2. A failed token refresh NEVER signs anyone out. A scout in a dead corner
+//      when that fires must not be bounced to a login screen holding unsaved
+//      work. We keep the local session, mark sync stale, and retry. Tokens last
+//      four days, so a refresh during an event is unlikely rather than hourly.
 //   3. Route guarding asks "has this device ever signed in", not "is this
 //      token valid right now". Validity is the sync layer's problem.
 //
-// ─── why the email is derived ───────────────────────────────────────────────
+// ─── why the email is looked up ─────────────────────────────────────────────
 //
-// Supabase password auth needs an email; scouts have usernames. Rather than
-// look one up — which needs an anon-readable table and leaks the roster — the
-// address is computed from the username. No round trip, nothing to leak.
+// Supabase password auth needs an email; scouts have usernames. The address
+// used to be COMPUTED — `username@scout.invalid` — so nothing had to be looked
+// up and nothing could leak. It also meant password recovery was impossible,
+// because .invalid is permanently unroutable and Supabase sends recovery to
+// auth.users.email. The first person to forget a password had no way back.
 //
-// The consequence, accepted knowingly: usernames are immutable. Changing one
-// means changing the auth email, which is an admin operation, not a settings
-// field.
+// Addresses are real now, so signIn() asks email_for_username() for one. That
+// RPC is callable by anon — it has to be, it runs before there is a session —
+// which means a username can be exchanged for a real address by anyone. See
+// migration 0016 for the trade and the exit: when Phase 3's Edge Function
+// exists, the lookup moves inside it and the RPC is revoked from anon.
+//
+// Usernames remain immutable. That was a consequence of the derivation and is
+// now a deliberate choice: the username is the join key people are told, and
+// changing it silently detaches an account from everything addressed to it.
 
 import { getAuthClient } from './supabase.js';
 // session.svelte.js imports only db.js, so this direction is acyclic.
@@ -42,13 +50,25 @@ import { scoutRef } from './scout-identity.js';
  */
 export const AUTH_ENFORCED = false;
 
-/** RFC 2606 reserves .invalid as permanently unroutable. Nothing is ever sent. */
-const AUTH_EMAIL_DOMAIN = 'scout.invalid';
 const PROFILE_CACHE_KEY = 'frc-scout-last-profile';
 
-/** @param {string} username */
-export const emailForUsername = (username) =>
-	`${String(username ?? '').trim().toLowerCase()}@${AUTH_EMAIL_DOMAIN}`;
+/**
+ * The login address for a username, or null if no account has that name.
+ *
+ * A round trip, where this used to be string concatenation. Unavoidable: the
+ * address is real now and no rule relates it to the username, which is the
+ * whole reason recovery works.
+ *
+ * @param {string} username
+ * @returns {Promise<string|null>}
+ */
+export async function lookupEmail(username) {
+	const u = String(username ?? '').trim().toLowerCase();
+	if (!u) return null;
+	const { data, error } = await getAuthClient().rpc('email_for_username', { p_username: u });
+	if (error) return null;
+	return data ?? null;
+}
 
 /** Same shape the database CHECK enforces, so the form can say so first. */
 export const USERNAME_RE = /^[a-z0-9._-]{3,24}$/;
@@ -78,18 +98,23 @@ export function authUserId(data) {
 }
 
 /**
- * Recover the immutable login username from the synthetic auth email. This is
- * used only for an unfinished signup: once signUp() succeeds, retrying invite
- * redemption must keep the same username or the displayed username would no
- * longer map to the email Supabase expects at the next login.
+ * The signed-in account's email address, from any Supabase auth response shape.
+ *
+ * Replaces authUsername(), which recovered the username by stripping
+ * `@scout.invalid` off the address. There is nothing to strip now — the address
+ * is real and unrelated to the username — so an unfinished signup is identified
+ * by the address the person typed rather than by a name encoded in it.
+ *
+ * That also removes a constraint rather than replacing it. Retrying a failed
+ * invite redemption used to REQUIRE the same username, because the username was
+ * the address; now any username will do, because the account is already bound
+ * to its own email.
  *
  * @param {{user?: {email?: string}|null, session?: {user?: {email?: string}|null}|null}|null|undefined} data
  * @returns {string|null}
  */
-export function authUsername(data) {
-	const email = data?.user?.email ?? data?.session?.user?.email ?? '';
-	const suffix = `@${AUTH_EMAIL_DOMAIN}`;
-	return email.toLowerCase().endsWith(suffix) ? email.slice(0, -suffix.length).toLowerCase() : null;
+export function authEmail(data) {
+	return data?.user?.email ?? data?.session?.user?.email ?? null;
 }
 
 const state = $state({
@@ -97,7 +122,7 @@ const state = $state({
 	signedIn: false,
 	/** Auth identity retained even when invite redemption has not made a profile. */
 	userId: /** @type {string|null} */ (null),
-	authUsername: /** @type {string|null} */ (null),
+	authEmail: /** @type {string|null} */ (null),
 	/** The profile row, or null while loading / if the account was revoked. */
 	profile: /** @type {null | {id: string, username: string, first_name: string,
 	 *  last_name: string, role: 'scout'|'manager'|'super'}} */ (null),
@@ -116,7 +141,7 @@ export const auth = {
 	get loading() { return state.loading; },
 	get orphaned() { return state.orphaned; },
 	get userId() { return state.userId; },
-	get authUsername() { return state.authUsername; },
+	get authEmail() { return state.authEmail; },
 	get profile() { return state.profile; },
 	get role() { return state.profile?.role ?? null; },
 	get isManager() { return state.profile?.role === 'manager' || state.profile?.role === 'super'; },
@@ -234,7 +259,7 @@ export const auth = {
 				clearCachedProfile();
 				state.signedIn = false;
 				state.userId = null;
-				state.authUsername = null;
+				state.authEmail = null;
 				state.profile = null;
 				state.orphaned = false;
 			}
@@ -247,10 +272,15 @@ export const auth = {
 	 * @returns {Promise<{ok: true} | {ok: false, message: string}>}
 	 */
 	async signIn(username, password) {
-		const { data, error } = await getAuthClient().auth.signInWithPassword({
-			email: emailForUsername(username),
-			password
-		});
+		// One extra round trip before the sign-in. A username with no account
+		// resolves to null, and that is reported as a credential failure rather
+		// than "no such user" — telling an attacker which usernames exist is the
+		// thing Supabase itself is careful not to do.
+		const email = await lookupEmail(username);
+		if (!email) {
+			return { ok: false, message: 'That username and password do not match.' };
+		}
+		const { data, error } = await getAuthClient().auth.signInWithPassword({ email, password });
 		if (error) {
 			// Supabase says "Invalid login credentials" for both a wrong
 			// password and an unknown user, which is the right thing to show —
@@ -268,7 +298,7 @@ export const auth = {
 	 * user exists either way; without a redeemed invite it has no profile and
 	 * therefore no access.
 	 *
-	 * @param {{code: string, username: string, password?: string,
+	 * @param {{code: string, username: string, email?: string, password?: string,
 	 *          firstName: string, lastName: string}} req
 	 * @returns {Promise<{ok: true} | {ok: false, message: string}>}
 	 */
@@ -281,33 +311,34 @@ export const auth = {
 
 		// A failed invite redemption leaves a valid, signed-in auth user but no
 		// profile. Reuse that user on the next attempt instead of calling signUp
-		// again (which can only report that the username already exists).
+		// again (which can only report that the address is already registered).
 		const { data: sessionData } = await client.auth.getSession();
 		let userId = authUserId(sessionData);
-		const existingUsername = authUsername(sessionData);
 		if (userId) {
 			if (state.profile) {
 				return { ok: false, message: 'This account is already set up.' };
 			}
-			if (existingUsername && existingUsername !== username) {
-				return {
-					ok: false,
-					message: `This unfinished account belongs to ${existingUsername}. Use that username or sign out first.`
-				};
-			}
+			// No username check on resume any more. It used to be required —
+			// the username WAS the address, so changing it would have pointed the
+			// profile at an account nobody could reach. The address is real and
+			// already fixed to this auth user, so any username still works.
 			state.signedIn = true;
 			rememberAuthIdentity(sessionData);
 		} else {
+			const email = String(req.email ?? '').trim().toLowerCase();
+			if (!email || !email.includes('@')) {
+				return { ok: false, message: 'Enter the email address you want password resets sent to.' };
+			}
 			if (!req.password || req.password.length < 8) {
 				return { ok: false, message: 'Use a password with at least 8 characters.' };
 			}
 			const { data: signUpData, error: signUpError } = await client.auth.signUp({
-				email: emailForUsername(username),
+				email,
 				password: req.password
 			});
 			if (signUpError) {
 				if (/already/i.test(signUpError.message)) {
-					return { ok: false, message: 'That username is taken. Pick another.' };
+					return { ok: false, message: 'That email address already has an account. Sign in instead.' };
 				}
 				return { ok: false, message: signUpError.message };
 			}
@@ -325,7 +356,12 @@ export const auth = {
 			p_code: req.code,
 			p_username: username,
 			p_first: req.firstName,
-			p_last: req.lastName
+			p_last: req.lastName,
+			// The fifth parameter has existed since 0008 and was never passed.
+			// auth.users.email is what recovery actually uses; this is the copy a
+			// manager can read on the Accounts page to spot a typo before it
+			// matters.
+			p_recovery_email: String(req.email ?? '').trim().toLowerCase() || null
 		});
 		if (redeemError) {
 			// 23505 is the unique index on lower(username) firing. It is a
@@ -333,12 +369,7 @@ export const auth = {
 			// moment, not an error worth logging — the availability check in
 			// the form has a race window and this is what actually holds.
 			if (redeemError.code === '23505') {
-				return existingUsername
-					? {
-							ok: false,
-							message: 'That username was taken before setup finished. Sign out below and choose another.'
-						}
-					: { ok: false, message: 'That username was just taken. Pick another.' };
+				return { ok: false, message: 'That username was just taken. Pick another.' };
 			}
 			return { ok: false, message: redeemError.message };
 		}
@@ -476,7 +507,7 @@ function rememberAuthIdentity(data) {
 		state.orphaned = false;
 	}
 	state.userId = nextUserId;
-	state.authUsername = authUsername(data);
+	state.authEmail = authEmail(data);
 }
 
 function readCachedProfile(userId) {

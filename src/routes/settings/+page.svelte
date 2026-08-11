@@ -94,7 +94,7 @@
 			</div>
 		{:else if auth.orphaned}
 			<p class="muted">
-				Signed in as <strong>{auth.authUsername}</strong>, but account setup is incomplete.
+				Signed in as <strong>{auth.authEmail}</strong>, but account setup is incomplete.
 				<a href="{base}/register/">Redeem an invite</a> to finish.
 			</p>
 			<Button onclick={signOut}>Sign out</Button>

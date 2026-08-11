@@ -34,11 +34,10 @@ const pure = src.slice(0, src.indexOf('const state = $state(')).replace(
 	''
 );
 const {
-	emailForUsername,
 	usernameProblem,
 	USERNAME_RE,
 	authUserId,
-	authUsername,
+	authEmail,
 	AUTH_ENFORCED
 } = await import(
 	'data:text/javascript,' + encodeURIComponent(pure)
@@ -54,21 +53,46 @@ const ok = (name, cond, detail = '') => {
 	}
 };
 
-// ─── the derived email ─────────────────────────────────────────────────────
+// ─── the address is looked up, not derived ─────────────────────────────────
+//
+// It used to be `username + '@scout.invalid'`. That needed no round trip and
+// leaked nothing — and made password recovery impossible, because .invalid is
+// permanently unroutable and Supabase sends recovery to auth.users.email.
+// Someone was locked out of a super account with no way back; that is what paid
+// for this change.
 {
-	ok('username maps to an address', emailForUsername('hzhang') === 'hzhang@scout.invalid');
-	ok('case is normalised', emailForUsername('HZhang') === 'hzhang@scout.invalid');
-	ok('surrounding space is trimmed', emailForUsername('  hz  ') === 'hz@scout.invalid');
-	ok('the same name always maps the same way',
-		emailForUsername('a.b') === emailForUsername('A.B '));
+	// A regression guard with teeth. If the derivation ever comes back, every
+	// account it creates is unrecoverable again, and nothing else would notice.
+	//
+	// Comments are stripped first. The file explains at length why the address
+	// USED to be derived, so a naive search finds the reserved domain in prose
+	// and reports the bug it is describing.
+	const code = src
+		.replace(/\/\*[\s\S]*?\*\//g, '')
+		.split('\n')
+		.filter((l) => !l.trim().startsWith('//'))
+		.join('\n');
+	ok('no executable code mentions the reserved domain', !/@scout\.invalid/.test(code));
 
-	// .invalid is reserved by RFC 2606 as permanently unroutable. A real
-	// domain here would mean signup mail leaving for an address nobody owns.
-	ok('the domain is the reserved unroutable one',
-		emailForUsername('x').endsWith('@scout.invalid'));
+	ok('signIn asks the database for the address',
+		/const email = await lookupEmail\(username\)/.test(src));
 
-	ok('empty input still produces a well-formed address, not a crash',
-		emailForUsername(undefined) === '@scout.invalid');
+	// An unknown username must be indistinguishable from a wrong password.
+	// Saying "no such user" is how an attacker enumerates a roster, and the
+	// lookup RPC already makes usernames cheap enough to guess.
+	const signInSrc = src.slice(src.indexOf('async signIn('), src.indexOf('async register('));
+	ok('an unknown username reports a credential failure, not a missing account',
+		/if \(!email\)[\s\S]*?username and password do not match/.test(signInSrc));
+	ok('and never calls signInWithPassword without an address',
+		signInSrc.indexOf('if (!email)') < signInSrc.indexOf('signInWithPassword'));
+
+	// Registration must collect somewhere reachable, or recovery is theatre.
+	const registerSrc = src.slice(src.indexOf('async register('));
+	ok('registration requires an address', /Enter the email address you want password resets sent to/.test(registerSrc));
+	ok('registration signs up with the address the human typed',
+		/signUp\(\{[\s\S]{0,60}\bemail,/.test(registerSrc));
+	ok('the address is also stored where a manager can read it',
+		/p_recovery_email/.test(registerSrc));
 }
 
 // ─── username rule must match the database CHECK ───────────────────────────
@@ -106,10 +130,11 @@ const ok = (name, cond, detail = '') => {
 	ok('gets the user id from sign-in data',
 		authUserId({ user: { id: 'signed-in-user' }, session: null }) === 'signed-in-user');
 	ok('missing auth data has no user id', authUserId(null) === null);
-	ok('recovers the immutable username from a stored auth session',
-		authUsername({ session: { user: { email: 'Scout.One@scout.invalid' } } }) === 'scout.one');
-	ok('does not treat an unrelated email address as an app username',
-		authUsername({ user: { email: 'scout@example.com' } }) === null);
+	ok('gets the address from a stored auth session',
+		authEmail({ session: { user: { email: 'scout@example.com' } } }) === 'scout@example.com');
+	ok('gets the address from sign-in data',
+		authEmail({ user: { email: 'a@b.com' }, session: null }) === 'a@b.com');
+	ok('missing auth data has no address', authEmail(null) === null);
 
 	const loadProfileSrc = src.slice(src.indexOf('async function loadProfile'));
 	ok('loadProfile scopes the roster query to the current user',

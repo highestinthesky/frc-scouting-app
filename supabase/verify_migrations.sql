@@ -560,26 +560,33 @@ checks AS (
 
     -- ── every profile is reachable by its own username ─────────────────────
     --
-    -- There is no username → email lookup table, by design: signIn() computes
-    -- `username || '@scout.invalid'` and asks Supabase for exactly that
-    -- address. So a profile whose auth user has a different email is an account
-    -- nobody can log into, and the only symptom is "that username and password
-    -- do not match" — which reads like a typo and sends you looking at the
-    -- password.
+    -- The invariant moved with 0016. It used to be that the auth email EQUALLED
+    -- `username || '@scout.invalid'`, because signIn() computed the address and
+    -- a mismatch made an account nobody could log into. Addresses are real now,
+    -- so there is nothing to compute and nothing to compare.
     --
-    -- /register cannot get this wrong; it derives the email the same way. The
-    -- hand-made bootstrap super user can, and did.
+    -- What still has to hold is the thing that check was really protecting:
+    -- signIn() asks email_for_username() for the address, so a profile the
+    -- lookup cannot resolve is an account nobody can log into, and the symptom
+    -- is still "that username and password do not match" — which reads like a
+    -- typo and sends you looking at the password.
     SELECT CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
            'every profile is reachable by its username',
-           CASE WHEN count(*) = 0 THEN 'username matches the auth email on every profile'
+           CASE WHEN count(*) = 0 THEN 'email_for_username resolves every profile'
                 ELSE 'UNREACHABLE: ' || string_agg(detail, '; ') END
     FROM (
-        SELECT p.username || ' expects ' || p.username || '@scout.invalid but the auth user is ' ||
-               COALESCE(u.email, '(no auth user)') AS detail
+        SELECT p.username || ' -> ' ||
+               COALESCE(public.email_for_username(p.username), '(lookup returned nothing)') ||
+               ', auth user has ' || COALESCE(u.email, '(no auth user)') AS detail
         FROM public.profiles p
         LEFT JOIN auth.users u ON u.id = p.id
-        WHERE u.email IS DISTINCT FROM p.username || '@scout.invalid'
+        WHERE u.email IS NULL
+           OR public.email_for_username(p.username) IS DISTINCT FROM u.email
     ) bad
+    WHERE EXISTS (
+        SELECT 1 FROM pg_proc pr JOIN pg_namespace n ON n.oid = pr.pronamespace
+        WHERE n.nspname = 'public' AND pr.proname = 'email_for_username'
+    )
 
     UNION ALL
 
@@ -625,6 +632,19 @@ checks AS (
         WHERE table_schema = 'public' AND table_name = 'assignments'
           AND column_name = 'profile_id'
     )
+
+    UNION ALL
+
+    -- ── no address that cannot receive a password reset ────────────────────
+    --
+    -- .invalid is permanently unroutable by RFC 2606, so an account still on one
+    -- has no recovery path at all. That is what locked the first super out.
+    SELECT CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+           'every account can receive a password reset',
+           CASE WHEN count(*) = 0 THEN 'no unroutable addresses'
+                ELSE count(*)::text || ' account(s) still on @scout.invalid — recovery impossible' END
+    FROM auth.users
+    WHERE lower(email) LIKE '%@scout.invalid'
 
     UNION ALL
 
