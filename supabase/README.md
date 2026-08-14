@@ -16,10 +16,28 @@ Verified against the live project on 2026-08-07:
 | `0010_identity.sql` | Applied 2026-08-07 |
 | `0011_policies.sql` | Not applied — the one-way door |
 | `0012_passphrase_cleanup.sql` | Not applied — after `0011` soaks |
+| `0016_real_emails.sql` | Not applied — ships with the Edge Function |
+| `0017_managed_accounts.sql` | Not applied — ships with the Edge Function |
+| `0018_revoke_from_anon.sql` | **Applied 2026-08-14** — grants, not behaviour |
 
 Both `verify_migrations.sql` and `verify_entries.sql` return zero FAILs.
 `AUTH_ENFORCED` is still `false`, so accounts remain additive rather than the
 production authorization boundary.
+
+`0018` went ahead of `0016`/`0017` because it only narrows privileges and
+depends on nothing they add. Order is safe in either direction: `0016` replaces
+`redeem_invite`'s body, and `CREATE OR REPLACE` preserves the ACL.
+
+After `0018`, `anon` can still execute exactly four functions —
+`current_session_header`, `has_manager_token`, `peek_invite` and
+`reset_event_data`. All four are load-bearing pre-cutover, because the manager
+surfaces write as anon with a passphrase header; `0011` revokes the last three
+and `0012` drops `has_manager_token` outright. The security advisor still warns
+about three of them, and that is expected rather than outstanding.
+
+The advisor's remaining *actionable* item is **leaked password protection**,
+which is a dashboard setting: Authentication → Providers → Email. Worth turning
+on before accounts are handed out.
 
 ## Project settings the migrations cannot set
 

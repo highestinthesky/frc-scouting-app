@@ -164,6 +164,37 @@ being run against it — which is why production had no UPDATE policy on `entrie
 production, and it will pass migrations that fail on the real thing. Three
 rehearsals were worthless for exactly this reason.
 
+**Production grants `anon` everything by default; the local stack grants it
+nothing.** The live project was created 2026-05-04, before Supabase changed the
+default, so `pg_default_acl` in `public` read `tables anon=arwdDxtm` — ALL
+privileges, DELETE included — plus `functions anon=X`. `supabase start` uses the
+current always-revoked default. Same schema, opposite environment.
+
+This is why `0009_picklist.sql` contains no `GRANT` statements and `picklist`
+was still reachable by anon, and why `0008`'s `REVOKE ALL ... FROM PUBLIC` read
+as a lockdown and was not one — closing a function takes **both** halves, since
+Postgres grants `EXECUTE TO PUBLIC` on every new function *and* the default ACL
+added an explicit `anon=X`. Revoking either alone leaves it open. `0010` is the
+only pre-`0018` migration that names the role, which is why `profile_for_name`
+was the only function actually closed.
+
+`0018` narrows the defaults so new tables arrive with no anon grant, which
+matters most for **Phase 4** — `events` and `event_scouts` would otherwise be
+anon-writable with only a policy in the way. It also flips the failure
+direction: a migration that forgets its grants now fails loudly instead of
+over-granting silently. A `supabase_admin`-owned default ACL still grants anon
+everything, but migrations run as `postgres`, so it is latent — verified by
+creating a table and reading its ACL.
+
+The rehearsal lesson generalises past `0001`: **the replica has to reproduce the
+environment, not just the schema.** It now sets these defaults, so a grant bug
+is visible locally. Before that change it showed all five functions closed when
+production had them open — it could not have caught this.
+
+**`CREATE OR REPLACE FUNCTION` preserves the ACL.** Measured, because assuming
+otherwise sent me down a wrong explanation once. Replacing a body never reopens
+a function, so migration order is free where only bodies change.
+
 **Filename order is semantic.** A corrective migration numbered after `0011`
 runs after the cutover and undoes it — `0013` re-granted `anon` access, restored
 write access to `submitted_by`, and added an unscoped 30th policy beside 29

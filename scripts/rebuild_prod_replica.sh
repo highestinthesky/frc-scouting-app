@@ -45,6 +45,31 @@ docker exec $C psql -U postgres -d postgres -q -c "
   GRANT ALL ON SCHEMA public TO postgres;
   DELETE FROM auth.users;" >/dev/null 2>&1
 
+# Production's PRIVILEGE DEFAULTS, not just its tables.
+#
+# The live project was created 2026-05-04, before Supabase changed the default
+# to always-revoked, so pg_default_acl in schema public reads
+#
+#     tables anon=arwdDxtm   functions anon=X   sequences anon=rwU
+#
+# Every new table there is granted ALL to anon automatically. `supabase start`
+# uses the CURRENT default and grants nothing, so a replica that copies only the
+# schema is wrong about the environment — and a migration that forgets its
+# grants passes locally and ships an anon-writable table.
+#
+# That is the same mistake as rehearsing on `db reset`: right about the tables,
+# wrong about the thing underneath them. 0009_picklist.sql is the proof — it
+# contains no GRANT statements at all and picklist still ended up reachable by
+# anon in production.
+#
+# 0018 narrows these on production. Reproduce the OLD defaults here so a replica
+# built to a pre-0018 state behaves like the project did.
+docker exec $C psql -U postgres -d postgres -q -c "
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
+  " >/dev/null 2>&1
+
 run "live_baseline (dashboard-built entries)" supabase/live_baseline.sql || exit 1
 for m in 0002_schedule_and_assignments 0003_reset_event_data 0004_reminders \
          0005_assignment_overrides 0006_tba_event_key 0007_entry_updated_at; do
