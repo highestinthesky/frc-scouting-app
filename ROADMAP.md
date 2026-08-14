@@ -168,9 +168,12 @@ trusted context any later admin operation needs.
 `0011` hardens policies keyed on `session_id` — the hashed event code. Phase 4
 replaces that key with a real `event_id`, so roughly a third of `0011` is about
 to be wrong and the rest gets rewritten around membership. **Do not apply it.**
-Phase 4 writes the replacement, borrowing heavily from it: the membership
-requirement, the attribution trigger, the manager-role gating and the passphrase
-removal are all still right.
+
+`0019` has now written most of that replacement, borrowing from `0011` exactly
+as predicted: membership gating, manager-role gating and attribution are all
+carried over. `0011` and `0012` are still on hold — Phase 4c retires them, and
+until then they stay in `migrations/` so a local `db reset` keeps exercising the
+post-cutover ordering, which is how `0019`'s policy-name collision was caught.
 
 `0012` drops the passphrase objects and follows the same fate. `0015` extends
 invite expiry, and invites may not survive Phase 3 — **do not apply it either.**
@@ -247,10 +250,44 @@ Usernames carry six digits, not the draft's three. `email_for_username()` turns
 a username into a real address for anonymous callers, so three digits is a
 thousand requests to harvest a named scout's email; six is a million.
 
-### Phase 4 — events and identity, in one migration
+### Phase 4 — events and identity
 
-The largest change, and the two halves are done together because they touch the
-same tables and migrating `entries` twice is not worth avoiding once.
+**4a — the database. ✅ `0019_events.sql`, applied to production 2026-08-14.**
+
+Done as an **expand** migration rather than a cutover. `session_id` still works
+and `event_id` sits beside it, so the client migrates on its own schedule
+instead of in the same instant as the database. The "one migration" reasoning in
+this document was about doing events and identity together rather than migrating
+`entries` twice — both are in `0019` — not about a flag day. `0010` used the same
+shape for `profile_id`.
+
+What is live: `events` and `event_scouts`; `event_id` on all eight shared
+tables, backfilled and FK'd; `is_event_member()`, `manages_event()` and
+`create_event()`; and a full `<table>_evt_*` policy set keyed on membership,
+sitting alongside the `session_id` policies rather than replacing them.
+
+108 RLS assertions cover it, all mutation-tested. Two bugs were found by that
+suite and are written up in `0019`'s header and in `CLAUDE.md`.
+
+**4b — the client. Not started.** This is the remaining work:
+
+- Replace `deriveSessionId(eventCode)` with a real event id from `events`. The
+  event picker becomes a list of events the device is a member of — a question
+  the database can finally answer — instead of a text field.
+- Send `event_id` on every write; stop sending `x-session-id`.
+- **Claim on sign-in.** Rows recorded signed-out carry `client_id` and a null
+  `submitted_by`. On sign-in the client claims its own: `client_id` matches this
+  device and `submitted_by` is null. Only unclaimed rows, only this device, so it
+  cannot take a teammate's work, and it is idempotent. Unsynced rows never left
+  the phone, so this happens locally before the first push — no claim RPC.
+- **Signed out, you record but do not sync.** The IndexedDB write path stays free
+  of `auth.svelte.js`; the push path requires a session.
+- `managerToken` removal — 62 references across 9 files.
+- `scout_name` stops being a join key. It stays as a display label and as part of
+  the dedupe fingerprint, which is content and must not gain identity.
+
+**4c — contract.** Once 4b ships and has soaked: drop `session_id`, the old
+policies, and the passphrase objects. This is what supersedes `0011`/`0012`.
 
 **Events become real rows.** An `events` table with a uuid primary key, and an
 `event_scouts` join table so a manager assigns people to an event by dragging
