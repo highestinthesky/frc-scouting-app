@@ -753,6 +753,238 @@ const scoutB = await clientFor(scout, EVENT_B);
 	ok('username_shape still rejects a bad username', rejected === true);
 }
 
+// ─── events and membership (0019) ───────────────────────────────────────────
+//
+// 0019 is an EXPAND migration: the session_id policies and the membership
+// policies are both live, and Postgres ORs permissive policies together. So a
+// membership test run through the normal harness client would pass whether or
+// not membership works — the x-session-id header alone would carry it. That is
+// the same false-confidence shape the create_managed_profile assertion had.
+//
+// Every client below therefore sends NO x-session-id header. current_session_header()
+// returns null, every session_id policy evaluates false, and the only thing that
+// can permit a row is membership. If these pass, they pass for the right reason.
+{
+	const noHeader = async (user) => {
+		const c = createClient(url, anonKey, {
+			auth: { persistSession: false, autoRefreshToken: false }
+		});
+		if (user) {
+			const { error } = await c.auth.signInWithPassword({ email: user.email, password: PASSWORD });
+			if (error) throw new Error(`sign in ${user.username}: ${error.message}`);
+		}
+		return c;
+	};
+
+	const scoutNH = await noHeader(scout);
+	const scout2NH = await noHeader(scout2);
+	const managerNH = await noHeader(manager);
+	const superNH = await noHeader(superUser);
+	const anonNH = await noHeader(null);
+
+	// ─── creating an event ──────────────────────────────────────────────────
+	const code = `evt${Math.floor(Math.random() * 1e5)}`;
+
+	const { error: scoutCreate } = await scoutNH.rpc('create_event', {
+		p_code: `${code}x`,
+		p_name: 'Scout Attempt'
+	});
+	ok('a scout cannot create an event', Boolean(scoutCreate), scoutCreate?.code);
+
+	const { error: anonCreate } = await anonNH.rpc('create_event', {
+		p_code: `${code}y`,
+		p_name: 'Anon Attempt'
+	});
+	ok('anon cannot create an event', Boolean(anonCreate), anonCreate?.code);
+
+	const { data: eventId, error: mgrCreate } = await managerNH.rpc('create_event', {
+		p_code: code,
+		p_name: 'Managed Event'
+	});
+	ok('a manager creates an event', !mgrCreate && Boolean(eventId), mgrCreate?.message);
+
+	// Creating and belonging are one act — an event its creator could not see
+	// would read as data loss the moment they opened it.
+	const [{ n: creatorMember }] = await sql(
+		'select count(*)::int as n from public.event_scouts where event_id = $1 and profile_id = $2',
+		[eventId, manager.id]
+	);
+	ok('the creator is a member of their own event', creatorMember === 1);
+
+	// ─── membership decides reads ───────────────────────────────────────────
+	//
+	// One entry, no header. The scout is not a member yet.
+	await sql(
+		`insert into public.entries
+		   (id, session_id, event_id, event_code, match_number, team_number,
+		    alliance_color, scout_name, schema_version, created_at)
+		 values (gen_random_uuid(), $1, $1, $2, 1, 3419, 'red', $3, 3, now())`,
+		[eventId, code, `${MARK}_scout`]
+	);
+
+	const beforeJoin = await scoutNH.from('entries').select('id').eq('event_id', eventId);
+	ok('a non-member reads nothing', (beforeJoin.data ?? []).length === 0, beforeJoin.error?.message);
+
+	const mgrSees = await managerNH.from('entries').select('id').eq('event_id', eventId);
+	ok('a member reads the event', (mgrSees.data ?? []).length === 1, mgrSees.error?.message);
+
+	// ─── a manager staffs the event ─────────────────────────────────────────
+	const { error: scoutAdds } = await scoutNH
+		.from('event_scouts')
+		.insert({ event_id: eventId, profile_id: scout2.id });
+	ok('a scout cannot add someone to an event', denied(scoutAdds), scoutAdds?.code);
+
+	const { error: mgrAdds } = await managerNH
+		.from('event_scouts')
+		.insert({ event_id: eventId, profile_id: scout.id });
+	ok('a manager adds a scout to the event', !mgrAdds, mgrAdds?.message);
+
+	const afterJoin = await scoutNH.from('entries').select('id').eq('event_id', eventId);
+	ok('joining the event grants the read', (afterJoin.data ?? []).length === 1, afterJoin.error?.message);
+
+	// ─── membership is not authority ────────────────────────────────────────
+	//
+	// manages_event() is `is_super() OR (member AND role = manager)`, and the
+	// two halves need separate assertions. The "a scout cannot add someone"
+	// check above runs while the scout is not yet a member, so it fails on
+	// membership and never reaches the role test — dropping the role check
+	// entirely left it green. These run now that the scout IS a member, so the
+	// only thing that can deny them is the role.
+	const { error: memberAdds } = await scoutNH
+		.from('event_scouts')
+		.insert({ event_id: eventId, profile_id: scout2.id });
+	ok('a member scout still cannot staff the event', denied(memberAdds), memberAdds?.code);
+
+	const { error: memberDrops } = await scoutNH
+		.from('event_scouts')
+		.delete()
+		.eq('event_id', eventId)
+		.eq('profile_id', manager.id);
+	const [{ n: mgrStill }] = await sql(
+		'select count(*)::int as n from public.event_scouts where event_id = $1 and profile_id = $2',
+		[eventId, manager.id]
+	);
+	ok(
+		'a member scout cannot remove the manager',
+		mgrStill === 1,
+		memberDrops ? `denied (${memberDrops.code})` : 'DELETE reported success'
+	);
+
+	const { error: memberPlans } = await scoutNH.from('assignments').insert({
+		session_id: eventId,
+		event_id: eventId,
+		event_code: code,
+		scout_name: `${MARK}_scout`
+	});
+	ok('a member scout cannot write a manager surface', denied(memberPlans), memberPlans?.code);
+
+	// ─── and removing them takes it away again ──────────────────────────────
+	const { error: mgrRemoves } = await managerNH
+		.from('event_scouts')
+		.delete()
+		.eq('event_id', eventId)
+		.eq('profile_id', scout.id);
+	ok('a manager removes a scout from the event', !mgrRemoves, mgrRemoves?.message);
+
+	const afterLeave = await scoutNH.from('entries').select('id').eq('event_id', eventId);
+	ok('removal revokes the read', (afterLeave.data ?? []).length === 0, afterLeave.error?.message);
+
+	// ─── a super reaches an event they were never added to ──────────────────
+	//
+	// Deliberate: the super is the account that fixes things, and "the person who
+	// can fix it has to be added first" is how that fails at 11pm before a match.
+	const [{ n: superMember }] = await sql(
+		'select count(*)::int as n from public.event_scouts where event_id = $1 and profile_id = $2',
+		[eventId, superUser.id]
+	);
+	ok('the super is NOT a member of this event', superMember === 0);
+
+	const { error: superManages } = await superNH
+		.from('event_scouts')
+		.insert({ event_id: eventId, profile_id: scout2.id });
+	ok('a super staffs an event without joining it', !superManages, superManages?.message);
+
+	// A manager who is not a member manages nothing, which is the other half of
+	// that rule — the exception is the super role, not the manager role.
+	const { data: otherEvent } = await superNH.rpc('create_event', {
+		p_code: `${code}z`,
+		p_name: 'Not The Managers'
+	});
+	const { error: outsideMgr } = await managerNH
+		.from('event_scouts')
+		.insert({ event_id: otherEvent, profile_id: scout.id });
+	ok('a manager cannot staff an event they are not on', denied(outsideMgr), outsideMgr?.code);
+
+	// ─── scouts see their own events, and only those ────────────────────────
+	const scoutEvents = await scout2NH.from('events').select('id');
+	const ids = (scoutEvents.data ?? []).map((r) => r.id);
+	ok(
+		'a scout lists exactly the events they belong to',
+		ids.length === 1 && ids[0] === eventId,
+		JSON.stringify(ids)
+	);
+
+	// The question that had no answer before this migration: you needed the event
+	// code to read event_meta, so you could not ask what you had access to.
+	const anonEvents = await anonNH.from('events').select('id');
+	ok('anon lists no events', (anonEvents.data ?? []).length === 0, anonEvents.error?.message);
+
+	// ─── entries attribute to the caller, not to the payload ────────────────
+	await sql('insert into public.event_scouts (event_id, profile_id) values ($1, $2)', [
+		eventId,
+		scout.id
+	]);
+	// Two mechanisms answer this, and which one runs depends on where you are.
+	//
+	// 0011 installs stamp_submitted_by, a trigger that OVERWRITES submitted_by
+	// with auth.uid(), so a forged value is corrected and the insert succeeds.
+	// 0019's WITH CHECK instead REJECTS a submitted_by that is not the caller.
+	// Locally both are present; on production, where 0011 is unapplied and on
+	// hold, only the policy is.
+	//
+	// So the assertion is the invariant rather than the mechanism: a forged
+	// attribution never lands. Either the write is denied, or the row is stored
+	// against the caller. Demanding one specific outcome would pass in one
+	// ordering and fail in the other while the system was correct in both.
+	const { error: forged } = await scoutNH.from('entries').insert({
+		session_id: eventId,
+		event_id: eventId,
+		event_code: code,
+		match_number: 2,
+		team_number: 3419,
+		alliance_color: 'blue',
+		scout_name: `${MARK}_scout`,
+		schema_version: 3,
+		created_at: new Date().toISOString(),
+		submitted_by: manager.id
+	});
+	const landed = await sql(
+		'select submitted_by from public.entries where event_id = $1 and match_number = 2',
+		[eventId]
+	);
+	ok(
+		'a forged attribution never lands',
+		denied(forged) || (landed.length === 1 && landed[0].submitted_by === scout.id),
+		denied(forged) ? `rejected (${forged.code})` : `stored as ${landed[0]?.submitted_by}`
+	);
+
+	const { error: own } = await scoutNH.from('entries').insert({
+		session_id: eventId,
+		event_id: eventId,
+		event_code: code,
+		match_number: 3,
+		team_number: 3419,
+		alliance_color: 'blue',
+		scout_name: `${MARK}_scout`,
+		schema_version: 3,
+		created_at: new Date().toISOString(),
+		submitted_by: scout.id
+	});
+	ok('a scout records their own entry through membership alone', !own, own?.message);
+
+	await sql('delete from public.events where id = any($1::uuid[])', [[eventId, otherEvent]]);
+}
+
 await reset();
 await db.end();
 

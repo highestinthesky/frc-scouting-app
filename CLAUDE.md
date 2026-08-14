@@ -217,6 +217,27 @@ running, so `npm test` stays green offline. Every assertion has been
 mutation-tested; if you add one, break the policy it covers and watch it go red
 before trusting it.
 
+**The failure mode is an assertion that passes for the wrong reason** — it hit
+three separate new assertions in one sitting, so assume it rather than hope:
+
+- `a manager cannot call create_managed_profile` passed with EXECUTE granted to
+  `authenticated`, because `guard_profile_update` raises first.
+- `a scout cannot add someone to an event` passed with the role check deleted
+  from `manages_event`, because the scout was not a member yet, so membership
+  denied it before role was consulted.
+- Every membership assertion would have passed without membership working at
+  all, because `0019` is an expand migration and the `x-session-id` header alone
+  satisfies the older policy. The membership block sends **no** header for
+  exactly this reason.
+
+The shape is always the same: a second mechanism denies the thing, so the
+assertion never exercises the one it is named after. Mutation testing is what
+finds it — a mutation that leaves the suite green is a finding, not a relief.
+When two mechanisms genuinely both apply, assert the invariant rather than the
+mechanism; `a forged attribution never lands` accepts denial or correction,
+because `0011`'s trigger corrects and `0019`'s policy rejects, and production
+has only one of them.
+
 ## Agent skills
 
 ### Issue tracker
