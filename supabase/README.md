@@ -16,9 +16,17 @@ Verified against the live project on 2026-08-07:
 | `0010_identity.sql` | Applied 2026-08-07 |
 | `0011_policies.sql` | Not applied — the one-way door |
 | `0012_passphrase_cleanup.sql` | Not applied — after `0011` soaks |
-| `0016_real_emails.sql` | Not applied — ships with the Edge Function |
-| `0017_managed_accounts.sql` | Not applied — ships with the Edge Function |
+| `0016_real_emails.sql` | **Applied 2026-08-14** |
+| `0017_managed_accounts.sql` | **Applied 2026-08-14** |
 | `0018_revoke_from_anon.sql` | **Applied 2026-08-14** — grants, not behaviour |
+
+The `create-account` Edge Function is deployed and ACTIVE (v1, `verify_jwt`
+on). Verified against the live endpoint rather than assumed: the CORS preflight
+returns 200 without a token, and a POST without an `Authorization` header is
+rejected by the platform with `UNAUTHORIZED_NO_AUTH_HEADER` before the handler
+runs. `apikey` had to be added to `Access-Control-Allow-Headers` — supabase-js
+sends it, and the preflight would have failed in a browser while passing under
+curl.
 
 Both `verify_migrations.sql` and `verify_entries.sql` return zero FAILs.
 `AUTH_ENFORCED` is still `false`, so accounts remain additive rather than the

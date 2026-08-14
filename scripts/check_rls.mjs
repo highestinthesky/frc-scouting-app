@@ -598,6 +598,161 @@ const scoutB = await clientFor(scout, EVENT_B);
 	);
 }
 
+// ─── manager-created accounts (0017) ────────────────────────────────────────
+//
+// create_managed_profile() runs SECURITY DEFINER and names the account holder's
+// id AND role as arguments, so anyone who can call it can attach a `super`
+// profile to any auth user. Two separate things have to hold: no browser role
+// may reach it at all, and the authority check inside it has to be real.
+//
+// The second half is tested by calling as postgres, which is what the Edge
+// Function's service_role does. That deliberately bypasses the grant — the
+// grant is the first half, asserted just below — so that what is under test is
+// the p_actor check rather than the permission to call.
+{
+	// Kept short on purpose: profiles.username_shape is ^[a-z0-9._-]{3,24}$ and
+	// the first draft of these fixtures was 25 characters, which failed as a
+	// constraint violation rather than as anything this block is about.
+	const args = (actor, id, role) => ({
+		p_actor: actor,
+		p_id: id,
+		p_username: `${MARK}_${role[0]}${Math.random().toString(36).slice(2, 7)}`,
+		p_first: 'Made',
+		p_last: 'Account',
+		p_role: role
+	});
+
+	// ─── no browser role may call it ────────────────────────────────────────
+	//
+	// The grant is asserted directly rather than only through behaviour, and that
+	// is not belt-and-braces — it is the fix for a test that lied.
+	//
+	// The behavioural check below passed even with EXECUTE granted to
+	// `authenticated`, which mutation testing caught. The reason is
+	// guard_profile_update: it raises 42501 because NEW.id is not the signed-in
+	// user, so the call fails for a signed-in caller whether or not the grant is
+	// there. Genuine defence in depth, and exactly why the behavioural assertion
+	// cannot speak for the grant. Both are kept; only together do they say "a
+	// browser cannot reach this AND is not permitted to try".
+	for (const fn of [
+		'create_managed_profile(uuid,uuid,text,text,text,public.app_role)',
+		'username_taken(text)'
+	]) {
+		const [{ anon_x, auth_x, svc_x }] = await sql(
+			`select has_function_privilege('anon',          'public.${fn}', 'EXECUTE') as anon_x,
+			        has_function_privilege('authenticated', 'public.${fn}', 'EXECUTE') as auth_x,
+			        has_function_privilege('service_role',  'public.${fn}', 'EXECUTE') as svc_x`
+		);
+		const name = fn.split('(')[0];
+		ok(`${name} is granted to service_role alone`, !anon_x && !auth_x && svc_x, `anon=${anon_x} auth=${auth_x} service=${svc_x}`);
+	}
+
+	for (const [label, client] of [
+		['anon', anonA],
+		['a scout', scoutA],
+		['a manager', managerA],
+		['a super', superA]
+	]) {
+		const { error } = await client.rpc('create_managed_profile', args(manager.id, orphan.id, 'scout'));
+		ok(`${label} cannot call create_managed_profile`, denied(error), error?.code);
+
+		const { error: takenErr } = await client.rpc('username_taken', { p_username: 'anything' });
+		ok(`${label} cannot call username_taken`, denied(takenErr), takenErr?.code);
+	}
+
+	// ─── the authority check, as the Edge Function calls it ─────────────────
+	const raises = async (text, params) => {
+		try {
+			await sql(text, params);
+			return null;
+		} catch (e) {
+			return e;
+		}
+	};
+	const CALL =
+		'select public.create_managed_profile($1, $2, $3, $4, $5, $6::public.app_role)';
+	const call = (actor, id, role) => {
+		const a = args(actor, id, role);
+		return [CALL, [a.p_actor, a.p_id, a.p_username, a.p_first, a.p_last, a.p_role]];
+	};
+
+	const targetA = await makeUser(`${MARK}_target_a`, null);
+	const targetB = await makeUser(`${MARK}_target_b`, null);
+	const targetC = await makeUser(`${MARK}_target_c`, null);
+	const targetD = await makeUser(`${MARK}_target_d`, null);
+
+	const byScout = await raises(...call(scout.id, targetA.id, 'scout'));
+	ok('a scout as actor cannot create an account', byScout?.code === '42501', byScout?.code);
+
+	const byStranger = await raises(
+		...call('00000000-0000-4000-8000-0000000000ff', targetA.id, 'scout')
+	);
+	ok('an actor with no profile cannot create an account', byStranger?.code === '42501', byStranger?.code);
+
+	const mgrMakesSuper = await raises(...call(manager.id, targetA.id, 'super'));
+	ok('a manager cannot create a super', mgrMakesSuper?.code === '42501', mgrMakesSuper?.code);
+
+	const mgrMakesManager = await raises(...call(manager.id, targetA.id, 'manager'));
+	ok('a manager cannot create a manager', mgrMakesManager?.code === '42501', mgrMakesManager?.code);
+
+	const mgrMakesScout = await raises(...call(manager.id, targetB.id, 'scout'));
+	ok('a manager creates a scout', mgrMakesScout === null, mgrMakesScout?.message);
+
+	const superMakesManager = await raises(...call(superUser.id, targetC.id, 'manager'));
+	ok('a super creates a manager', superMakesManager === null, superMakesManager?.message);
+
+	const superMakesSuper = await raises(...call(superUser.id, targetD.id, 'super'));
+	ok('a super creates a super', superMakesSuper === null, superMakesSuper?.message);
+
+	// The handed-over password is provisional, and the app relies on this flag to
+	// know it. A created account that did not carry it would sit on a password two
+	// people know, silently and forever.
+	const flags = await sql(
+		`select must_change_password from public.profiles where id = any($1::uuid[])`,
+		[[targetB.id, targetC.id, targetD.id]]
+	);
+	ok(
+		'a created account must change its password',
+		flags.length === 3 && flags.every((r) => r.must_change_password === true),
+		JSON.stringify(flags)
+	);
+
+	// A scout who registered by redeeming an invite chose their own password, so
+	// the flag must NOT be set for them — otherwise every existing user is asked
+	// to change a password they picked.
+	const seeded = await sql('select must_change_password from public.profiles where id = $1', [
+		scout.id
+	]);
+	ok('an invite-redeemed account is not flagged', seeded[0]?.must_change_password === false);
+
+	// ─── the generator and the constraint have to agree ─────────────────────
+	//
+	// generateUsername() lives in TypeScript in the Edge Function and
+	// username_shape lives in SQL in 0008, with nothing connecting them. Widening
+	// one would fail at account creation, in production, on a manager's phone,
+	// with a constraint name for a message.
+	//
+	// So assert the shape the function actually emits — two initials and six
+	// digits — against the live constraint, and assert the constraint still
+	// rejects something, so this cannot quietly pass by being switched off.
+	const generated = `hz${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}`;
+	const shapeOk = await raises(
+		`select 1 where $1 ~ (select substring(pg_get_constraintdef(oid) from '~ ''(.*)''::text')
+		 from pg_constraint where conname = 'username_shape')`,
+		[generated]
+	);
+	const [{ matches }] = await sql(
+		`select ($1 ~ '^[a-z0-9._-]{3,24}$') as matches`,
+		[generated]
+	);
+	ok(`the Edge Function's username shape is accepted (${generated})`, shapeOk === null && matches);
+
+	const [{ rejected }] = await sql(
+		`select (not ('Some_Name_That_Is_Far_Too_Long_Indeed' ~ '^[a-z0-9._-]{3,24}$')) as rejected`
+	);
+	ok('username_shape still rejects a bad username', rejected === true);
+}
+
 await reset();
 await db.end();
 

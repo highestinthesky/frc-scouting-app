@@ -9,17 +9,26 @@
 -- a static GitHub Pages bundle cannot hold that key. That constraint is the
 -- whole reason invite codes exist; see ROADMAP.md.
 --
--- ─── why the function cannot just INSERT ───────────────────────────────────
+-- ─── why the function does not just INSERT ─────────────────────────────────
 --
--- `service_role` holds no DML on any table in `public` on this project — only
--- REFERENCES, TRIGGER and TRUNCATE, which is the default for a new table here.
--- The Edge Function can therefore create the auth user and nothing else.
+-- Not because it cannot. Measured on the live project: `service_role` holds
+-- SELECT, INSERT and UPDATE on all ten tables in `public`, including profiles,
+-- and it bypasses RLS. The Edge Function could insert the row directly.
 --
--- So it calls create_managed_profile() instead: SECURITY DEFINER, granted to
--- service_role alone. That is better than widening the grants anyway. The
--- function is a named, reviewable operation with its own argument list, where
--- `GRANT INSERT ON profiles TO service_role` would be a standing capability
--- nothing constrains.
+-- An earlier draft of this comment said the opposite — that service_role held
+-- no DML — which was true of the local stack and false of production, the same
+-- environment drift 0018 documents. The conclusion survived the correction; the
+-- reason changed, so it is written down accurately here.
+--
+-- The real reason is the role check. A direct INSERT from the Edge Function
+-- would carry no notion of who asked for it: service_role bypasses RLS, so
+-- nothing downstream would stop a caller minting a `super`. create_managed_profile()
+-- takes p_actor and re-checks it, which is what makes "only a super may create a
+-- manager" true rather than merely intended.
+--
+-- So the boundary is a named operation with a fixed argument list, not a
+-- standing capability. That it is granted to service_role alone is the smaller
+-- half of the point.
 --
 -- ─── the temporary password has to be visible as temporary ─────────────────
 --
@@ -107,11 +116,14 @@ GRANT EXECUTE ON FUNCTION public.create_managed_profile(uuid, uuid, text, text, 
 -- ─── is a username already taken? ──────────────────────────────────────────
 --
 -- The Edge Function generates a username and needs to know whether to try
--- again. It cannot SELECT from profiles — no DML, no SELECT — so it asks.
+-- again. It could SELECT profiles directly — see the note above; service_role
+-- does hold SELECT — but a question this narrow is worth asking narrowly.
 --
 -- Returns only a boolean, never a row. That matters: email_for_username()
 -- already lets an anonymous caller turn a username into an address, and this
--- must not become a second, richer way to enumerate the roster.
+-- must not become a second, richer way to enumerate the roster. Keeping the
+-- Edge Function's reach to a boolean is what stops a bug there from spilling
+-- the roster, given that its key bypasses RLS entirely.
 
 CREATE OR REPLACE FUNCTION public.username_taken(p_username text)
 RETURNS boolean
