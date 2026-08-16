@@ -7,8 +7,8 @@
 	import { syncState, resync } from '$lib/sync.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
+	import EventPicker from '$lib/components/EventPicker.svelte';
 
-	let eventCode = $state(session.eventCode);
 	let scoutName = $state(session.scoutName);
 	let saving = $state(false);
 	let savedMsg = $state('');
@@ -19,10 +19,8 @@
 		saving = true;
 		savedMsg = '';
 		try {
-			await session.update({
-				eventCode: eventCode.trim().toLowerCase(),
-				scoutName: scoutName.trim()
-			});
+			// The event is the picker's to set — this form only owns the name now.
+			await session.update({ scoutName: scoutName.trim() });
 			savedMsg = 'Saved.';
 		} finally {
 			saving = false;
@@ -59,7 +57,10 @@
 	}
 
 	function statusLabel() {
-		if (!session.eventCode) return 'No event code set';
+		if (!session.eventCode) return 'No event chosen';
+		// Name the reason rather than showing a status that will never advance.
+		if (syncState.reason === 'signed-out') return 'Paused — sign in to sync';
+		if (syncState.reason === 'no-such-event') return 'Paused — not on this event';
 		if (syncState.status === 'connected') return 'Connected';
 		if (syncState.status === 'connecting') return 'Connecting…';
 		if (syncState.status === 'offline') return 'Offline';
@@ -109,13 +110,12 @@
 	<section>
 		<h2>Identity</h2>
 		<form onsubmit={saveSession}>
-			<label class="field">
-				<span class="label">Event code</span>
-				<small class="help">
-					Any code your team agrees on. Everyone using the same one shares data.
-				</small>
-				<input bind:value={eventCode} autocomplete="off" autocapitalize="none" placeholder="e.g. 2027nyc" />
-			</label>
+			<!-- Wrapped in the page's own .field rather than passing a class to the
+			     component: the scoping hash belongs to this file, so it lands on the
+			     div and never on the picker's internals. See CLAUDE.md. -->
+			<div class="field">
+				<EventPicker />
+			</div>
 
 			<label class="field">
 				<span class="label">Your name</span>

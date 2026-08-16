@@ -2,6 +2,7 @@
 	import { session } from '$lib/session.svelte.js';
 	import { base } from '$app/paths';
 	import { auth } from '$lib/auth.svelte.js';
+	import EventPicker from './EventPicker.svelte';
 
 	let eventCode = $state(session.eventCode);
 	let scoutName = $state(session.scoutName);
@@ -17,10 +18,13 @@
 		e.preventDefault();
 		saving = true;
 		try {
-			await session.update({
-				eventCode: eventCode.trim().toLowerCase(),
-				scoutName: scoutName.trim()
-			});
+			// Signed in, the picker already stored the event — do not overwrite it
+			// with this form's stale copy of the field it no longer renders.
+			await session.update(
+				auth.signedIn
+					? { scoutName: scoutName.trim() }
+					: { eventCode: eventCode.trim().toLowerCase(), scoutName: scoutName.trim() }
+			);
 		} finally {
 			saving = false;
 		}
@@ -31,11 +35,24 @@
 	<h1>Set up scouting</h1>
 
 	<form onsubmit={save}>
-		<label class="field">
-			<span class="label">Event code</span>
-			<small class="help">Whatever your team agreed on.</small>
-			<input bind:value={eventCode} required autocomplete="off" autocapitalize="none" placeholder="2026xxxx" />
-		</label>
+		{#if auth.signedIn}
+			<!-- Signed in, the event is a row the server can name, so this is a list
+			     rather than a guess. Choosing one fills session.eventCode, which is
+			     the condition this whole gate is shown on — so the app un-gates the
+			     moment an event is picked and there is nothing further to submit. -->
+			<div class="field">
+				<EventPicker />
+			</div>
+		{:else}
+			<label class="field">
+				<span class="label">Event code</span>
+				<small class="help">
+					Whatever your team agreed on. Entries are saved on this phone; sign in
+					to send them to your team.
+				</small>
+				<input bind:value={eventCode} required autocomplete="off" autocapitalize="none" placeholder="2026xxxx" />
+			</label>
+		{/if}
 
 		{#if knowsMe}
 			<p class="as">Scouting as <strong>{auth.displayName}</strong></p>
@@ -50,9 +67,11 @@
 			</label>
 		{/if}
 
-		<button type="submit" disabled={saving}>
-			{saving ? 'Saving…' : 'Start scouting'}
-		</button>
+		{#if !auth.signedIn || !knowsMe}
+			<button type="submit" disabled={saving}>
+				{saving ? 'Saving…' : 'Start scouting'}
+			</button>
+		{/if}
 	</form>
 </main>
 

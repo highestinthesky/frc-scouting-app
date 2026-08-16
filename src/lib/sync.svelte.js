@@ -115,7 +115,16 @@ export async function setEventCode(eventCode) {
 		return;
 	}
 	syncState.sessionId = await resolveEventId(next);
-	syncState.status = navigator.onLine ? 'connecting' : 'offline';
+	// 'idle' rather than 'connecting' when there is nothing to connect TO. A
+	// spinner that never resolves is the failure this whole reason field exists
+	// to prevent — it reads as a hang, and the scout waits instead of signing in.
+	// Reusing an existing status keeps every dot and badge that switches on it
+	// working without a new case.
+	syncState.status = !syncState.sessionId
+		? 'idle'
+		: navigator.onLine
+			? 'connecting'
+			: 'offline';
 	lastSeenAt = null; // do a full backfill whenever the scope changes
 	// New event = check schedule/assignments on the next tick, not 30s from now.
 	ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
@@ -223,7 +232,10 @@ async function tick() {
 		// here; eventIdForCode caches, so a resolved event costs nothing per tick.
 		if (!syncState.sessionId) {
 			syncState.sessionId = await resolveEventId(syncState.eventCode);
-			if (!syncState.sessionId) return;
+			if (!syncState.sessionId) {
+				syncState.status = 'idle';
+				return;
+			}
 		}
 		await pushOutbox();
 		await pullInbox();
