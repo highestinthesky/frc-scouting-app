@@ -34,6 +34,9 @@
 import { getAuthClient } from './supabase.js';
 // session.svelte.js imports only db.js, so this direction is acyclic.
 import { session } from './session.svelte.js';
+// Same direction: db.js never imports this module, which is the invariant that
+// keeps recording working without auth. auth calls db; db never calls auth.
+import { claimEntriesForAccount } from './db.js';
 import { scoutRef } from './scout-identity.js';
 
 /**
@@ -553,7 +556,37 @@ async function loadProfile(userId = null) {
 	state.orphaned = state.signedIn && !data;
 	if (data) cacheProfile(data);
 	else clearCachedProfile();
-	if (data) await adoptScoutName(data);
+	if (data) {
+		await adoptScoutName(data);
+		await claimRecordedEntries(data);
+	}
+}
+
+/**
+ * Attach this account to the entries this device recorded signed out.
+ *
+ * Here rather than only in signIn() because this is the one place a profile
+ * becomes known, and it runs on session restore too. A scout who recorded
+ * offline, closed the app and reopened it should not have to sign out and back
+ * in for their work to become theirs.
+ *
+ * Safe to run every time by construction: claimableRows() takes only this
+ * device's own unattributed rows, so a second run finds nothing.
+ *
+ * Failure is swallowed deliberately. Claiming is a repair, not a precondition —
+ * a scout whose IndexedDB is momentarily locked should still be signed in, and
+ * the next profile load tries again.
+ *
+ * @param {{id: string, first_name?: string, last_name?: string, username?: string}} profile
+ */
+async function claimRecordedEntries(profile) {
+	try {
+		const name =
+			`${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || profile.username || '';
+		await claimEntriesForAccount(profile.id, name);
+	} catch (_error) {
+		// Intentionally quiet. See above.
+	}
 }
 
 /**

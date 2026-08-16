@@ -7,6 +7,9 @@
 import Dexie from 'dexie';
 import { SCHEMA_VERSION } from './form-config.js';
 import { shouldApplyRemote } from './sync-rules.js';
+// Pure rules only. event-rules.js has no imports of its own, so this keeps the
+// write path free of auth.svelte.js — see claimEntriesForAccount below.
+import { claimableRows, claimRow } from './event-rules.js';
 
 export const db = new Dexie('frc-scout');
 
@@ -100,6 +103,71 @@ export async function addEntry(entry) {
 /** Get every entry, newest first. */
 export async function listEntries() {
 	return db.entries.orderBy('createdAt').reverse().toArray();
+}
+
+/**
+ * Attach an account to the entries this device recorded while signed out.
+ *
+ * Called on sign-in. Recording never depends on auth, so a scout with no
+ * session still writes here — and those rows have no account on them. Without
+ * this, an afternoon of scouting syncs as nobody's, and `submitted_by` cannot
+ * become the identity `scout_name` used to be.
+ *
+ * ─── the direction of the dependency matters ───────────────────────────────
+ *
+ * This module must not import auth.svelte.js — the write path stays free of it
+ * so a scout with an expired token, a revoked account or no signal still
+ * records. So the account is passed IN. auth calls db; db never calls auth.
+ *
+ * ─── why it is safe to run on every sign-in ────────────────────────────────
+ *
+ * claimableRows() takes only rows this device recorded that belong to nobody,
+ * so it cannot take a teammate's work and cannot rewrite attribution that
+ * already exists. Both make it idempotent, which it has to be: sign-in happens
+ * many times.
+ *
+ * Unsynced rows never left the phone, which is what makes a local claim
+ * sufficient and a server-side claim RPC unnecessary. Rows that HAVE been
+ * pushed already carry their attribution from the server.
+ *
+ * @param {string} profileId    the account signing in
+ * @param {string} [displayName] used only to fill a blank scout name
+ * @returns {Promise<number>}   how many rows were claimed
+ */
+export async function claimEntriesForAccount(profileId, displayName = '') {
+	if (!profileId) return 0;
+	const clientId = await getOrCreateClientId();
+	if (!clientId) return 0;
+
+	// Synced rows are candidates too, not just queued ones. A row recorded before
+	// sync required a session could have reached the server with a null
+	// submitted_by, and that copy is still unattributed. Claiming it locally and
+	// re-queueing is what repairs it.
+	//
+	// A scan rather than an index. `clientId` is not indexed, and adding it means
+	// a Dexie version bump — the one change that runs exactly once per device, in
+	// the field, against the user's only copy of their data. That is a bad trade
+	// for a query that runs once per sign-in over a few hundred rows.
+	// getUnsyncedEntries() scans for the same reason, on every tick.
+	const rows = await db.entries.filter((e) => e.clientId === clientId).toArray();
+	const claimable = claimableRows(rows, clientId);
+	if (claimable.length === 0) return 0;
+
+	await db.transaction('rw', db.entries, async () => {
+		for (const row of claimable) {
+			const claimed = claimRow(row, profileId, displayName);
+			await db.entries.update(row.id, {
+				submittedBy: claimed.submittedBy,
+				scoutName: claimed.scoutName,
+				// pendingSync is what getUnsyncedEntries() looks at, so this is what
+				// sends the new attribution up. A row that was never pushed has a null
+				// remoteId and is already in that set; setting the flag is harmless
+				// there and necessary for one that was.
+				pendingSync: true
+			});
+		}
+	});
+	return claimable.length;
 }
 
 /** Delete a single entry by id. */
