@@ -13,7 +13,8 @@
 // We prune entries whose expiry has passed so the map doesn't grow
 // forever.
 
-import { createSupabaseClient, deriveSessionId } from './supabase.js';
+import { createSupabaseClient } from './supabase.js';
+import { scopeIdForCode } from './events.js';
 import { getSetting, setSetting } from './db.js';
 import { reminderTarget } from './planning-rows.js';
 import { teamsInMatch } from './tba.js';
@@ -32,7 +33,7 @@ const DISMISSED_KEY = 'dismissedReminders';
 export async function listReminders(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return [];
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return [];
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
@@ -63,12 +64,14 @@ export async function createReminder(eventCode, opts) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) throw new Error('No event code.');
 	if (!opts?.message?.trim()) throw new Error('Reminder message is empty.');
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
 	const target = reminderTarget(opts.scoutName, opts.roster);
 	const row = {
 		session_id: sid,
+		// Same uuid, both columns — see the expand note in sync.svelte.js.
+		event_id: sid,
 		event_code: code,
 		...target,
 		match_number: Number.isFinite(opts.matchNumber) ? opts.matchNumber : null,
@@ -94,7 +97,7 @@ export async function createReminder(eventCode, opts) {
  * @param {string} managerToken
  */
 export async function deleteReminder(eventCode, reminderId, managerToken) {
-	const sid = await deriveSessionId(eventCode);
+	const sid = await scopeIdForCode(eventCode);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken });
 	const { error } = await client.from('reminders').delete().eq('id', reminderId);

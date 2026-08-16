@@ -98,6 +98,53 @@ export async function eventIdForCode(code) {
 }
 
 /**
+ * The uuid that scopes this event's shared rows, for the manager surfaces that
+ * still run without a session.
+ *
+ * ─── why this exists and why it is temporary ───────────────────────────────
+ *
+ * Entry sync uses eventIdForCode() and refuses to run signed out, which is the
+ * "record but do not sync" rule. The manager surfaces cannot do that yet:
+ * AUTH_ENFORCED is false, so a device holding the passphrase is still a manager
+ * as far as production is concerned, and switching those modules to a
+ * session-only lookup would lock them out before the replacement exists.
+ *
+ * Mixing the two is what makes this necessary. If entries used the real event
+ * id and assignments used the hash, a NEW event would partition them under two
+ * different uuids and a manager would see a schedule with no entries under it.
+ *
+ * The fallback is safe rather than merely convenient, and the reason is worth
+ * stating because it is what makes the transition sound:
+ *
+ *   - New events (id is random, id ≠ hash) can only be created through
+ *     create_event(), which requires a session. So a signed-out device can
+ *     never be looking at one.
+ *   - Events that predate 0019 have id == the old session_id == the hash,
+ *     because the backfill reused it deliberately. Both paths return the same
+ *     uuid.
+ *
+ * So the two branches agree wherever both are reachable. This whole function
+ * goes away with managerToken.
+ *
+ * @param {string} code
+ * @returns {Promise<string|null>}
+ */
+export async function scopeIdForCode(code) {
+	const { auth } = await import('./auth.svelte.js');
+	if (auth.signedIn) {
+		try {
+			const id = await eventIdForCode(code);
+			if (id) return id;
+		} catch (_error) {
+			// Fall through to the legacy derivation rather than stranding a manager
+			// mid-event on a network blip.
+		}
+	}
+	const { deriveSessionId } = await import('./supabase.js');
+	return deriveSessionId(code);
+}
+
+/**
  * Create an event and join it, in one call.
  *
  * Goes through the create_event RPC rather than an INSERT because creating and

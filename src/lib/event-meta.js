@@ -7,7 +7,8 @@
 // hash is what `has_manager_token()` checks server-side when gating writes
 // to `schedules` and `assignments`.
 
-import { createSupabaseClient, deriveSessionId, hashManagerToken } from './supabase.js';
+import { createSupabaseClient, hashManagerToken } from './supabase.js';
+import { scopeIdForCode } from './events.js';
 
 /**
  * Has a manager passphrase been set for this event yet?
@@ -18,7 +19,7 @@ import { createSupabaseClient, deriveSessionId, hashManagerToken } from './supab
 export async function isPassphraseSet(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return false;
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return false;
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
@@ -42,12 +43,14 @@ export async function setPassphrase(eventCode, passphrase) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) throw new Error('No event code.');
 	if (!passphrase || !passphrase.trim()) throw new Error('Passphrase is empty.');
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const token = await hashManagerToken(passphrase.trim(), code);
 	const client = createSupabaseClient(sid);
 	const { error } = await client.from('event_meta').insert({
 		session_id: sid,
+		// Same uuid, both columns — see the expand note in sync.svelte.js.
+		event_id: sid,
 		event_code: code,
 		manager_token: token
 	});
@@ -76,7 +79,7 @@ export async function setPassphrase(eventCode, passphrase) {
 export async function verifyPassphrase(eventCode, passphrase) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return { ok: false, token: '' };
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return { ok: false, token: '' };
 	const token = await hashManagerToken((passphrase ?? '').trim(), code);
 	const client = createSupabaseClient(sid, { managerToken: token });
@@ -104,7 +107,7 @@ export async function rotatePassphrase(eventCode, currentToken, newPassphrase) {
 	if (!code) throw new Error('No event code.');
 	if (!currentToken) throw new Error('Current manager token missing on this device.');
 	if (!newPassphrase || !newPassphrase.trim()) throw new Error('New passphrase is empty.');
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const newToken = await hashManagerToken(newPassphrase.trim(), code);
 	const client = createSupabaseClient(sid, { managerToken: currentToken });
@@ -137,7 +140,7 @@ export async function resetEventData(eventCode, managerToken) {
 	if (!managerToken) {
 		throw new Error('Manager passphrase required on this device to reset.');
 	}
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken });
 	const { error } = await client.rpc('reset_event_data');

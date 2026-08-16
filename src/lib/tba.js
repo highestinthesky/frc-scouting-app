@@ -19,7 +19,8 @@
 
 import { getSetting, setSetting } from './db.js';
 import { scoutRef, rowScout, sameScout } from './scout-identity.js';
-import { createSupabaseClient, deriveSessionId } from './supabase.js';
+import { createSupabaseClient } from './supabase.js';
+import { scopeIdForCode } from './events.js';
 
 const TBA_BASE = 'https://www.thebluealliance.com/api/v3';
 
@@ -179,7 +180,7 @@ async function cacheAlliances(eventCode, alliances, fetchedAt) {
 export async function publishAlliances(eventCode, alliances, opts = {}) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code || !Array.isArray(alliances)) return false;
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return false;
 	try {
 		const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
@@ -208,7 +209,7 @@ export async function publishAlliances(eventCode, alliances, opts = {}) {
 export async function pullAlliances(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return null;
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return null;
 	try {
 		const client = createSupabaseClient(sid);
@@ -284,13 +285,15 @@ export async function publishSchedule(eventCode, matches, opts = {}) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) throw new Error('No event code.');
 	if (!Array.isArray(matches)) throw new Error('publishSchedule requires a match array.');
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) throw new Error('Could not derive session id from event code.');
 	const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
 	const fetchedAt = new Date().toISOString();
 	const tbaEventKey = (opts.tbaEventKey ?? '').trim().toLowerCase() || null;
 	const baseRow = {
 		session_id: sid,
+		// Same uuid, both columns — see the expand note in sync.svelte.js.
+		event_id: sid,
 		event_code: code,
 		matches,
 		fetched_at: fetchedAt,
@@ -333,7 +336,7 @@ function isMissingColumn(err, column) {
 export async function pullSchedule(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return null;
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return null;
 	const client = createSupabaseClient(sid);
 	// Try selecting the TBA key column; fall back if the DB predates 0006.
@@ -374,7 +377,7 @@ export async function pullSchedule(eventCode) {
 export async function getPublishedTbaEventKey(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return null;
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return null;
 	try {
 		const client = createSupabaseClient(sid);
@@ -402,7 +405,7 @@ export async function getPublishedTbaEventKey(eventCode) {
 export async function pullScheduleIfStale(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return false;
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return false;
 	const client = createSupabaseClient(sid);
 	// First just ask for the timestamp.

@@ -16,7 +16,8 @@
 // scout sees their last-known assignments offline; the next online tick
 // freshens it.
 
-import { createSupabaseClient, deriveSessionId } from './supabase.js';
+import { createSupabaseClient } from './supabase.js';
+import { scopeIdForCode } from './events.js';
 import { session } from './session.svelte.js';
 import { rowScout, sameScout } from './scout-identity.js';
 import { assignmentRows, overrideRows } from './planning-rows.js';
@@ -39,7 +40,7 @@ export async function replaceAssignments(eventCode, rows, opts) {
 	if (!opts?.managerToken && opts?.managerToken !== '') {
 		// Allow empty-string explicitly for bootstrap (no passphrase set yet).
 	}
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken: opts?.managerToken ?? '' });
 
@@ -69,7 +70,7 @@ export async function replaceAssignments(eventCode, rows, opts) {
 export async function listAssignments(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return [];
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return [];
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
@@ -151,7 +152,7 @@ export async function pullAndApplyForScout(eventCode, me) {
 export async function listOverrides(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return [];
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return [];
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
@@ -177,7 +178,7 @@ export async function addOverride(
 	roster
 ) {
 	const code = (eventCode ?? '').trim().toLowerCase();
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken });
 	const [row] = overrideRows(
@@ -212,7 +213,7 @@ export async function addOverride(
 export async function replaceOverrides(eventCode, rows, opts) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) throw new Error('No event code.');
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken: opts?.managerToken ?? '' });
 
@@ -245,7 +246,7 @@ export async function replaceOverrides(eventCode, rows, opts) {
  * @param {string} managerToken
  */
 export async function removeOverride(eventCode, id, managerToken) {
-	const sid = await deriveSessionId(eventCode);
+	const sid = await scopeIdForCode(eventCode);
 	if (!sid) throw new Error('Could not derive session id.');
 	const client = createSupabaseClient(sid, { managerToken });
 	const { error } = await client.from('assignment_overrides').delete().eq('id', id);

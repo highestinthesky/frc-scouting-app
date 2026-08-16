@@ -13,7 +13,8 @@
 // there for why. This file is the plumbing.
 
 import { db } from './db.js';
-import { createSupabaseClient, deriveSessionId } from './supabase.js';
+import { createSupabaseClient } from './supabase.js';
+import { scopeIdForCode } from './events.js';
 import {
 	mergeRows,
 	ordered,
@@ -159,7 +160,7 @@ export async function putWeights(eventCode, weights) {
  */
 export async function syncWeights(eventCode, opts = {}) {
 	const code = norm(eventCode);
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return null;
 
 	const mine = await localWeights(code);
@@ -193,6 +194,8 @@ export async function syncWeights(eventCode, opts = {}) {
 			const { error } = await client.from('picklist_prefs').upsert(
 				{
 					session_id: sid,
+					// Same uuid, both columns — see the expand note in sync.svelte.js.
+					event_id: sid,
 					event_code: code,
 					weights: mine.weights,
 					updated_by: opts.updatedBy ?? null
@@ -221,7 +224,7 @@ export async function syncWeights(eventCode, opts = {}) {
  */
 export async function pull(eventCode) {
 	const code = norm(eventCode);
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return false;
 
 	const client = createSupabaseClient(sid);
@@ -278,7 +281,7 @@ export async function pull(eventCode) {
  */
 export async function push(eventCode, { managerToken, updatedBy } = {}) {
 	const code = norm(eventCode);
-	const sid = await deriveSessionId(code);
+	const sid = await scopeIdForCode(code);
 	if (!sid) return 0;
 
 	const pending = await localPending(code);
@@ -307,6 +310,8 @@ export async function push(eventCode, { managerToken, updatedBy } = {}) {
 		const { error } = await client.from('picklist').upsert(
 			live.map((r) => ({
 				session_id: sid,
+				// Same uuid, both columns — see the expand note in sync.svelte.js.
+				event_id: sid,
 				event_code: code,
 				team_number: r.teamNumber,
 				status: r.status,

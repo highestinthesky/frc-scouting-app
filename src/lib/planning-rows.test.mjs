@@ -28,6 +28,11 @@ const ctx = { sessionId: 'sid-1', eventCode: 'evt', roster };
 {
 	const [row] = assignmentRows([{ scout_name: 'Ning', team_number: 3419 }], ctx);
 	ok('an assignment carries the account', row.profile_id === 'u1');
+	// Both columns, same value, for the length of 0019's expand window. Dropping
+	// either one silently halves which policy path can permit the write:
+	// session_id carries the pre-0019 policies, event_id the membership ones.
+	ok('an assignment carries the event id', row.event_id === 'sid-1', String(row.event_id));
+	ok('and still carries session_id beside it', row.session_id === 'sid-1');
 	ok('an assignment still carries the name', row.scout_name === 'Ning');
 	ok('an assignment carries the event scope', row.session_id === 'sid-1' && row.event_code === 'evt');
 	ok('the team number is a number', row.team_number === 3419);

@@ -14,7 +14,8 @@
 // sync: the local Dexie `entries` table and the cloud `entries` row set
 // scoped to our event.
 
-import { createSupabaseClient, deriveSessionId } from './supabase.js';
+import { createSupabaseClient } from './supabase.js';
+import { eventIdForCode } from './events.js';
 import {
 	getOrCreateClientId,
 	getUnsyncedEntries,
@@ -49,8 +50,19 @@ export const syncState = $state({
 	error: /** @type {string | null} */ (null),
 	/** Lower-cased event code currently scoping pull. */
 	eventCode: /** @type {string | null} */ (null),
-	/** Derived session_id for the current event. */
+	/**
+	 * The current event's id — a real events.id since 0019, not a hash of the
+	 * code. Null means sync is paused, and `reason` says why.
+	 */
 	sessionId: /** @type {string | null} */ (null),
+	/**
+	 * Why sync is paused, when it is. Recording is unaffected either way — that
+	 * invariant does not move — but the UI has to be able to say so, because
+	 * "my entries aren't appearing" is otherwise indistinguishable from a bug.
+	 *
+	 * null | 'signed-out' | 'no-such-event'
+	 */
+	reason: /** @type {string | null} */ (null),
 	/** Incremented every time a peer's row is inserted locally. Pages watch
 	 * this to know when their `entries` view is stale. */
 	inboundChanges: 0
@@ -98,10 +110,11 @@ export async function setEventCode(eventCode) {
 	syncState.eventCode = next || null;
 	if (!next) {
 		syncState.sessionId = null;
+		syncState.reason = null;
 		syncState.status = 'idle';
 		return;
 	}
-	syncState.sessionId = await deriveSessionId(next);
+	syncState.sessionId = await resolveEventId(next);
 	syncState.status = navigator.onLine ? 'connecting' : 'offline';
 	lastSeenAt = null; // do a full backfill whenever the scope changes
 	// New event = check schedule/assignments on the next tick, not 30s from now.
@@ -146,6 +159,41 @@ export function resync() {
 	scheduleTick(0);
 }
 
+/**
+ * The event id for a code, or null with a reason on syncState.
+ *
+ * Where deriveSessionId() hashed a public string and always succeeded, this
+ * reads a row and can legitimately fail. Two failures are normal rather than
+ * exceptional, and both mean "do not sync" rather than "something is broken":
+ *
+ *   signed-out     0019 grants `events` to `authenticated` and nobody else, so
+ *                  there is no id to fetch. This is the "record but do not
+ *                  sync" rule falling out of the schema rather than being
+ *                  enforced by a second check that could disagree with it.
+ *   no-such-event  the event has not been created, or this device is not a
+ *                  member. RLS makes those indistinguishable on purpose.
+ *
+ * Recording keeps working in both cases. Only the push and pull pause.
+ *
+ * @param {string} code
+ * @returns {Promise<string|null>}
+ */
+async function resolveEventId(code) {
+	if (!auth.signedIn) {
+		syncState.reason = 'signed-out';
+		return null;
+	}
+	try {
+		const id = await eventIdForCode(code);
+		syncState.reason = id ? null : 'no-such-event';
+		return id;
+	} catch (_error) {
+		// A network failure is not "no such event" — leaving reason unset keeps
+		// the status machine's own error handling in charge.
+		return null;
+	}
+}
+
 function onOnline() {
 	syncState.status = 'connecting';
 	scheduleTick(0);
@@ -168,7 +216,15 @@ async function tick() {
 			syncState.status = 'offline';
 			return;
 		}
-		if (!syncState.eventCode || !syncState.sessionId) return;
+		if (!syncState.eventCode) return;
+		// The id may not have resolved when the code was set — a device that opens
+		// the app signed out, or before its membership was added, gets null there
+		// and would otherwise stay paused until the code was re-entered. Retry
+		// here; eventIdForCode caches, so a resolved event costs nothing per tick.
+		if (!syncState.sessionId) {
+			syncState.sessionId = await resolveEventId(syncState.eventCode);
+			if (!syncState.sessionId) return;
+		}
 		await pushOutbox();
 		await pullInbox();
 		// Best-effort: keep the cached schedule and this scout's assigned
@@ -210,11 +266,20 @@ async function pushOutbox() {
 		// An entry's eventCode field is its source of truth — we push to
 		// THAT event's scope, not the user's currently-selected one. This
 		// way switching events doesn't strand entries from a previous one.
-		const sid = await deriveSessionId(local.eventCode);
+		const sid = await eventIdForCode(local.eventCode);
+		// No id means the event does not exist or this device is not on it. Skip
+		// rather than fail: the row stays queued locally and goes up the moment a
+		// manager creates the event or adds this scout to it. Nothing is lost.
 		if (!sid) continue;
 		const client = clientFor(sid);
 		const row = {
+			// Both columns, same value, for as long as 0019's expand window lasts.
+			// session_id still carries the pre-0019 policies and event_id carries
+			// the membership ones, so writing both means either path can permit the
+			// row and neither deploy has to be simultaneous. The contract migration
+			// drops session_id and this becomes one line.
 			session_id: sid,
+			event_id: sid,
 			event_code: local.eventCode,
 			match_number: local.matchNumber,
 			team_number: local.teamNumber,
