@@ -41,12 +41,24 @@ survive Phase 3. Phase 4 writes the replacement and borrows most of `0011`:
 membership, the attribution trigger, role gating and passphrase removal are all
 still right. See `ROADMAP.md`.
 
-**`AUTH_ENFORCED` and migration `0011` flip in the same deploy.** The flag alone
-locks the UI while the data stays open to anyone holding the event code, which
-is published on The Blue Alliance. `0011` alone locks the data while the UI
-still offers the passphrase and every write silently fails. `src/lib/auth.test.mjs`
-asserts the flag is still `false`; that assertion is a **tripwire**, so when it
-fires the cutover is what gets finished and the assertion is what changes last.
+**`AUTH_ENFORCED` flips with the CONTRACT migration, not with `0011`.** This
+rule used to name `0011`, and `0019` superseded it — the reasoning is unchanged
+but the other half of the pair moved, so read it carefully.
+
+The flag alone locks the UI while the data stays open to anyone holding the
+event code, which is published on The Blue Alliance. The migration alone locks
+the data while the UI still offers the passphrase and every write silently
+fails. Both halves, one deploy.
+
+`0019` is **expand**, so it is explicitly *not* that migration: it adds the
+membership policies beside the `session_id` ones, and Postgres ORs permissive
+policies together. Anon can still read production through `x-session-id` today.
+Phase 4c — dropping `session_id` and the old policies — is what closes that, and
+that is the deploy the flag belongs to.
+
+`src/lib/auth.test.mjs` asserts the flag is still `false`; that assertion is a
+**tripwire**, so when it fires the cutover is what gets finished and the
+assertion is what changes last.
 
 **The `entries` dedupe index is a content fingerprint** —
 `[eventCode+matchNumber+teamNumber+scoutName+createdAt]`. Sync relies on it
@@ -81,9 +93,24 @@ restriction is load-bearing: the name is still the join key, so overwriting one
 a device already had would silently detach it from every assignment, override
 and reminder addressed to the old spelling.
 
-**The event code is going away — in v0.6 Phase 4, not before.** It is still the
-`session_id` partition on every shared table, so nothing may assume otherwise
-yet. `docs/adr-001-auth.md` says accounts replace the passphrase and not the
+**The event code is now a label, and `session_id` is still live.** `0019` made
+events real rows with membership deciding access, so knowing a code grants
+nothing — but `session_id` remains on all eight tables with its old policies
+intact, because `0019` is expand. Every write sets **both** `session_id` and
+`event_id` to the same uuid until Phase 4c drops one. `events.code` survives
+that: The Blue Alliance's API is keyed on it and the schedule import needs it.
+
+Two resolvers exist during the window and the difference matters.
+`eventIdForCode()` is strict and needs a session — entry sync uses it, which is
+what makes "record but do not sync" fall out of the schema. `scopeIdForCode()`
+falls back to the old hash for the manager surfaces, which cannot require a
+session while `AUTH_ENFORCED` is false. That fallback is sound because new
+events only exist for signed-in users (`create_event` requires auth) and
+pre-`0019` events have `id == hash`, so the branches agree wherever both are
+reachable. It dies with `managerToken`.
+
+The original note read: *the event code is going away in Phase 4, not before —
+it is still the `session_id` partition on every shared table.* `docs/adr-001-auth.md` says accounts replace the passphrase and not the
 event code; the v0.6 draft supersedes that, replacing it with an `events` table
 and an `event_scouts` membership join.
 

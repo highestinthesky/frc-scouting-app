@@ -269,7 +269,29 @@ sitting alongside the `session_id` policies rather than replacing them.
 108 RLS assertions cover it, all mutation-tested. Two bugs were found by that
 suite and are written up in `0019`'s header and in `CLAUDE.md`.
 
-**4b — the client. Not started.** This is the remaining work:
+**4b — the client. Mostly done (v0.67–v0.69).**
+
+Shipped: `event-rules.js` (pure) and `events.js` (I/O); claim-on-sign-in wired
+into `loadProfile()` so it runs on session restore too; every shared write
+carries `event_id` beside `session_id`; entry sync resolves a real event id and
+pauses with a named reason when it cannot; `EventPicker` replaced the free-text
+code field in **both** places it appeared — Settings and the first-run
+`SessionSetup` gate.
+
+Still open:
+
+- `managerToken` removal — 62 references across 9 files. Now unblocked in
+  principle: `0019`'s `manages_event()` policies are live on production, so a
+  signed-in manager who is a member can already write without the passphrase.
+  Removing it collapses `canManage`/`showsManagerTools` to the role, which is
+  effectively flipping `AUTH_ENFORCED` for the manager surfaces — so it wants
+  to land near 4c rather than alone.
+- `scout_name` stops being a join key. It stays as a display label and as part
+  of the dedupe fingerprint, which is content and must not gain identity.
+- The signed-in picker has not been looked at by a human. Its logic is tested;
+  its appearance is not.
+
+The original 4b list, for reference:
 
 - Replace `deriveSessionId(eventCode)` with a real event id from `events`. The
   event picker becomes a list of events the device is a member of — a question
