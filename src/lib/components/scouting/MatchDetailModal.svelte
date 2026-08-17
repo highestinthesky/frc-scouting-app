@@ -375,7 +375,7 @@
 	}
 	@media (max-width: 28rem) {
 		.modal-card { max-width: 100%; }
-		.mb-form { grid-template-columns: 1fr; }
+		.mb-form { grid-template-columns: minmax(0, 1fr); }
 	}
 	@keyframes fadein {
 		from { opacity: 0; }

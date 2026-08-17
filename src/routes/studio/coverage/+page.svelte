@@ -185,7 +185,7 @@
 		margin: var(--space-1) 0 0;
 		color: var(--text-muted);
 		font-size: var(--fs-sm);
-		max-width: 42rem;
+		max-width: var(--w-board); /* a coverage grid is dense by nature */
 	}
 	h2 {
 		margin: 0 0 var(--space-1);
@@ -198,7 +198,7 @@
 		color: var(--text-muted);
 		font-size: var(--fs-sm);
 		margin: 0 0 var(--space-2);
-		max-width: 42rem;
+		max-width: var(--w-board); /* a coverage grid is dense by nature */
 	}
 	.err {
 		color: var(--danger);
@@ -207,7 +207,7 @@
 
 	.tiles {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(11rem, minmax(0, 1fr)));
 		gap: var(--space-3);
 	}
 	.tile {

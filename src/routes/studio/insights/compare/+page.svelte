@@ -324,7 +324,7 @@
 
 	.grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(16rem, minmax(0, 1fr)));
 		gap: var(--space-3);
 	}
 	.col {

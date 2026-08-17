@@ -499,5 +499,37 @@ for (const [label, file] of [
 	}
 }
 
+
+// ─── no grid track may refuse to shrink ────────────────────────────────────
+//
+// A bare `1fr` track will not go below its content's min-content width, so a
+// text input or a nav row holds the whole grid wider than the viewport and the
+// PAGE scrolls sideways. `minmax(0, 1fr)` is identical except that it may
+// shrink.
+//
+// This is here because it shipped three times: the Accounts form at 375px, the
+// Studio sidebar on a phone, and eleven tracks found in the sweep between them.
+// It is invisible in review — `1fr` looks like exactly what you meant — and only
+// shows up on a narrow screen, which is the screen this app is for.
+{
+	const offenders = [];
+	for (const abs of readdirRecursive(path.join(root, 'src')).filter((f) => f.endsWith('.svelte'))) {
+		const rel = path.relative(root, abs);
+		const src = readFileSync(abs, 'utf8');
+		for (const m of src.matchAll(/grid-template-columns:\s*([^;]+);/g)) {
+			// A bare `<n>fr` not already wrapped in minmax().
+			const withoutMinmax = m[1].replace(/minmax\([^)]*\)/g, '');
+			if (/(?:^|[\s,])\d*fr\b/.test(withoutMinmax)) {
+				offenders.push(`${rel}: ${m[0].trim()}`);
+			}
+		}
+	}
+	ok(
+		'every grid track may shrink (minmax(0, 1fr), not 1fr)',
+		offenders.length === 0,
+		offenders.slice(0, 3).join(' | ')
+	);
+}
+
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

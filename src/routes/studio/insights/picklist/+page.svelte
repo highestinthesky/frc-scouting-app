@@ -730,7 +730,7 @@
 	.weights { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }
 	.weight {
 		display: grid;
-		grid-template-columns: minmax(6rem, 9rem) 1fr 2.5rem;
+		grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr) 2.5rem;
 		align-items: center;
 		gap: var(--space-2);
 		font-size: var(--fs-sm);

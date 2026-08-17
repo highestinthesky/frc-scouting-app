@@ -168,6 +168,6 @@
 	}
 	.rr-x:hover { color: var(--danger); }
 	@media (max-width: 28rem) {
-		.reminder-form { grid-template-columns: 1fr; }
+		.reminder-form { grid-template-columns: minmax(0, 1fr); }
 	}
 </style>

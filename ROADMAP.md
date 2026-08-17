@@ -520,12 +520,24 @@ a peer of Scout and Schedule, it is a different application.
    before it checks connectivity. Verified: offline shows 2 waiting with 2
    actually queued, and the queue drains to 0 on reconnect.
 
-8. **The shell earns its space.** One breakpoint system replaces the four ad-hoc
-   values (`28rem`, `40rem`, `47.9375rem`, `600px`). Desktop stops being a phone
-   in the middle of a screen: content width becomes a per-surface decision — a
-   form stays narrow because line length is readability, a board goes wide
-   because density is the point. The top bar slims; it currently spends a
-   full-width band on an event code, a name and a role chip.
+8. **The shell earns its space. ✅** Width is a decision about the content, not
+   the device, and it is expressed once: `--w-form` 34rem (a column of fields),
+   `--w-read` 42rem (prose), `--w-list` 60rem (cards and entry lists),
+   `--w-board` 78rem (tables and coverage grids). Every page used to pick its own
+   number — 38rem here, 32rem there, 42rem in the bar — so a 1440px screen showed
+   a 672px column and no two surfaces agreed why. The entry list now runs to
+   960px there; a form stays narrow, because a 900px text input is harder to use,
+   not easier.
+
+   The app bar aligns to `--w-list`, the busiest surface under it. Aligning it to
+   the widest instead left its text starting well left of the content it sits
+   above, which reads as two pages stacked.
+
+   The overflowing bar is fixed too — see the v0.72 note. And 22 grid tracks that
+   could not shrink are now `minmax(0, 1fr)`, with a check that fails the build
+   on a bare `fr`: it shipped three times, it is invisible in review because
+   `1fr` looks like exactly what you meant, and it only appears on a narrow
+   screen, which is the screen this app is for.
 
 9. **Identity without typing. ✅ partly — `0023`.** The invite now carries the
    name the manager typed, and `redeem_invite` uses it rather than whatever the

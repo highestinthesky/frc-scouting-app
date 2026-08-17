@@ -396,6 +396,28 @@
 		   guessed. Tracks the bar's own padding + line-height, plus the notch. */
 		--app-bar-h: calc(2.75rem + var(--space-2) * 2 + env(safe-area-inset-top, 0px));
 
+		/* ─── how wide content is allowed to get ────────────────────────────────
+		 *
+		 * Every page picked its own number before this — 38rem here, 32rem there,
+		 * 42rem in the bar — so a 1280px screen showed a 672px column with a third
+		 * of the window empty, and no two surfaces agreed on why.
+		 *
+		 * Width is a decision about the CONTENT, not the device. A form stays
+		 * narrow because line length is readability and a 900px-wide text input is
+		 * harder to use, not easier. A list of cards or a table goes wide because
+		 * density is the whole point — a manager comparing teams wants more rows
+		 * visible, not more whitespace.
+		 *
+		 * Breakpoints stay literal in @media because custom properties cannot be
+		 * used there. The scale is 30rem / 40rem / 64rem — phone, tablet, desktop —
+		 * and it replaces the four ad-hoc values that were in use (28rem, 40rem,
+		 * 47.9375rem, 600px).
+		 */
+		--w-form: 34rem;   /* one column of fields */
+		--w-read: 42rem;   /* prose, settings, anything mostly sentences */
+		--w-list: 60rem;   /* cards and entry lists */
+		--w-board: 78rem;  /* tables, coverage grids, anything dense */
+
 		/* App-bar palette. Deliberately NOT redefined in the dark block: the bar
 		   is identity, not a surface, and stays team purple in both themes. The
 		   status dots sit on that fixed purple, so they are fixed too — a token
@@ -550,7 +572,12 @@
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.app-bar-inner {
-		max-width: 42rem;
+		/* Aligned to --w-list, the width of the busiest surface under it.
+		   --w-board left the bar's text starting well left of the content it sits
+		   above, which reads as two pages stacked; a bar WIDER than a narrow form
+		   is just a header and looks right. Align to the common case, not the
+		   widest one. */
+		max-width: var(--w-list);
 		margin: 0 auto;
 		display: flex;
 		align-items: center;

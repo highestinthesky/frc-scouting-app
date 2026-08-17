@@ -117,7 +117,7 @@
 
 	.studio {
 		display: grid;
-		grid-template-columns: 14rem 1fr;
+		grid-template-columns: 14rem minmax(0, 1fr);
 		gap: var(--space-5);
 		align-items: start;
 		padding: var(--space-4);
@@ -132,7 +132,7 @@
 	   one thing, and a 14rem column beside content at 375px is unreadable. */
 	@media (max-width: 47.9375rem) {
 		.studio {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 			gap: var(--space-3);
 		}
 		nav ul {
