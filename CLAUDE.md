@@ -33,32 +33,31 @@ Access tokens last **four days**, not the Supabase default hour — see the sess
 settings below. That makes a refresh during an event unlikely rather than
 hourly, which is belt to this braces, not a replacement for it.
 
-**`0011`, `0012` and `0015` are on hold — do not apply them.** `0011` hardens
-policies keyed on the hashed event code, which v0.6 Phase 4 replaces with a real
-`event_id`, so applying it is a one-way door onto a model with a known expiry
-date. `0012` follows it, and `0015` extends invite expiry when invites may not
-survive Phase 3. Phase 4 writes the replacement and borrows most of `0011`:
-membership, the attribution trigger, role gating and passphrase removal are all
-still right. See `ROADMAP.md`.
+**`0011`, `0012` and `0013` live in `supabase/superseded/`, not `migrations/`.**
+None was ever applied to production. `0019` and `0020` replaced them and
+borrowed what was right: membership gating, role gating, the attribution trigger
+and passphrase removal. `0020` still drops `0011`'s policy names so a database
+that did receive them converges.
 
-**`AUTH_ENFORCED` flips with the CONTRACT migration, not with `0011`.** This
-rule used to name `0011`, and `0019` superseded it — the reasoning is unchanged
-but the other half of the pair moved, so read it carefully.
+Filename order is why they had to leave rather than sit unapplied: a local
+`db reset` applies everything in `migrations/`, so leaving them there builds a
+shape production will never have — which is the rehearsal-fidelity problem this
+file keeps returning to.
 
-The flag alone locks the UI while the data stays open to anyone holding the
-event code, which is published on The Blue Alliance. The migration alone locks
-the data while the UI still offers the passphrase and every write silently
-fails. Both halves, one deploy.
+**The cutover happened.** `AUTH_ENFORCED` is `true` and `0020` is written; the
+two flip together and neither is safe alone. The flag alone locks the UI while
+the data stays open to anyone holding the event code, which is published on The
+Blue Alliance; the migration alone locks the data while the UI still offers a
+passphrase and every write silently fails.
 
-`0019` is **expand**, so it is explicitly *not* that migration: it adds the
-membership policies beside the `session_id` ones, and Postgres ORs permissive
-policies together. Anon can still read production through `x-session-id` today.
-Phase 4c — dropping `session_id` and the old policies — is what closes that, and
-that is the deploy the flag belongs to.
+`src/lib/auth.test.mjs` still asserts the flag, now pointing the other way —
+turning it back off would be the dangerous move, because the database no longer
+has an anonymous path and the UI would offer writes that all fail.
 
-`src/lib/auth.test.mjs` asserts the flag is still `false`; that assertion is a
-**tripwire**, so when it fires the cutover is what gets finished and the
-assertion is what changes last.
+**`0020` is applied locally and NOT to production.** Every earlier migration was
+backwards-compatible with the deployed bundle; this one is not, so it has to
+land *after* a push, not before. Applying it to a project whose live site is
+still running the old client breaks that site immediately.
 
 **The `entries` dedupe index is a content fingerprint** —
 `[eventCode+matchNumber+teamNumber+scoutName+createdAt]`. Sync relies on it
@@ -83,34 +82,36 @@ to three call sites and two to the other three.
 in IndexedDB that revealed the manager surfaces to anyone who ticked it, and its
 own header still described the file-import workflow that had been removed. Two
 questions replaced it, both owned by `auth.svelte.js`: `canManage` is *may this
-write succeed* (the passphrase now, the role after `0011`), and
-`showsManagerTools` is *should the surface render at all*. They differ
-pre-cutover because the passphrase form lives inside the surface it unlocks —
-gate the surface on holding the passphrase and you seal the only door to it.
+write succeed* and `showsManagerTools` is *should the surface render at all*.
+Both are now the account's role and nothing else.
+
+They used to differ, and the reason is worth keeping: the passphrase entry form
+lived inside the surface it unlocked, so gating the surface on already holding
+the passphrase sealed the only door to it. There is no door now — the role
+arrives with the session — but the pair stays split because they are still two
+questions, and `check_components.mjs` fails the build if a caller re-derives
+either.
 
 **Signing in fills `session.scoutName`, but only when it is blank.** That
 restriction is load-bearing: the name is still the join key, so overwriting one
 a device already had would silently detach it from every assignment, override
 and reminder addressed to the old spelling.
 
-**The event code is now a label, and `session_id` is still live.** `0019` made
-events real rows with membership deciding access, so knowing a code grants
-nothing — but `session_id` remains on all eight tables with its old policies
-intact, because `0019` is expand. Every write sets **both** `session_id` and
-`event_id` to the same uuid until Phase 4c drops one. `events.code` survives
-that: The Blue Alliance's API is keyed on it and the schedule import needs it.
+**The event code is a label. `session_id` is gone.** `0019` made events real
+rows with membership deciding access; `0020` dropped `session_id` from all eight
+tables along with 29 policies, `has_manager_token()` and the passphrase.
+`events.code` survives because The Blue Alliance's API is keyed on it and the
+schedule import needs it — but knowing it grants nothing.
 
-Two resolvers exist during the window and the difference matters.
-`eventIdForCode()` is strict and needs a session — entry sync uses it, which is
-what makes "record but do not sync" fall out of the schema. `scopeIdForCode()`
-falls back to the old hash for the manager surfaces, which cannot require a
-session while `AUTH_ENFORCED` is false. That fallback is sound because new
-events only exist for signed-in users (`create_event` requires auth) and
-pre-`0019` events have `id == hash`, so the branches agree wherever both are
-reachable. It dies with `managerToken`.
+`eventIdForCode()` is the only resolver, and it needs a session. That is what
+makes "record but do not sync" fall out of the schema rather than being a second
+check that could disagree with it. `scopeIdForCode()` existed for one release as
+a fallback for the passphrase-era manager surfaces and died with them.
 
-The original note read: *the event code is going away in Phase 4, not before —
-it is still the `session_id` partition on every shared table.* `docs/adr-001-auth.md` says accounts replace the passphrase and not the
+Two superseded notes, for anyone reading old commits: *the event code is going
+away in Phase 4, not before — it is still the `session_id` partition on every
+shared table*, and later, *every write sets both columns until Phase 4c drops
+one.* `docs/adr-001-auth.md` says accounts replace the passphrase and not the
 event code; the v0.6 draft supersedes that, replacing it with an `events` table
 and an `event_scouts` membership join.
 

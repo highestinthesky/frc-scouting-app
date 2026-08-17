@@ -308,8 +308,23 @@ The original 4b list, for reference:
 - `scout_name` stops being a join key. It stays as a display label and as part of
   the dedupe fingerprint, which is content and must not gain identity.
 
-**4c — contract.** Once 4b ships and has soaked: drop `session_id`, the old
-policies, and the passphrase objects. This is what supersedes `0011`/`0012`.
+**4c — contract. ✅ `0020_contract.sql`, written and applied LOCALLY only.**
+
+`session_id` dropped from all eight tables; 29 legacy policies, the passphrase
+and `has_manager_token()` gone; attribution stamped by a BEFORE INSERT trigger;
+`AUTH_ENFORCED` flipped to `true` in the same commit. 194 client references to
+the passphrase removed across 12 files.
+
+**Not on production, deliberately.** Every earlier migration was compatible with
+the deployed bundle. This one is not: applying it while the live site runs the
+old client breaks that site. Push first, then apply.
+
+### Phase 5 — Manager Studio ✅
+
+`/studio` with a sidebar: **Event** (staff an event by dragging, with a button
+beside every drag) and **Coverage** (three numbers and the gaps under them).
+The draft's drag-and-drop graph builder stays deferred, which the draft itself
+marked as the right call.
 
 **Events become real rows.** An `events` table with a uuid primary key, and an
 `event_scouts` join table so a manager assigns people to an event by dragging
