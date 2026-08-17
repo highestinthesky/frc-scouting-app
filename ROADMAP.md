@@ -571,6 +571,32 @@ a peer of Scout and Schedule, it is a different application.
     styling a layout that is about to move is wasted work.
 
 
+### v0.74 — getting twenty scouts onto the app
+
+Added to the plan before building it, per the working agreement. It is not
+polish and it is not in the original ten steps: it is the logistics wall the
+offseason hits on day one.
+
+Every account today is created one at a time — type a name, mint a code, read it
+out, repeat. At 20+ scouts that is twenty round trips through one manager on the
+morning of an event, and the failure mode is not a bug, it is a queue.
+
+`0023` already put the pieces in place: an invite carries the name the manager
+typed, so a batch of invites is just a batch of names.
+
+- **Paste a roster.** One name per line, in whatever shape a team already keeps
+  it — "Haolun Ning", "Ning, Haolun", with or without blank lines and stray
+  commas. Parsing is a pure function with tests, because the input is other
+  people's spreadsheets.
+- **Mint them in one pass**, each carrying its own name, and show the resulting
+  codes as a table that can be read out or printed.
+- **Say what failed and keep the rest.** A roster with one bad line should
+  produce nineteen invites and one complaint, not an error.
+
+Deliberately still invites rather than direct account creation: the Edge
+Function needs an email per person, and collecting twenty addresses is the
+bottleneck this is trying to remove. Scouts supply their own on redemption.
+
 ### Out of scope for v0.7
 
 Named so the series can actually close: no new analysis features, no graph

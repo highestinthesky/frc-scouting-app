@@ -421,6 +421,37 @@ export const auth = {
 		return /** @type {string} */ (data);
 	},
 
+	/**
+	 * Mint one invite per person, in one pass.
+	 *
+	 * Sequential rather than parallel on purpose. create_invite retries on code
+	 * collision by re-reading `invites`, and twenty concurrent calls make that
+	 * retry loop race itself for no gain — twenty round trips still finish inside
+	 * a second, and a manager pasting a roster is not waiting on latency.
+	 *
+	 * One failure does not abandon the rest: a roster of twenty with one bad row
+	 * should produce nineteen codes and one complaint, because the alternative is
+	 * the manager doing all twenty by hand.
+	 *
+	 * @param {Array<{firstName: string, lastName: string}>} people
+	 * @param {'scout'|'manager'|'super'} [role]
+	 * @returns {Promise<{minted: Array<{firstName: string, lastName: string, code: string}>,
+	 *                    failed: Array<{firstName: string, lastName: string, why: string}>}>}
+	 */
+	async createInviteBatch(people, role = 'scout') {
+		const minted = [];
+		const failed = [];
+		for (const person of people ?? []) {
+			try {
+				const code = await this.createInvite({ ...person, role });
+				minted.push({ ...person, code });
+			} catch (e) {
+				failed.push({ ...person, why: e?.message ?? String(e) });
+			}
+		}
+		return { minted, failed };
+	},
+
 	async listInvites() {
 		const { data, error } = await getAuthClient()
 			.from('invites')

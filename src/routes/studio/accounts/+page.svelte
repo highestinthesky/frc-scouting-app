@@ -1,5 +1,6 @@
 <script>
 	import Select from '$lib/components/Select.svelte';
+	import { parseRoster, formatRosterName } from '$lib/roster.js';
 	// Manager surface: invite people, change roles, revoke access.
 	//
 	// Every restriction here is also enforced in Postgres (migration 0008) —
@@ -21,6 +22,38 @@
 	let inviteRole = $state(/** @type {'scout'|'manager'|'super'} */ ('scout'));
 	let inviteFirst = $state('');
 	let inviteLast = $state('');
+
+	// ─── bulk roster ────────────────────────────────────────────────────────
+	let rosterText = $state('');
+	let rosterRole = $state(/** @type {'scout'|'manager'|'super'} */ ('scout'));
+	let batch = $state(/** @type {null | {minted: any[], failed: any[]}} */ (null));
+
+	// Parsed live, so a manager sees what the app understood BEFORE minting
+	// twenty codes. The alternative is finding out afterwards, when the fix is
+	// twenty revocations.
+	const parsed = $derived(parseRoster(rosterText));
+
+	async function mintRoster() {
+		busy = true;
+		err = '';
+		msg = '';
+		batch = null;
+		try {
+			batch = await auth.createInviteBatch(parsed.people, rosterRole);
+			await load();
+			msg = `${batch.minted.length} invite${batch.minted.length === 1 ? '' : 's'} created.`;
+			if (batch.minted.length > 0) rosterText = '';
+		} catch (e) {
+			err = e.message;
+		} finally {
+			busy = false;
+		}
+	}
+
+	/** The codes as text, so they can go into a message or a printout. */
+	const batchAsText = $derived(
+		(batch?.minted ?? []).map((m) => `${formatRosterName(m)}\t${m.code}`).join('\n')
+	);
 
 	// Create-an-account form. The draft's flow: type a name, hand over what comes
 	// back. Email is ours, not the draft's — an account with no routable address
@@ -236,6 +269,89 @@
 				<a href="{base}/register/">the sign-up page</a>.
 			</p>
 
+			<!-- ─── paste a roster ──────────────────────────────────────────
+			     Every account was created one at a time: type a name, mint a code,
+			     read it out, repeat. At 20+ scouts that is twenty round trips
+			     through one manager on the morning of an event, and the failure
+			     mode is not a bug, it is a queue. 0023 made an invite carry a name,
+			     which makes a batch of invites just a batch of names. -->
+			<details class="bulk">
+				<summary>Paste a whole roster</summary>
+
+				<label class="field">
+					<span class="label">One name per line</span>
+					<small class="help">
+						"Haolun Ning" or "Ning, Haolun", or two columns pasted from a sheet.
+					</small>
+					<textarea
+						bind:value={rosterText}
+						rows="6"
+						placeholder={'Haolun Ning\nAda Lovelace\nRey Ortiz'}
+					></textarea>
+				</label>
+
+				{#if rosterText.trim()}
+					<!-- Shown before minting, not after. Finding out afterwards means
+					     the fix is twenty revocations. -->
+					<p class="tally">
+						{parsed.people.length} name{parsed.people.length === 1 ? '' : 's'} understood{parsed
+							.problems.length > 0
+							? `, ${parsed.problems.length} line${parsed.problems.length === 1 ? '' : 's'} skipped`
+							: ''}.
+					</p>
+					{#if parsed.problems.length > 0}
+						<ul class="problems">
+							{#each parsed.problems as pr (pr.line)}
+								<li>Line {pr.line} “{pr.text}” — {pr.why}</li>
+							{/each}
+						</ul>
+					{/if}
+				{/if}
+
+				<div class="invite-row">
+					<div class="field">
+						<Select
+							label="All join as"
+							bind:value={rosterRole}
+							options={roleOptions.map((r) => ({ value: r, label: r }))}
+						/>
+					</div>
+					<Button
+						variant="primary"
+						disabled={busy || parsed.people.length === 0}
+						onclick={mintRoster}
+					>
+						{busy ? 'Creating…' : `Create ${parsed.people.length} invite${parsed.people.length === 1 ? '' : 's'}`}
+					</Button>
+				</div>
+
+				{#if batch}
+					{#if batch.minted.length > 0}
+						<table class="codes">
+							<thead><tr><th>Name</th><th>Code</th></tr></thead>
+							<tbody>
+								{#each batch.minted as m (m.code)}
+									<tr><td>{formatRosterName(m)}</td><td><code>{m.code}</code></td></tr>
+								{/each}
+							</tbody>
+						</table>
+						<!-- Selectable as one block: these get pasted into a group chat or
+						     printed, not read off a screen twenty times. -->
+						<label class="field">
+							<span class="label">Copy as text</span>
+							<textarea readonly rows="4" value={batchAsText}></textarea>
+						</label>
+					{/if}
+					{#if batch.failed.length > 0}
+						<ul class="problems">
+							{#each batch.failed as f (f.firstName + f.lastName)}
+								<li>{formatRosterName(f)} — {f.why}</li>
+							{/each}
+						</ul>
+					{/if}
+				{/if}
+			</details>
+
 			<!-- The name is typed HERE, by the person who also types the assignments.
 			     It used to be typed by whoever redeemed the code, which is how an
 			     assignment ended up addressed to a spelling the scout never used. -->
@@ -440,6 +556,59 @@
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.muted.small { font-size: var(--fs-sm); margin-top: var(--space-3); }
 	.muted a { color: var(--accent); }
+
+	.bulk {
+		margin-bottom: var(--space-4);
+		padding: var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--bg-subtle);
+	}
+	.bulk summary {
+		cursor: pointer;
+		font-weight: 600;
+		min-height: var(--tap-min);
+		display: flex;
+		align-items: center;
+	}
+	.bulk textarea {
+		font: inherit;
+		width: 100%;
+		min-width: 0;
+		padding: var(--space-2);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--text-primary);
+		resize: vertical;
+	}
+	.tally {
+		margin: var(--space-2) 0 0;
+		font-size: var(--fs-sm);
+		color: var(--text-primary);
+	}
+	.problems {
+		margin: var(--space-1) 0 0;
+		padding-left: var(--space-4);
+		font-size: var(--fs-xs);
+		color: var(--text-muted);
+	}
+	.codes {
+		width: 100%;
+		margin-top: var(--space-3);
+		border-collapse: collapse;
+		font-size: var(--fs-sm);
+	}
+	.codes th,
+	.codes td {
+		text-align: left;
+		padding: var(--space-1) var(--space-2);
+		border-bottom: 1px solid var(--border);
+	}
+	.codes code {
+		font-weight: 700;
+		letter-spacing: 0.08em;
+	}
 
 	.invite-row {
 		display: flex;
