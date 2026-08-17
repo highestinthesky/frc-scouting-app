@@ -9,6 +9,15 @@ Supabase is the shared mirror. JavaScript with JSDoc, not TypeScript.
 - **Commit freely; leave `git push` to the user.** A push deploys.
 - **`ROADMAP.md` is the only plan document.** Update it rather than starting a
   second one — two earlier plans and a handoff were folded into it.
+- **Plan a version series before shipping into it.** Every `v0.7x` release is
+  enumerated in `ROADMAP.md` before any of them ships, and v0.8 does not begin
+  until the 7 series closes. This rule exists because v0.6 finished and the work
+  simply kept going into v0.67–v0.71 with no plan behind the numbers — which is
+  how a version number stops meaning anything.
+
+  A release may span several commits, and **an overhaul is allowed to stay on
+  `v0.x`** rather than forcing a major bump; the series is the unit of planning,
+  not the commit.
 - Existing structure is a **baseplate**. Reorganising it aggressively is fine.
   The invariants below are what isn't negotiable.
 

@@ -365,6 +365,132 @@ decision-oriented charts and see what actually gets used at the offseason event.
 
 ---
 
+---
+
+## v0.7 — the interface series
+
+**Planned in full before any of it ships**, per the working agreement: every
+`v0.7x` release is enumerated here and no v0.8 work begins until the series
+closes. A release may span several commits; an overhaul is allowed to stay on
+`v0.x` rather than forcing a major bump.
+
+v0.67–v0.71 spilled into this series unplanned. They are the account/event
+cutover finishing, not part of the plan below, and the overflow is the reason
+this section exists.
+
+### The diagnosis
+
+Three of four navigation labels do not match the page they open:
+
+| Nav says | Route | Page is titled |
+|---|---|---|
+| Home | `/home` | **Your entries** |
+| Scouting | `/scouting` | **Schedule** |
+| Insights | `/insights` | **Manager** |
+| Settings | `/settings` | Settings |
+
+Recording — the app's entire purpose — lives at `/scouting/new` and is reached
+from Home. So "scouting" is the one thing the Scouting tab does not do, and
+"Insights" is literally titled Manager, which is also what Studio is. That one
+table is the root of four separate complaints, and everything in v0.72 follows
+from it.
+
+Two structural facts sit underneath the rest. Content is capped at `max-width:
+42rem` on every route, so a 1280px screen shows a 672px column with a third of
+the window empty. And the breakpoints in use are `28rem`, `40rem`,
+`47.9375rem` and `600px` — four scales, no system, which is why the layout does
+not meaningfully differ between a phone and a laptop.
+
+### v0.72 — names and routes tell the truth
+
+*Notes 4, 5, 9. Nothing else in the series is safe to build until this lands.*
+
+- Recording gets a route that says so. `/scouting` becomes the act of scouting —
+  the entry form and this device's entries — not the schedule.
+- The schedule and assignment planning move out of `/scouting` to their own
+  place. They are a manager job that happens to be about matches.
+- `/insights` stops being titled "Manager". It is analysis: teams, compare,
+  picklist. Manager *operations* belong to Studio, which resolves the clash in
+  note 9 by giving each a job rather than a better label.
+- Every nav label equals the `<h1>` of the page it opens. Enforced by a check in
+  `npm test`, because this drifted once and will drift again.
+- Redirects from the old paths. A scout with a bookmark or a cached PWA must not
+  get a 404 the morning of an event.
+
+### v0.73 — the shell earns its space
+
+*Notes 3, 10, 11.*
+
+- One breakpoint system, replacing the four ad-hoc values. Phone / tablet /
+  desktop, named in tokens.
+- Desktop stops being a phone in the middle of a screen. Content width becomes a
+  per-surface decision: a form stays narrow because line length is readability,
+  a table or a board goes wide because density is the point.
+- The top bar slims. It currently spends a full-width band on an event code, a
+  name and a role chip; on a phone that is chrome eating the space the app is
+  for.
+- Bottom tab bar stays on phones — it is right there — and becomes a side rail on
+  desktop, where a fixed bottom bar is a phone affordance on a device that has
+  no thumbs near the bottom.
+- Verified at 320 / 375 / 414 / 768 / 1280, not just "looks fine on my laptop".
+
+### v0.74 — Studio becomes its own application
+
+*Note 6.*
+
+- Studio loses the global navigation entirely. It is a separate surface and the
+  tab bar is a trapdoor out of it with no way back.
+- It gets its own way home — one explicit exit, not a nav bar that silently
+  drops you into a different app.
+- Studio's own chrome carries the event it is operating on, because "which event
+  am I editing" is the one thing that must never be ambiguous there.
+
+### v0.75 — identity without typing
+
+*Note 7. The deepest change in the series; it touches the join key.*
+
+- A manager or super types the person's real full name when creating the invite
+  or the account. The name is bound to the invite at creation.
+- Whatever username the scout picks, the name stays what the manager typed.
+  Redemption cannot detach it.
+- The "type your name" field disappears from setup. It exists today only because
+  assignments were matched on a typed string, and `submitted_by` replaced that.
+- `scout_name` finishes retiring as a join key and becomes a display label only.
+  It stays in the dedupe fingerprint, which is content, not identity.
+- Requires a migration and an RLS suite pass; the fingerprint invariant in
+  `CLAUDE.md` is the thing most at risk here and gets an assertion.
+
+### v0.76 — reminders rebuilt
+
+*Note 8. Sequenced after v0.75 because reminders target people.*
+
+- Reminders target accounts, not typed names.
+- The composer stops being a text box bolted to the schedule page and moves to
+  wherever manager operations end up living after v0.72.
+- Expiry and delivery state are visible: a manager should be able to see that a
+  reminder was seen, or that it aged out unread.
+
+### v0.77 — the component and visual pass
+
+*Notes 2 and 12. Last, deliberately: styling a layout that is about to move is
+wasted work.*
+
+- Native `<select>` and other browser-default controls are replaced with the
+  app's own components. The event dropdown in Studio is the visible offender and
+  is not the only one.
+- Every interactive component ships all eight states, per Hallmark's component
+  discipline: default, hover, focus-visible, active, disabled, loading, error,
+  success.
+- Hallmark runs as a **redesign inside `design.md`'s existing system** — tokens,
+  contrast checks and the component checks stay authoritative. This is not a
+  reskin and not a new palette; `design.md` is a locked system and Hallmark
+  defers to it.
+
+### Out of scope for v0.7
+
+Named so the series can actually close: no new analysis features, no graph
+builder, no season retune. Those are v0.8.
+
 ## Target model
 
 **Account** — who you are. Created by a manager, username generated, real email
