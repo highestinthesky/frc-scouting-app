@@ -322,6 +322,27 @@
 	   Components consume these vars instead of hardcoding hex values. The
 	   accent (purple brand) stays the same in both themes for the app bar;
 	   everything else flips. */
+	/* ─── the focus ring, once, for everything ──────────────────────────────
+	 *
+	 * Eight component files had interactive elements and no :focus-visible at
+	 * all, so a keyboard user tabbed through them with nothing to see. Adding a
+	 * rule to each is how they drift: the next component is written without one
+	 * and nobody notices, because the failure is invisible to a mouse.
+	 *
+	 * Wrapped in :where() so it has ZERO specificity. Any component that wants a
+	 * different ring — Button, Select, SyncPanel, the reminder cards — overrides
+	 * it simply by having a rule at all, which is what they already do.
+	 *
+	 * :focus-visible, not :focus, so a mouse click does not draw it. Never
+	 * animated: the ring has to appear the instant focus lands, and a transition
+	 * on it reads as lag on the one affordance that must not feel laggy.
+	 */
+	:global(:where(a, button, summary, input, select, textarea, [tabindex]):focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-radius: var(--radius-sm);
+	}
+
 	:global(:root) {
 		--bg-page: #fafafa;
 		--bg-card: #ffffff;

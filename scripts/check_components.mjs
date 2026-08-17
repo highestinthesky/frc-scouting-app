@@ -531,5 +531,39 @@ for (const [label, file] of [
 	);
 }
 
+
+// ─── a keyboard user can always see where they are ─────────────────────────
+//
+// Eight components shipped with interactive elements and no :focus-visible.
+// The failure is invisible to a mouse, so it survives review indefinitely — and
+// the fix is not "add a rule to each", which drifts the moment someone writes
+// the ninth. One zero-specificity baseline in the layout covers everything and
+// loses to any component that wants its own.
+//
+// Testing for `:where(` alone does NOT work: Svelte emits its own
+// `:where(.svelte-hash)` for scoping, so that matched every scoped rule in the
+// file and the assertion passed with the baseline narrowed to `a` and the
+// :where() removed. Mutation testing caught it. What actually distinguishes the
+// baseline is that ONE selector covers several element types at once.
+{
+	const r = rules('src/routes/+layout.svelte');
+	const covers = (sel, tag) => new RegExp(`(^|[\\s,(])${tag}[\\s,:)]`).test(sel);
+	const baseline = r.find(
+		(x) =>
+			/focus-visible/.test(x.selector) &&
+			['button', 'input', 'textarea', 'select'].every((t) => covers(x.selector, t))
+	);
+	ok(
+		'one focus ring covers every interactive element',
+		Boolean(baseline),
+		'no single :focus-visible rule covers button, input, textarea and select'
+	);
+	ok(
+		'and it draws with the accent token',
+		/var\(--accent\)/.test(valueOf(baseline?.body ?? '', 'outline') ?? ''),
+		valueOf(baseline?.body ?? '', 'outline') ?? '(no outline)'
+	);
+}
+
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

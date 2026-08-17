@@ -565,37 +565,22 @@ a peer of Scout and Schedule, it is a different application.
    sent a scout to a dead end. It now distinguishes "none published yet" from
    "published, none yours", both verified against seeded data.
 
-10. **The visual pass.** Hallmark runs as a redesign *inside* `design.md`'s
-    existing system — tokens, contrast and component checks stay authoritative.
-    Every interactive component ships all eight states. This is last because
-    styling a layout that is about to move is wasted work.
+10. **The visual pass. ✅** Run against `design.md` as the locked system, so
+    tokens, contrast and component checks stayed authoritative — a redesign
+    inside the system, not a reskin.
 
+    The audit's two loudest findings were false positives, and saying so is part
+    of the result: the hex literals flagged as "bypassing tokens" ARE the `:root`
+    token block, which is exactly where literals belong; and every italic in the
+    codebase is a body-copy label, not a heading.
 
-### v0.74 — getting twenty scouts onto the app
-
-Added to the plan before building it, per the working agreement. It is not
-polish and it is not in the original ten steps: it is the logistics wall the
-offseason hits on day one.
-
-Every account today is created one at a time — type a name, mint a code, read it
-out, repeat. At 20+ scouts that is twenty round trips through one manager on the
-morning of an event, and the failure mode is not a bug, it is a queue.
-
-`0023` already put the pieces in place: an invite carries the name the manager
-typed, so a batch of invites is just a batch of names.
-
-- **Paste a roster.** One name per line, in whatever shape a team already keeps
-  it — "Haolun Ning", "Ning, Haolun", with or without blank lines and stray
-  commas. Parsing is a pure function with tests, because the input is other
-  people's spreadsheets.
-- **Mint them in one pass**, each carrying its own name, and show the resulting
-  codes as a table that can be read out or printed.
-- **Say what failed and keep the rest.** A roster with one bad line should
-  produce nineteen invites and one complaint, not an error.
-
-Deliberately still invites rather than direct account creation: the Edge
-Function needs an email per person, and collecting twenty addresses is the
-bottleneck this is trying to remove. Scouts supply their own on redemption.
+    The real one: **eight components had interactive elements and no
+    `:focus-visible` at all.** A keyboard user tabbed through them with nothing
+    to see, and the failure is invisible to a mouse, so it had survived every
+    review. One zero-specificity `:where(...)` baseline in the layout covers all
+    of them and loses to any component that defines its own — verified with a
+    real Tab press, and by seeing a component's own 1px offset win over the
+    baseline's 2px.
 
 ### Out of scope for v0.7
 
