@@ -160,6 +160,22 @@
 		return () => mq.removeEventListener('change', apply);
 	});
 
+	// Studio's palette is scoped to a data-studio attribute on the document root,
+	// not to a class on Studio's own wrapper, and the reason is `body`: its
+	// background comes from `:global(body) { background: var(--bg-page) }`, which
+	// resolves at `body` — outside anything Studio renders. Scoped to the wrapper,
+	// the page would have carried a dark panel on a light overscroll edge.
+	//
+	// app.html sets the same attribute before first paint, so a hard load of
+	// /studio does not flash the scout palette. This effect is what keeps it
+	// correct across client-side navigation, which the pre-paint script never sees.
+	$effect(() => {
+		if (typeof document === 'undefined') return;
+		const root = document.documentElement;
+		if (inStudio) root.setAttribute('data-studio', '');
+		else root.removeAttribute('data-studio');
+	});
+
 	function isActive(path) {
 		// Compare against pathname with the deploy base stripped, so a single
 		// /insights check works whether we're at "/insights" (dev) or
@@ -499,6 +515,140 @@
 		--banner-red-border: #5a2a22;
 		--banner-blue-bg: #16233a;
 		--banner-blue-border: #2c4a7a;
+	}
+
+	/* ─── Studio ───────────────────────────────────────────────────────────────
+	 *
+	 * A second palette on one system, not a second design system. Spacing, type,
+	 * radii and motion still come from the block above and design.md still governs
+	 * them; only colour changes here.
+	 *
+	 * MUST STAY AFTER THE DARK BLOCK. `:root[data-theme='dark']` and
+	 * `:root[data-studio]` are both (0,2,0), so source order is the only thing
+	 * deciding which wins on a dark-themed Studio. check_contrast.mjs asserts the
+	 * ordering, because nothing else would notice it being moved.
+	 *
+	 * ── why dark, in both themes ──
+	 *
+	 * Studio is dark whatever the app theme says, the same way the app bar stays
+	 * purple in both. It is a laptop-at-a-table surface read under competition
+	 * lighting, and the palette only works on a dark ground:
+	 *
+	 *     #662DB4  purple  8.08 on white   ← the only one that can carry white text
+	 *     #0087F8  blue    3.61 on white   dark text only
+	 *     #00C7FA  cyan    1.99 on white   dark text only
+	 *     #49FCE2  aqua    1.29 on white   dark text only
+	 *
+	 * Three of the four cannot have white text on them. That is not a detail to
+	 * discover during implementation, it decides the scheme: on a dark ground the
+	 * numbers invert term for term, and the three that were unusable become the
+	 * readable ones. Cyan is 1.99 on white and 9.29 as ink on a Studio card.
+	 *
+	 * So the light three are INK — links, active states, series, accents — and
+	 * purple, the one that can carry white text, is the FILL. That is the whole
+	 * assignment, and every rule below follows from it.
+	 *
+	 * ── why base tokens are remapped, not just added to ──
+	 *
+	 * `--studio-*` alone would have dressed the pages and left every shared
+	 * component behind: Button, Select, Dialog and Field all read `--bg-card`,
+	 * `--accent` and `--text-primary`, so a white button would have sat on a dark
+	 * panel until each was given a Studio variant. Remapping the base names inside
+	 * this scope costs nothing and dresses all of them at once — a component that
+	 * consumes tokens correctly is already a Studio component.
+	 *
+	 * The `--studio-*` names are the ones with no scout-app equivalent: the raw
+	 * four, the white-text fill, and the chart series.
+	 */
+	:global(:root[data-studio]) {
+		/* The four, verbatim. Named so a page can reach for the colour itself
+		   where a semantic token would be a lie — a legend swatch is not an
+		   "accent", it is series 2. */
+		--studio-purple: #662db4;
+		--studio-blue: #0087f8;
+		--studio-cyan: #00c7fa;
+		--studio-aqua: #49fce2;
+		/* #662DB4 lifted until it reads as ink on a dark ground. The raw purple is
+		   2.29 on a Studio card — fine as a fill, invisible as text — and a fourth
+		   series had to be something, so this is the purple that can be drawn with
+		   rather than sat on. Same relationship as the app's dark --accent to its
+		   light one. */
+		--studio-violet: #a277ee;
+
+		/* Grounds. Neutral-with-purple rather than grey, so the sidebar's purple
+		   fill reads as the same family instead of a sticker on slate. */
+		--bg-page: #0a0912;
+		--bg-card: #14121f;
+		--bg-subtle: #1c1930;
+		--bg-elev: #241f3c;
+
+		--text-primary: #eceafd;
+		--text-muted: #a9a3c9;
+		--text-faint: #8e88b0;
+
+		--border: #2a2540;
+		/* 3.54 on --bg-elev, the lightest ground it is ever drawn against. The
+		   obvious #5c5480 looked right and measured 2.27 there — an input outline
+		   under WCAG 1.4.11's 3:1 floor, which is the one boundary that has to be
+		   visible because it is the only thing saying "input". */
+		--border-strong: #7a71a4;
+
+		/* Cyan is the accent because it is the one colour that works in both
+		   directions: 9.29 as ink on a card, and 9.95 as a fill under --on-accent.
+		   Purple could carry the fill but not the links, and --accent has to do
+		   both jobs — Button paints it as a background, every page paints it as
+		   text. */
+		--accent: #00c7fa;
+		--accent-hover: #49fce2;
+		--accent-soft: #2a1a4d;
+		--on-accent: #0a0912;
+
+		--alliance-red: #ff8078;
+		--alliance-blue: #7db2f2;
+		--on-alliance: #0a0912;
+
+		--danger: #ff8f84;
+		--danger-bg: #33141a;
+		--success: #5fe3b4;
+		--success-bg: #0d2b2c;
+		--success-border: #1e5a4e;
+		--warning: #fbc94a;
+		--warning-bg: #2e2413;
+		--warning-border: #5c4a1c;
+		--banner-info-bg: #1c1440;
+		--banner-info-border: #3f2d6e;
+		--banner-red-bg: #33141a;
+		--banner-red-border: #5e2a2a;
+		--banner-blue-bg: #141d38;
+		--banner-blue-border: #2c4472;
+
+		/* The white-text fill. Deliberately separate from --accent: this is the
+		   one member of the palette that may sit under white, and naming it that
+		   way is what stops someone reaching for cyan the next time a filled
+		   surface is wanted. */
+		--studio-fill: #662db4;
+		--on-studio-fill: #ffffff;
+
+		/* Chart series. Ordered cyan → blue → aqua → violet, which is not the
+		   order they are listed in: it is the order that keeps ADJACENT series
+		   furthest apart. The natural order puts cyan next to aqua at 1.55, the
+		   closest pair in the set.
+
+		   Two of the four are lifted rather than raw, and the check is what
+		   decided which: a series doubles as its own legend label, so it is held
+		   to the 4.5 text floor, and the raw blue measures 4.36 on --bg-elev. It
+		   passes on every other ground, which is exactly how it would have
+		   shipped — the raised panel is the one surface nobody checks. #1c92fb is
+		   the smallest lift that clears it, at 4.90. */
+		--studio-series-1: #00c7fa;
+		--studio-series-2: #1c92fb;
+		--studio-series-3: #49fce2;
+		--studio-series-4: #a277ee;
+
+		/* A 6%-black shadow is invisible on a #14121f card. Elevation on dark has
+		   to be a darker hole, not a lighter edge. */
+		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+		--shadow-md: 0 8px 28px rgba(0, 0, 0, 0.55);
 	}
 
 	:global(body) {

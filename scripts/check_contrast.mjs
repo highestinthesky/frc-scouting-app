@@ -28,16 +28,28 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.dirname(here);
 const layout = readFileSync(path.join(root, 'src/routes/+layout.svelte'), 'utf8');
 
+// Comments stripped before anything is parsed out of this file. A comment that
+// mentions a token by name — "deliberately separate from --accent: this is the
+// one that…" — is matched by the declaration regex below, and the value it
+// captures then runs to the next semicolon, several lines into real CSS.
+//
+// This is the THIRD time a checker here has failed against its own commentary,
+// and the first two were fixed by rewording the comment. That is the wrong
+// repair: it leaves the trap armed for the next person who explains a token by
+// naming another one, which is the most natural sentence to write about a
+// palette. Strip once, parse the code.
+const code = layout.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
 /** Token declarations inside one CSS block, by its opening selector. */
 function block(startPattern) {
-	const i = layout.search(startPattern);
+	const i = code.search(startPattern);
 	if (i === -1) throw new Error(`token block not found: ${startPattern}`);
-	const open = layout.indexOf('{', i);
+	const open = code.indexOf('{', i);
 	let depth = 0;
 	let end = open;
-	for (let j = open; j < layout.length; j += 1) {
-		if (layout[j] === '{') depth += 1;
-		else if (layout[j] === '}') {
+	for (let j = open; j < code.length; j += 1) {
+		if (code[j] === '{') depth += 1;
+		else if (code[j] === '}') {
 			depth -= 1;
 			if (depth === 0) {
 				end = j;
@@ -45,7 +57,7 @@ function block(startPattern) {
 			}
 		}
 	}
-	const body = layout.slice(open, end);
+	const body = code.slice(open, end);
 	return Object.fromEntries(
 		[...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()])
 	);
@@ -57,6 +69,11 @@ const light = block(/:global\(:root\)\s*\{/);
 // this palette is written down once — there were two copies, and they had
 // already drifted.
 const dark = { ...light, ...block(/:global\(:root\[data-theme='dark'\]\)\s*\{/) };
+// Studio remaps the base tokens rather than only adding --studio-* ones, so the
+// whole PAIRS table below applies to it unchanged. That is the point of the
+// remap and the reason this is three lines instead of a second table: a surface
+// Studio renders is a surface the scout app renders, in different colours.
+const studio = { ...light, ...block(/:global\(:root\[data-studio\]\)\s*\{/) };
 
 // ─── colour maths ──────────────────────────────────────────────────────────
 
@@ -155,11 +172,43 @@ const ok = (name, cond, detail = '') => {
 	}
 };
 
+// Studio-only pairings. The palette's whole shape is "three of these four
+// cannot carry white text", so what needs asserting is the assignment: the fill
+// is the one that can, the series are the ones that are drawn with, and nothing
+// has quietly swapped places.
+const STUDIO_PAIRS = [
+	['--on-studio-fill', '--studio-fill', 4.5, 'white text on the one fill that takes it'],
+	['--text-primary', '--studio-fill', 4.5, 'Studio ink on the purple fill'],
+	// Every series has to be legible against the two grounds a chart sits on.
+	// Non-text at 3:1 — a series is a mark, not a sentence — except that these
+	// double as legend text, so they are held to the text floor instead.
+	...[1, 2, 3, 4].flatMap((n) => [
+		[`--studio-series-${n}`, '--bg-card', 4.5, `series ${n} on a panel`],
+		[`--studio-series-${n}`, '--bg-elev', 4.5, `series ${n} on a raised panel`]
+	]),
+	// The raw four, named for the cases a page reaches for the colour itself.
+	//
+	// Held to different floors on purpose, and the floor IS the documentation of
+	// what each may be used for. Cyan and aqua are text anywhere. The raw blue is
+	// 4.36 on --bg-elev, so it is a mark, a border or a fill and never a sentence
+	// — --studio-series-2 is the lifted one that may be read. Purple is absent
+	// entirely: at 2.29 on a card it fails even the non-text floor as ink, which
+	// is why --studio-violet exists.
+	['--studio-blue', '--bg-elev', 3.0, 'the blue as a mark, not as text'],
+	['--studio-cyan', '--bg-elev', 4.5, 'the cyan as ink'],
+	['--studio-aqua', '--bg-elev', 4.5, 'the aqua as ink'],
+	['--studio-violet', '--bg-card', 4.5, 'the lifted purple as ink'],
+	['--studio-violet', '--bg-elev', 4.5, 'the lifted purple on a raised panel']
+];
+
 for (const [theme, tokens] of [
 	['light', light],
-	['dark', dark]
+	['dark', dark],
+	['studio', studio]
 ]) {
-	for (const [ink, surface, floor, what] of PAIRS) {
+	for (const [ink, surface, floor, what] of theme === 'studio'
+		? [...PAIRS, ...STUDIO_PAIRS]
+		: PAIRS) {
 		const a = tokens[ink];
 		const b = tokens[surface];
 		if (!a || !b) {
@@ -185,17 +234,32 @@ for (const [theme, tokens] of [
 // Matches the CSS at-rule only. The layout also calls window.matchMedia with
 // the same string, which is the mechanism that replaced the duplicate.
 {
-	// Comments stripped first. The comment three lines above the dark block
-	// explains why the media query was removed — and matched this check, which
-	// is the second time a checker in this repo has failed against its own
-	// prose. Search the code, not the commentary.
-	const code = layout.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+	// Searches `code`, not `layout` — the comment three lines above the dark
+	// block explains why the media query was removed, and matched this check when
+	// it read the raw file. That stripping is now done once at the top, for every
+	// search in this script rather than this one.
 	const dupes = [...code.matchAll(/@media[^{]*prefers-color-scheme/g)].length;
 	ok(
 		'the dark palette is defined in exactly one place',
 		dupes === 0,
 		`+layout.svelte has ${dupes} @media(prefers-color-scheme) block(s). The theme ` +
 			'is resolved to an explicit data-theme in JS — a media query here would be a second copy.'
+	);
+}
+
+// Studio's block has to come after the dark one. `:root[data-theme='dark']` and
+// `:root[data-studio]` are both (0,2,0), so specificity does not separate them
+// and source order is the entire mechanism. Moving the block up — a tidy-up
+// anybody might make, grouping the two palettes "logically" — would leave a
+// manager on the dark theme seeing scout colours in Studio, and nothing else in
+// the suite would notice: every token still resolves, every pair still passes.
+{
+	const darkAt = code.search(/:global\(:root\[data-theme='dark'\]\)/);
+	const studioAt = code.search(/:global\(:root\[data-studio\]\)/);
+	ok(
+		'the Studio palette is declared after the dark palette',
+		darkAt !== -1 && studioAt > darkAt,
+		'equal specificity (0,2,0) — source order is the only thing deciding which wins'
 	);
 }
 

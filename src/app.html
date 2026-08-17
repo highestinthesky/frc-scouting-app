@@ -32,6 +32,15 @@
 				} catch (e) {
 					/* private mode, storage disabled — light is the safe default */
 				}
+				/* Studio is dark in both themes, so a hard load of /studio has to
+				 * know that before it paints. Outside the try: it reads no storage
+				 * and cannot throw, and getting it wrong means the manager watches
+				 * the whole surface flip from white to near-black on hydration.
+				 * The layout's own effect takes over for client-side navigation,
+				 * which this script never sees. */
+				if (/(^|\/)studio(\/|$)/.test(location.pathname)) {
+					document.documentElement.setAttribute('data-studio', '');
+				}
 			})();
 		</script>
 		%sveltekit.head%
