@@ -15,6 +15,7 @@
 	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
 	import SessionSetup from '$lib/components/SessionSetup.svelte';
 	import ReminderFlyby from '$lib/components/ReminderFlyby.svelte';
+	import SyncPanel from '$lib/components/SyncPanel.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import Button from '$lib/components/Button.svelte';
 
@@ -169,16 +170,12 @@
 		return p === path || p.startsWith(path + '/') || p === path.replace(/\/$/, '');
 	}
 
-	// Pre-compute the colour and tooltip for the sync dot. Reactive on syncState.
-	const syncDot = $derived.by(() => {
-		const s = syncState.status;
-		if (s === 'connected') return { className: 'ok', title: 'Synced' };
-		if (s === 'connecting') return { className: 'pending', title: 'Connecting…' };
-		if (s === 'offline')
-			return { className: 'offline', title: 'Offline — entries will sync when you reconnect.' };
-		if (s === 'error') return { className: 'err', title: syncState.error || 'Sync error' };
-		return { className: 'idle', title: 'No event code — set one in Settings to share with your team.' };
-	});
+	// The sync dot's colour/tooltip derivation lived here and is gone with it.
+	// Two reasons, and the second is the bug: a `title` needs a mouse to hover, so
+	// on a phone it communicated nothing — and the derivation never read
+	// syncState.reason, so a signed-out scout was told "No event code — set one in
+	// Settings" about an event they had already chosen. SyncPanel says the true
+	// thing, in words, and is tappable.
 </script>
 
 <svelte:head>
@@ -237,12 +234,18 @@
 {:else}
 	<header class="app-bar">
 		<div class="app-bar-inner">
-			<strong class="event">{session.eventCode}</strong>
-			<span class="sep">·</span>
-			<span class="name">{shellIdentity.name}</span>
-			<span class="sync-dot {syncDot.className}" title={syncDot.title} aria-label={syncDot.title}>
-				{#if syncState.pendingCount > 0}<span class="pending-count">{syncState.pendingCount}</span>{/if}
-			</span>
+			<!-- Context, not controls: this group is allowed to shrink and truncate.
+			     The controls after it are not, because a tap target that shrinks is a
+			     tap target that gets missed. -->
+			<div class="who">
+				<strong class="event">{session.eventCode}</strong>
+				<span class="sep">·</span>
+				<span class="name">{shellIdentity.name}</span>
+			</div>
+			<SyncPanel />
+			<!-- Hidden on narrow screens. On a phone the Studio button already says
+			     "manager" more usefully than a badge does, and at 375px the bar was
+			     overflowing the viewport by 37px with this in it. -->
 			<span class="role-badge" class:manager={shellIdentity.isManager}>
 				{shellIdentity.role}
 			</span>
@@ -553,6 +556,28 @@
 		align-items: center;
 		gap: var(--space-2);
 		font-size: var(--fs-md);
+		/* Without this a flex item refuses to shrink below its content, which is
+		   what pushed the bar 37px past a 412px viewport and scrolled the whole
+		   page sideways. Same failure as the bare `1fr` grid tracks. */
+		min-width: 0;
+	}
+
+	/* The identity group absorbs the squeeze. It truncates; the controls do not. */
+	.who {
+		flex: 1 1 auto;
+		min-width: 0;
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-1);
+		overflow: hidden;
+		white-space: nowrap;
+	}
+	.who .name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.event {
+		flex: none;
 	}
 	.event {
 		font-weight: 700;
@@ -564,6 +589,14 @@
 	.name { opacity: 0.95; }
 	/* Visually hidden, still announced. The pop-out glyph is aria-hidden, so
 	   without this a screen reader gets no warning that the link leaves the app. */
+	/* Below this the bar is carrying an event, a name, sync state and a way into
+	   Studio. The badge is the only one of those that is purely decorative. */
+	@media (max-width: 30rem) {
+		.role-badge {
+			display: none;
+		}
+	}
+
 	.sr-only {
 		position: absolute;
 		width: 1px;
@@ -577,6 +610,7 @@
 	}
 
 	.studio-btn {
+		flex: none;
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-1);
@@ -602,6 +636,7 @@
 	}
 
 	.role-badge {
+		flex: none;
 		background: var(--bar-chip-bg);
 		padding: var(--space-1) var(--space-2);
 		border-radius: var(--radius-pill);
@@ -615,31 +650,6 @@
 		font-weight: 700;
 	}
 
-	.sync-dot {
-		margin-left: auto;
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		width: 0.7rem;
-		height: 0.7rem;
-		border-radius: 50%;
-		background: var(--dot-offline);
-	}
-	.sync-dot.ok { background: var(--dot-ok); }
-	.sync-dot.pending { background: var(--dot-pending); }
-	.sync-dot.offline { background: var(--dot-offline); }
-	.sync-dot.err { background: var(--dot-err); }
-	.sync-dot.idle { background: var(--dot-idle); }
-	.pending-count {
-		position: absolute;
-		transform: translate(0.6rem, -0.4rem);
-		background: var(--dot-pending);
-		color: var(--pending-ink);
-		font-size: var(--fs-xs);
-		font-weight: 700;
-		padding: 0 var(--space-1);
-		border-radius: var(--radius-pill);
-	}
 
 	/* ── Primary navigation ────────────────────────────────────────────
 	   Phone-first: docked to the bottom of the viewport, where a thumb

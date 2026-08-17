@@ -149,6 +149,10 @@ export function stop() {
 
 /** Force an immediate sync tick — useful after the user adds an entry. */
 export function kick() {
+	// Also what refreshes the pending count after a save: the tick recounts before
+	// it checks connectivity, so the badge moves while the scout is still looking
+	// at the screen they saved from — online or not. A lagging count reads as "it
+	// did not take", and a scout who thinks a save failed writes it on paper too.
 	if (syncState.eventCode) scheduleTick(0);
 }
 
@@ -221,6 +225,16 @@ async function tick() {
 	if (polling) return;
 	polling = true;
 	try {
+		// The queue depth is refreshed BEFORE any connectivity check, because it is
+		// the one fact that stays true when everything else stops.
+		//
+		// It used to be set only inside pushOutbox(), which does not run when
+		// offline — so a scout recording six matches in a dead corner of a venue
+		// was shown "Waiting to upload: Nothing" while holding six unsent entries.
+		// That is the exact moment the count exists to reassure them, and it was
+		// the one moment it was wrong.
+		await refreshPendingCount();
+
 		if (typeof navigator !== 'undefined' && !navigator.onLine) {
 			syncState.status = 'offline';
 			return;
@@ -268,6 +282,21 @@ async function tick() {
 	} finally {
 		polling = false;
 		if (syncState.eventCode) scheduleTick(POLL_INTERVAL_MS);
+	}
+}
+
+/**
+ * How many local entries have not reached the server.
+ *
+ * Cheap enough to run on every tick — getUnsyncedEntries() already scans, and at
+ * scouting volume that is a few hundred rows against a 3-second interval.
+ */
+async function refreshPendingCount() {
+	try {
+		syncState.pendingCount = (await getUnsyncedEntries()).length;
+	} catch {
+		// A failed read must not take the tick down; the count is information, not
+		// a precondition for syncing.
 	}
 }
 

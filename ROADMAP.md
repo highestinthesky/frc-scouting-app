@@ -499,6 +499,27 @@ a peer of Scout and Schedule, it is a different application.
    rest of the manager page in v0.73 and Studio is manager-gated, so there was
    nowhere for a scout to look. `MyAssignments` puts it back on `/scouting`.
 
+7c. **Sync is legible from anywhere. ✅** The app bar had a four-state coloured
+   dot with a `title` — and a title needs a mouse to hover, so on the device this
+   app is actually used it said nothing. Everything readable lived on Settings,
+   two taps from every screen. `SyncPanel` replaces it: a tappable chip carrying
+   the queue depth, opening a sheet that names the state in words, says how many
+   entries are waiting and when it last synced, and offers a retry.
+
+   Four states, four different answers, because they need different responses —
+   offline (keep scouting), signed out (keep scouting, but sign in before you
+   leave), not on this event (ask a manager, you cannot fix this), error (a
+   manager should know). A dot could only be a colour someone learns to ignore.
+
+   Two bugs came out of building it. The old dot's derivation never read
+   `syncState.reason`, so a signed-out scout was told to set an event code they
+   already had. And `pendingCount` was only written inside `pushOutbox()`, which
+   does not run when offline — so a scout recording six matches in a dead corner
+   saw "Waiting to upload: Nothing" while holding six unsent entries, which is
+   the exact moment that number exists to reassure them. The tick now recounts
+   before it checks connectivity. Verified: offline shows 2 waiting with 2
+   actually queued, and the queue drains to 0 on reconnect.
+
 8. **The shell earns its space.** One breakpoint system replaces the four ad-hoc
    values (`28rem`, `40rem`, `47.9375rem`, `600px`). Desktop stops being a phone
    in the middle of a screen: content width becomes a per-surface decision — a
