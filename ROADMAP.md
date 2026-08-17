@@ -582,6 +582,62 @@ a peer of Scout and Schedule, it is a different application.
     real Tab press, and by seeing a component's own 1px offset win over the
     baseline's 2px.
 
+### v0.74 — Studio becomes its own application, visually
+
+Two halves. The roster paste is done; the rest is Studio's appearance and
+layout, and it is the larger half.
+
+**The problem.** Studio's five pages were moved wholesale out of the scout app
+in v0.73 and never redressed. `schedule` is 1087 lines with 8 local style rules
+— it inherits a scout page's styling that no longer applies around it.
+`insights` is 1010 lines with 92 rules written for a phone-width column, now
+sitting inside a sidebar layout. They read as the main site with a sidebar
+bolted on, because that is exactly what they are.
+
+#### The palette, and the constraint that shapes everything
+
+    #662DB4  purple   8.08x on white   ← the ONLY one that can carry white text
+    #0087F8  blue     3.61x on white   dark text only (fails AA for body copy)
+    #00C7FA  cyan     1.99x on white   dark text only
+    #49FCE2  aqua     1.29x on white   dark text only
+
+**Three of the four cannot have white text on them.** That is not a detail to
+discover during implementation, it decides the whole scheme: they are surfaces,
+fills, borders, chart series and state accents — never a button background with
+white text, never body copy on a light ground. `check_contrast.mjs` fails the
+build on it, so this is enforced rather than remembered.
+
+`#662DB4` is within a hair of the app's existing accent (`#5F24A2`, 9.29x). The
+palette is an *extension* of the brand, not a break from it: Studio reads as the
+same product, cooler and deeper, which is the right relationship for a surface
+the same people open on a laptop ten minutes later.
+
+#### Steps
+
+1. **Studio gets its own token block** — a `[data-studio]` scope defining
+   `--studio-*` over the existing scale, so the scout app is untouched and
+   `design.md` still governs spacing, type and radii. A second palette on one
+   system, not a second design system.
+2. **A dark surface.** Studio is a laptop-at-a-table application used under
+   competition lighting, the four colours sing on a dark ground and wash out on
+   white, and dark is what makes the three light ones usable at all — as accents
+   on dark rather than fills beneath white text.
+3. **Each page redressed for the layout it now lives in.** Wide tables instead
+   of phone-width cards, real density on `insights`, and `schedule` losing the
+   styling it inherited from a page it no longer shares.
+4. **A Studio component set** — table, panel, stat, toolbar — so five pages stop
+   each inventing their own. `insights`'s 92 local rules are mostly four things
+   repeated.
+5. **Contrast verified per surface, not per token.** Every pairing that ships
+   gets checked, because a palette that passes in isolation still fails in the
+   combination someone actually writes.
+
+#### Deliberately not in v0.74
+
+The visualization builder. Studio needs to *look* like one application before it
+grows a new feature; a chart builder built on five inconsistent pages inherits
+all five inconsistencies.
+
 ### Out of scope for v0.7
 
 Named so the series can actually close: no new analysis features, no graph

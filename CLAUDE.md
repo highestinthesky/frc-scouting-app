@@ -4,6 +4,122 @@ Offline-first scouting PWA for FRC team 3419. SvelteKit 2 + Svelte 5 runes,
 `adapter-static`, deployed to GitHub Pages. IndexedDB is the write target;
 Supabase is the shared mirror. JavaScript with JSDoc, not TypeScript.
 
+## What this app is, end to end
+
+Written for someone arriving cold. The invariants below are the sharp edges; this
+is the shape they sit on.
+
+**Two applications share one deployment.**
+
+    the scout app     Scouting · Settings          + a Studio button for managers
+    Studio            Event · Schedule · Coverage · Insights · Accounts
+
+A scout opens the app to record a match. A manager opens Studio to run an event.
+Those are different jobs on different devices in different rooms, and v0.73 split
+them. Studio renders with **no app shell at all** — `+layout.svelte` returns early
+on `/studio` — because the global tab bar was a trapdoor out of it.
+
+### The routes
+
+| Route | What it is |
+|---|---|
+| `/` | Sign in. The front door; every other route redirects here when signed out. |
+| `/register` | Redeem an invite code. Shows whose invite it is. |
+| `/scouting` | The scout's page: assignments, then their entries. |
+| `/scouting/new`, `/scouting/edit` | The entry form. |
+| `/settings` | Device settings, event picker, sign out. |
+| `/home` | A redirect to `/scouting`. Kept because installed PWAs still point here. |
+| `/studio/event` | Who is on this event — drag scouts on and off. |
+| `/studio/schedule` | Publish a TBA schedule, auto-assign, per-match overrides, reminders. |
+| `/studio/coverage` | What is being watched and what is not. |
+| `/studio/insights` | Team metrics, compare, picklist. |
+| `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles. |
+
+### The data path
+
+Recording writes to **IndexedDB first, always** (`db.js`, Dexie). The sync layer
+(`sync.svelte.js`) pushes to Supabase on a 3-second tick and pulls peers' rows
+back. Postgres is a shared mirror, never the write target.
+
+Pull is a **watermark on `updated_at`**, not a full fetch. That one fact explains
+several designs: deletion is a tombstone (`deleted_at`) because a vanished row is
+indistinguishable from an unchanged one; and `updated_at` is set by a trigger so
+devices with wrong clocks still agree.
+
+**An event is a row.** `events.id` scopes every shared table via `event_id`, and
+`event_scouts` decides who may see it. `events.code` is a TBA label, not a
+credential. `eventIdForCode()` resolves one and needs a session — which is what
+makes "record but do not sync" fall out of the schema.
+
+### Who may do what
+
+Three roles on `profiles.role`: `scout`, `manager`, `super`. Everything is
+enforced in Postgres RLS, and the UI only avoids offering what would fail.
+
+- **scout** — records entries, edits their own, reads their event.
+- **manager** — the above, plus everything in Studio for events they are a
+  member of: schedule, assignments, reminders, picklist, accounts.
+- **super** — manages every event without being a member, and is the only role
+  that can create a manager or another super.
+
+`manages_event(event_id)` is the one predicate: `is_super() OR (member AND role =
+manager)`. `auth.canManage` and `auth.showsManagerTools` are the client twins and
+nothing may re-derive them — `check_components.mjs` fails the build if it does.
+
+### Onboarding a team
+
+Two paths, both from `/studio/accounts`:
+
+1. **Invite codes.** The manager types the person's real name; the invite carries
+   it and `redeem_invite` uses it over anything the redeemer sends. Paste a whole
+   roster to mint twenty at once. The scout picks their own username and password.
+2. **Direct creation** via the `create-account` Edge Function — a username and a
+   one-time password to hand over. Needs `service_role`, which is why it is an
+   Edge Function and not in the bundle.
+
+### Design system
+
+`design.md` is the locked system: spacing (`--space-1..6`), type (`--fs-xs..xl`),
+radii, motion and an explicit light/dark palette. Components consume tokens and
+never hardcode a value — the `:root` block is the only place literals belong.
+
+Content width is a decision about the content, not the device:
+
+    --w-form   34rem   one column of fields
+    --w-read   42rem   prose and settings
+    --w-list   60rem   cards and entry lists
+    --w-board  78rem   tables and dense grids
+
+**Studio gets its own palette in v0.74** (see `ROADMAP.md`), and one fact governs
+its use:
+
+    #662DB4  purple   8.08x on white   ← the only one that can carry white text
+    #0087F8  blue     3.61x on white   dark text only
+    #00C7FA  cyan     1.99x on white   dark text only
+    #49FCE2  aqua     1.29x on white   dark text only
+
+Three of the four cannot have white text on them. They are surfaces, fills,
+borders and chart series — never a button background with white text.
+`#662DB4` is a hair from the existing accent `#5F24A2`, so the palette extends
+the brand rather than breaking it.
+
+### The checks, and why each exists
+
+`npm test` runs 16 suites. Two are not unit tests and are the important ones:
+
+- **`check_components.mjs`** reads *emitted* CSS, not source, because Svelte's
+  scoping changes specificity and that shipped a bug once. It pins the tap-target
+  floor, the focus ring, token usage, that nav labels match their page's `<h1>`,
+  and that no grid track is a bare `fr`.
+- **`check_contrast.mjs`** pins every token pairing against WCAG.
+
+`npm run test:rls` needs Docker (`supabase start`) and makes **real HTTP requests**
+as anon, an orphan, a scout, a manager and a super. 127 assertions. It skips and
+exits 0 without a stack, so `npm test` stays green offline.
+
+**Every assertion in it has been mutation-tested, and that is not a formality** —
+see the failure mode documented under the RLS section below.
+
 ## Working agreements
 
 - **Commit freely; leave `git push` to the user.** A push deploys.
@@ -323,11 +439,28 @@ Single-context. No `CONTEXT.md`, deliberately — this file already carries the
 vocabulary one would hold. ADRs are `docs/adr-NNN-*.md`, flat, not `docs/adr/`.
 See `docs/agents/domain.md`.
 
+## Live state, as of 2026-08-17
+
+Checked, not remembered. A new session should re-verify before trusting it.
+
+- **Production is at migration `0023`.** `0016`–`0023` are applied; `0011`,
+  `0012` and `0013` never were and live in `supabase/superseded/`.
+- **`AUTH_ENFORCED` is `true`** and the cutover is complete: no anonymous path
+  exists in the database, and membership is the only thing granting access.
+- The `create-account` Edge Function is deployed and ACTIVE.
+- **Leaked password protection is still OFF** — a dashboard setting nobody but
+  the user can change, worth doing before accounts are handed out.
+- The Supabase MCP connection is available and is how migrations have been
+  applied; `mcp__plugin_supabase_supabase__*`, project ref `hhvpkgwgkuiemxyarsuk`.
+
+**Everything up to and including v0.74's roster paste is committed but the user
+pushes.** A push deploys to GitHub Pages.
+
 ## Where the reasoning lives
 
 | | |
 |---|---|
-| `ROADMAP.md` | the single dependency-ordered plan |
+| `ROADMAP.md` | the single dependency-ordered plan; v0.74 is the current release |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `supabase/README.md` | migration runbook, and repo state vs live state |
 | `design.md` | the locked design system |
