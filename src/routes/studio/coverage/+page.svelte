@@ -23,7 +23,12 @@
 	import { getCachedSchedule } from '$lib/tba.js';
 	import { buildEntryIndex, scheduleRollup, matchCoverage } from '$lib/coverage.js';
 	import { eventRoster, listMyEvents } from '$lib/events.js';
-	import { sameScout } from '$lib/scout-identity.js';
+	import { sameScout, rowScout, scoutRef } from '$lib/scout-identity.js';
+	import PageHead from '$lib/components/studio/PageHead.svelte';
+	import Panel from '$lib/components/studio/Panel.svelte';
+	import Stats from '$lib/components/studio/Stats.svelte';
+	import Stat from '$lib/components/studio/Stat.svelte';
+	import Table from '$lib/components/studio/Table.svelte';
 
 	let entries = $state([]);
 	let cached = $state(null);
@@ -53,12 +58,31 @@
 	// Per-scout counts through sameScout(), never a raw string compare. CLAUDE.md:
 	// the codebase used to disagree with itself about whether "Ning" and "ning"
 	// were one person, in three places out of six.
+	//
+	// Both sides have to be ScoutRefs, and this call site was passing neither — a
+	// raw entry and a raw roster row. sameScout() then read `undefined` off both:
+	// the profileId branch was skipped because the entry has no `.profileId`, and
+	// `a.key !== '' && a.key === b.key` became `undefined !== '' && undefined ===
+	// undefined`, which is TRUE. Every scout was credited with every entry on the
+	// event, so this list read "everyone has 20" and the one number it exists to
+	// surface — the scout at zero — could never appear.
+	//
+	// It is the exact failure scout-identity.js was written to end, in the one
+	// call site whose comment says it is using it. The other six wrap both sides.
+	const scoutIdentity = (p) =>
+		scoutRef(
+			// Not personName(): its 'Unnamed' fallback would become a join key and
+			// match an entry recorded by someone who typed "Unnamed".
+			`${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username || '',
+			p.profileId
+		);
+
 	const perScout = $derived(
 		roster
 			.map((r) => ({
 				person: r,
 				count: entries.filter(
-					(e) => e.eventCode === session.eventCode && sameScout(e, r)
+					(e) => e.eventCode === session.eventCode && sameScout(rowScout(e), scoutIdentity(r))
 				).length
 			}))
 			.sort((a, b) => a.count - b.count)
@@ -86,189 +110,156 @@
 		`${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username || 'Unnamed';
 </script>
 
-<header>
-	<h1>Coverage</h1>
-	<p class="lede">
-		{#if session.eventCode}
-			{session.eventCode} — what has actually been recorded, against what the
-			schedule says should have been.
-		{:else}
-			Choose an event first.
-		{/if}
-	</p>
-</header>
+<PageHead
+	title="Coverage"
+	sub={session.eventCode
+		? `${session.eventCode} — what has actually been recorded, against what the schedule says should have been.`
+		: 'Choose an event first.'}
+/>
 
 {#if loading}
 	<p class="muted">Loading…</p>
 {:else if err}
 	<p class="err">{err}</p>
 {:else if qmList.length === 0}
-	<p class="muted">
-		No schedule cached for this event yet. Publish one from Scouting and this
-		fills in.
-	</p>
+	<Panel tone="quiet">
+		<p class="muted">
+			No schedule cached for this event yet. Publish one from Scouting and this
+			fills in.
+		</p>
+	</Panel>
 {:else}
-	<div class="tiles">
-		<div class="tile">
-			<span class="big">{pct === null ? '—' : `${pct}%`}</span>
-			<span class="cap">robot-matches recorded</span>
-			<span class="sub">{rollup.teamMatchesScouted} of {rollup.teamMatchesTotal}</span>
-		</div>
-		<div class="tile">
-			<span class="big">{rollup.matchesComplete}</span>
-			<span class="cap">matches fully covered</span>
-			<span class="sub">of {rollup.matchesTotal} scheduled</span>
-		</div>
-		<div class="tile" class:warn={partial.length > 0}>
-			<span class="big">{partial.length}</span>
-			<span class="cap">matches with gaps</span>
-			<span class="sub">started but incomplete</span>
-		</div>
+	<Stats>
+		<Stat
+			label="Robot-matches recorded"
+			value={pct === null ? '—' : `${pct}%`}
+			note="{rollup.teamMatchesScouted} of {rollup.teamMatchesTotal}"
+		/>
+		<Stat
+			label="Matches fully covered"
+			value={rollup.matchesComplete}
+			note="of {rollup.matchesTotal} scheduled"
+		/>
+		<!-- Toned, and the note carries the same fact in words. Colour alone is
+		     not a signal everyone receives. -->
+		<Stat
+			label="Matches with gaps"
+			value={partial.length}
+			note="started but incomplete"
+			tone={partial.length > 0 ? 'warn' : 'default'}
+		/>
+	</Stats>
+
+	<!-- Two independent lists, so they sit side by side on a laptop rather than
+	     one below the other with the second below the fold. They answer the two
+	     halves of the same question — which match has a hole, and who is not
+	     recording — and chasing one without the other is how a manager fixes
+	     symptoms all afternoon. -->
+	<div class="cols">
+		<Panel
+			title="Gaps"
+			hint={partial.length === 0
+				? 'Every match anyone has recorded is complete.'
+				: 'Someone recorded part of these and not the rest — the most likely place a scout drifted off their assignment.'}
+			flush={partial.length > 0}
+		>
+			{#if partial.length === 0}
+				<p class="muted">Nothing started is unfinished.</p>
+			{:else}
+				<Table dense>
+					{#snippet head()}
+						<tr>
+							<th>Match</th>
+							<th>Recorded</th>
+							<th data-num>Robots</th>
+						</tr>
+					{/snippet}
+					{#each partial as { match, cov } (match.match_number ?? match.matchNumber)}
+						<tr>
+							<td class="qm">Q{match.match_number ?? match.matchNumber}</td>
+							<td>
+								<span class="bar" aria-hidden="true">
+									<span
+										class="fill"
+										style="width: {(cov.scoutedTeams / cov.totalTeams) * 100}%"
+									></span>
+								</span>
+							</td>
+							<td data-num>{cov.scoutedTeams}/{cov.totalTeams}</td>
+						</tr>
+					{/each}
+				</Table>
+			{/if}
+		</Panel>
+
+		<Panel
+			title="By scout"
+			hint={perScout.length === 0
+				? 'Nobody is on this event yet — add scouts on the Event tab.'
+				: 'Fewest first, because the useful end of this list is the top. A zero usually means a phone that has not synced rather than a scout who has not worked.'}
+			flush={perScout.length > 0}
+		>
+			{#if perScout.length === 0}
+				<p class="muted">No roster.</p>
+			{:else}
+				<Table dense>
+					{#snippet head()}
+						<tr>
+							<th>Scout</th>
+							<th data-num>Entries</th>
+						</tr>
+					{/snippet}
+					{#each perScout as { person, count } (person.profileId)}
+						<tr>
+							<td class="who">{personName(person)}</td>
+							<td data-num>
+								<span class:zero-n={count === 0} title={count === 0 ? 'Nothing recorded' : undefined}>
+									{count}
+								</span>
+							</td>
+						</tr>
+					{/each}
+				</Table>
+			{/if}
+		</Panel>
 	</div>
-
-	<section>
-		<h2>Gaps</h2>
-		{#if partial.length === 0}
-			<p class="muted">
-				Nothing started is unfinished. Every match anyone has recorded is complete.
-			</p>
-		{:else}
-			<p class="muted">
-				Someone recorded part of these and not the rest — the most likely place a
-				scout drifted off their assignment.
-			</p>
-			<ul class="gaps">
-				{#each partial as { match, cov } (match.match_number ?? match.matchNumber)}
-					<li>
-						<span class="qm">Q{match.match_number ?? match.matchNumber}</span>
-						<span class="bar" aria-hidden="true">
-							<span class="fill" style="width: {(cov.scoutedTeams / cov.totalTeams) * 100}%"></span>
-						</span>
-						<span class="frac">{cov.scoutedTeams}/{cov.totalTeams}</span>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</section>
-
-	<section>
-		<h2>By scout</h2>
-		{#if perScout.length === 0}
-			<p class="muted">Nobody is on this event yet — add scouts on the Event tab.</p>
-		{:else}
-			<p class="muted">
-				Fewest first, because the useful end of this list is the top. A zero here
-				usually means a phone that has not synced rather than a scout who has not
-				worked.
-			</p>
-			<ul class="scouts">
-				{#each perScout as { person, count } (person.profileId)}
-					<li class:zero={count === 0}>
-						<span class="who">{personName(person)}</span>
-						<span class="n">{count}</span>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</section>
 {/if}
 
 <style>
-	header {
-		margin-bottom: var(--space-4);
-	}
-	h1 {
-		margin: 0;
-		font-size: var(--fs-xl);
-	}
-	.lede {
-		margin: var(--space-1) 0 0;
-		color: var(--text-muted);
-		font-size: var(--fs-sm);
-		max-width: var(--w-board); /* a coverage grid is dense by nature */
-	}
-	h2 {
-		margin: 0 0 var(--space-1);
-		font-size: var(--fs-md);
-	}
-	section {
-		margin-top: var(--space-5);
-	}
+	/* Panel, Stat and Table own the boxes now. What is left is the two marks this
+	   page draws and the state its rows carry. */
+
 	.muted {
 		color: var(--text-muted);
 		font-size: var(--fs-sm);
-		margin: 0 0 var(--space-2);
-		max-width: var(--w-board); /* a coverage grid is dense by nature */
+		margin: 0;
 	}
 	.err {
 		color: var(--danger);
 		font-size: var(--fs-sm);
 	}
 
-	.tiles {
+	.cols {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(11rem, minmax(0, 1fr)));
-		gap: var(--space-3);
-	}
-	.tile {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding: var(--space-3);
-		background: var(--bg-card);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-	}
-	/* Gaps get a border and a background, not a red number — the count is the
-	   signal and colour alone is not readable to everyone. */
-	.tile.warn {
-		border-color: var(--warning-border);
-		background: var(--warning-bg);
-	}
-	.big {
-		/* A token, not 2rem. check_components.mjs enforces this and caught the
-		   hardcoded value — one page inventing its own type scale is how a design
-		   system stops being one. */
-		font-size: var(--fs-xl);
-		font-weight: 700;
-		line-height: 1.1;
-		color: var(--text-primary);
-	}
-	.cap {
-		font-size: var(--fs-sm);
-		color: var(--text-primary);
-	}
-	.sub {
-		font-size: var(--fs-xs);
-		color: var(--text-muted);
+		grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+		gap: var(--space-4);
+		align-items: start;
+		margin-top: var(--space-4);
 	}
 
-	ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-	}
-	.gaps li {
-		display: grid;
-		grid-template-columns: 3.5rem minmax(0, 1fr) 3rem;
-		align-items: center;
-		gap: var(--space-2);
-		padding: var(--space-2);
-		background: var(--bg-subtle);
-		border-radius: var(--radius-md);
-	}
 	.qm {
 		font-weight: 600;
+		white-space: nowrap;
 	}
-	.frac {
-		font-size: var(--fs-sm);
-		color: var(--text-muted);
-		text-align: right;
+	.who {
+		font-weight: 600;
 	}
+
+	/* How much of the match got recorded. A mark, so the accent is used at its
+	   non-text floor rather than as a label. */
 	.bar {
+		display: block;
+		min-width: 4rem;
 		height: 0.5rem;
 		background: var(--bg-elev);
 		border-radius: var(--radius-pill);
@@ -280,26 +271,11 @@
 		background: var(--accent);
 	}
 
-	.scouts li {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: var(--space-2);
-		min-height: var(--tap-min);
-		padding: var(--space-2);
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-	}
-	.scouts li.zero {
-		border-color: var(--warning-border);
-		background: var(--warning-bg);
-	}
-	.who {
-		font-weight: 600;
-	}
-	.n {
-		font-variant-numeric: tabular-nums;
-		color: var(--text-muted);
+	/* A scout with nothing recorded. Marked on the number rather than by filling
+	   the whole row: at an event most of this list is short, and a wall of amber
+	   rows says "everything is wrong" when the point is which ONE is. */
+	.zero-n {
+		color: var(--warning);
+		font-weight: 700;
 	}
 </style>

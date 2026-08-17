@@ -15,6 +15,17 @@
 	//              ends up with five of them.
 	//   danger     outlined in --danger, filling only on hover. A destructive
 	//              button should not look like the obvious thing to press.
+	//   ghost      no fill, no border at rest. For the ones that are an option
+	//              rather than an action — Cancel, "Add all 12", "Archive this
+	//              event" — where a third outlined button in a row of two makes
+	//              the row read as three equal choices.
+	//
+	// `ghost` was in use at four call sites before it existed as a variant. It
+	// rendered `.btn.ghost` with no rule behind it, so those buttons had no fill,
+	// no border colour and inherited body text — bare text that happened to be
+	// clickable. Nothing failed, because a variant prop is just a class name and
+	// an unmatched class is not an error. check_components.mjs now asserts that
+	// every variant passed anywhere is one this file defines.
 	//
 	// Not every button in the app belongs here. A ✕ in a modal header, a match
 	// -number chip, a remove-row ×: those are page furniture with their own
@@ -121,6 +132,15 @@
 		border-color: var(--border-strong);
 	}
 	.secondary:hover:not(:disabled) {
+		background: var(--bg-subtle);
+	}
+
+	.ghost {
+		background: transparent;
+		color: var(--accent);
+		border-color: transparent;
+	}
+	.ghost:hover:not(:disabled) {
 		background: var(--bg-subtle);
 	}
 

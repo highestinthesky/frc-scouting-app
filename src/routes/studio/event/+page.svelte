@@ -30,6 +30,8 @@
 	import Button from '$lib/components/Button.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import EventPicker from '$lib/components/EventPicker.svelte';
+	import PageHead from '$lib/components/studio/PageHead.svelte';
+	import Panel from '$lib/components/studio/Panel.svelte';
 
 	let events = $state([]);
 	let selectedId = $state(null);
@@ -177,46 +179,47 @@
 	}
 </script>
 
-<header>
-	<h1>Event</h1>
-	<p class="lede">
-		Who can see and sync this event. Access is this list — knowing the event code
-		grants nothing.
-	</p>
-</header>
-
-{#if events.length > 1}
-	<div class="pick">
-		<Select
-			label="Editing"
-			bind:value={selectedId}
-			onchange={refreshRoster}
-			disabled={busy}
-			options={events.map((e) => ({
-				value: e.id,
-				label: eventLabel(e) + (e.archived_at ? ' (archived)' : '')
-			}))}
-		/>
-	</div>
-{/if}
+<PageHead
+	title="Event"
+	sub="Who can see and sync this event. Access is this list — knowing the event code grants nothing."
+>
+	{#snippet actions()}
+		{#if events.length > 1}
+			<Select
+				label="Editing"
+				inline
+				bind:value={selectedId}
+				onchange={refreshRoster}
+				disabled={busy}
+				options={events.map((e) => ({
+					value: e.id,
+					label: eventLabel(e) + (e.archived_at ? ' (archived)' : '')
+				}))}
+			/>
+		{/if}
+	{/snippet}
+</PageHead>
 
 {#if !selected}
-	<div class="empty">
-		<p>No event yet. Create one and it becomes yours to staff.</p>
+	<Panel tone="quiet">
+		<p class="empty-line">No event yet. Create one and it becomes yours to staff.</p>
 		<EventPicker />
-	</div>
+	</Panel>
 {:else}
 	<div class="columns">
-		<section
-			class="col"
-			ondragover={(e) => e.preventDefault()}
-			ondrop={onDrop('event')}
-			aria-label="Scouts on this event"
+		<Panel
+			title="On {eventLabel(selected)}"
+			hint={roster.length === 0 ? 'Nobody yet. Drag a name across, or press +.' : ''}
 		>
-			<h2>On {eventLabel(selected)} <span class="count">{roster.length}</span></h2>
-			{#if roster.length === 0}
-				<p class="hint">Nobody yet. Drag a name across, or press +.</p>
-			{/if}
+			{#snippet actions()}
+				<span class="count">{roster.length}</span>
+			{/snippet}
+			<section
+				class="col"
+				ondragover={(e) => e.preventDefault()}
+				ondrop={onDrop('event')}
+				aria-label="Scouts on this event"
+			>
 			<ul>
 				{#each roster as r (r.profileId)}
 					<li
@@ -239,22 +242,27 @@
 					</li>
 				{/each}
 			</ul>
-		</section>
+			</section>
+		</Panel>
 
-		<section
-			class="col"
-			ondragover={(e) => e.preventDefault()}
-			ondrop={onDrop('team')}
-			aria-label="Team members not on this event"
+		<Panel
+			title="Rest of the team"
+			hint={available.length === 0 ? 'Everyone is on this event.' : ''}
 		>
-			<h2>Rest of the team <span class="count">{available.length}</span></h2>
-			{#if available.length === 0}
-				<p class="hint">Everyone is on this event.</p>
-			{:else}
-				<Button variant="ghost" type="button" disabled={busy} onclick={addEveryone}>
-					Add all {available.length}
-				</Button>
-			{/if}
+			{#snippet actions()}
+				{#if available.length > 0}
+					<Button variant="ghost" type="button" disabled={busy} onclick={addEveryone}>
+						Add all {available.length}
+					</Button>
+				{/if}
+				<span class="count">{available.length}</span>
+			{/snippet}
+			<section
+				class="col"
+				ondragover={(e) => e.preventDefault()}
+				ondrop={onDrop('team')}
+				aria-label="Team members not on this event"
+			>
 			<ul>
 				{#each available as p (p.id)}
 					<li
@@ -277,67 +285,42 @@
 					</li>
 				{/each}
 			</ul>
-		</section>
+			</section>
+		</Panel>
 	</div>
 
-	<section class="danger">
-		<h2>Event</h2>
-		<p class="hint">
-			{selected.code}{selected.starts_on ? ` · starts ${selected.starts_on}` : ''}
-		</p>
-		<Button variant="ghost" type="button" disabled={busy} onclick={toggleArchived}>
-			{selected.archived_at ? 'Restore this event' : 'Archive this event'}
-		</Button>
-	</section>
+	<div class="tail">
+		<Panel
+			title="This event"
+			hint="{selected.code}{selected.starts_on ? ` · starts ${selected.starts_on}` : ''}"
+		>
+			{#snippet actions()}
+				<Button variant="ghost" type="button" disabled={busy} onclick={toggleArchived}>
+					{selected.archived_at ? 'Restore this event' : 'Archive this event'}
+				</Button>
+			{/snippet}
+			<p class="hint">
+				Archiving hides the event from pickers. Nothing recorded against it is
+				deleted, and restoring puts it back exactly as it was.
+			</p>
+		</Panel>
+	</div>
 {/if}
 
 {#if err}<p class="err">{err}</p>{/if}
 {#if msg}<p class="ok">{msg}</p>{/if}
 
 <style>
-	header {
-		margin-bottom: var(--space-4);
-	}
-	h1 {
-		margin: 0;
-		font-size: var(--fs-xl);
-	}
-	.lede {
-		margin: var(--space-1) 0 0;
-		color: var(--text-muted);
-		font-size: var(--fs-sm);
-		max-width: 40rem;
-	}
+	/* Panel owns the two columns now. What is left is the roster row itself and
+	   the drag state it carries. */
 
-	.pick {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		margin-bottom: var(--space-4);
-		max-width: 22rem;
-	}
-	.label {
-		font-size: var(--fs-sm);
-		font-weight: 600;
-	}
-	select {
-		font: inherit;
-		min-height: var(--tap-min);
-		padding: var(--space-2);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-md);
-		background: var(--bg-card);
-		color: var(--text-primary);
-	}
-
-	.empty {
-		padding: var(--space-4);
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-	}
-	.empty p {
+	.empty-line {
 		margin: 0 0 var(--space-3);
+		color: var(--text-muted);
+	}
+	.hint {
+		margin: 0;
+		font-size: var(--fs-sm);
 		color: var(--text-muted);
 	}
 
@@ -345,44 +328,28 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		gap: var(--space-4);
+		align-items: start;
 	}
-	@media (max-width: 47.9375rem) {
-		.columns {
-			grid-template-columns: minmax(0, 1fr);
-		}
+	.tail {
+		margin-top: var(--space-4);
 	}
 
 	.col {
-		padding: var(--space-3);
-		background: var(--bg-card);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
 		min-width: 0;
-	}
-	h2 {
-		margin: 0 0 var(--space-2);
-		font-size: var(--fs-md);
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
 	}
 	.count {
 		font-size: var(--fs-xs);
 		font-weight: 600;
-		padding: 1px var(--space-2);
+		font-variant-numeric: tabular-nums;
+		padding: 2px var(--space-2);
 		border-radius: var(--radius-pill);
 		background: var(--bg-subtle);
-		color: var(--text-muted);
-	}
-	.hint {
-		margin: 0 0 var(--space-2);
-		font-size: var(--fs-sm);
 		color: var(--text-muted);
 	}
 
 	ul {
 		list-style: none;
-		margin: var(--space-2) 0 0;
+		margin: 0;
 		padding: 0;
 		display: flex;
 		flex-direction: column;
@@ -418,10 +385,18 @@
 		font-size: var(--fs-xs);
 		color: var(--text-muted);
 	}
+
+	/* 44px, not the 2rem it shipped at. This page's own header says the buttons
+	   are the real control and dragging is the fast path — drag-and-drop is
+	   unreachable by keyboard and awkward on a phone — and then sized them at 32.
+	   The one control a manager MUST be able to hit was the smallest on the page. */
 	.act {
 		flex: none;
-		width: 2rem;
-		height: 2rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
 		font: inherit;
 		font-size: var(--fs-lg);
 		line-height: 1;
@@ -440,13 +415,6 @@
 		cursor: default;
 	}
 
-	.danger {
-		margin-top: var(--space-5);
-		padding: var(--space-3);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-	}
-
 	.err {
 		color: var(--danger);
 		font-size: var(--fs-sm);
@@ -454,5 +422,11 @@
 	.ok {
 		color: var(--success);
 		font-size: var(--fs-sm);
+	}
+
+	@media (max-width: 47.9375rem) {
+		.columns {
+			grid-template-columns: minmax(0, 1fr);
+		}
 	}
 </style>

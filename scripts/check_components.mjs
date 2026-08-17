@@ -111,10 +111,40 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 		'design.md treats 44px as non-negotiable'
 	);
 
-	for (const variant of ['primary', 'secondary', 'danger']) {
+	for (const variant of ['primary', 'secondary', 'danger', 'ghost']) {
 		ok(
 			`Button: ${variant} variant is defined`,
 			r.some((x) => new RegExp(`\\.${variant}\\b`).test(unscoped(x.selector)))
+		);
+	}
+
+	// …and nobody asks for one that is not.
+	//
+	// Four call sites passed variant="ghost" for a release before the rule
+	// existed. It rendered `.btn.ghost` against nothing, so those buttons had no
+	// fill, no border colour and inherited body text. Nothing failed and nothing
+	// could: a variant prop is a class name, and a class with no rule behind it
+	// is not an error in CSS, in Svelte, or in any test that does not render.
+	//
+	// Checked against the SELECTORS in Button.svelte rather than a hardcoded
+	// list, so adding a variant to the component is all it takes to allow it.
+	{
+		const defined = new Set(
+			r.flatMap((x) =>
+				[...unscoped(x.selector).matchAll(/\.([a-z][\w-]*)\b/g)].map((m) => m[1])
+			)
+		);
+		const offenders = [];
+		for (const abs of readdirRecursive(path.join(root, 'src')).filter((f) => f.endsWith('.svelte'))) {
+			const rel = path.relative(root, abs);
+			for (const m of readFileSync(abs, 'utf8').matchAll(/<Button[^>]*?\bvariant="([^"]+)"/gs)) {
+				if (!defined.has(m[1])) offenders.push(`${rel}: variant="${m[1]}"`);
+			}
+		}
+		ok(
+			'every Button variant asked for is one Button defines',
+			offenders.length === 0,
+			offenders.join('\n        ') + '\n        an unmatched class is not an error — it is an unstyled button'
 		);
 	}
 
