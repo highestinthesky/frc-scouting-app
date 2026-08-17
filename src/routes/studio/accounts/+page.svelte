@@ -1,5 +1,8 @@
 <script>
 	import Select from '$lib/components/Select.svelte';
+	import PageHead from '$lib/components/studio/PageHead.svelte';
+	import Panel from '$lib/components/studio/Panel.svelte';
+	import Table from '$lib/components/studio/Table.svelte';
 	import { parseRoster, formatRosterName } from '$lib/roster.js';
 	// Manager surface: invite people, change roles, revoke access.
 	//
@@ -204,20 +207,18 @@
 <svelte:head><title>Accounts · FRC Scout</title></svelte:head>
 
 <main>
-	<header class="page-head">
-		<a class="back" href="{base}/scouting/" aria-label="Back">←</a>
-		<h1>Accounts</h1>
-	</header>
+	<PageHead
+		title="Accounts"
+		sub="Create an account and hand over a password, or mint an invite and read out a code."
+	/>
 
 	{#if !auth.isManager}
 		<p class="muted">Only managers can see this page.</p>
 	{:else}
-		<section>
-			<h2>Add someone</h2>
-			<p class="muted">
-				Type their name and email. You get a username and a one-time password to
-				give them; they choose their own the first time they sign in.
-			</p>
+		<Panel
+			title="Add someone"
+			hint="Type their name and email. You get a username and a one-time password to give them; they choose their own the first time they sign in."
+		>
 
 			<div class="new-grid">
 				<label class="field">
@@ -260,10 +261,9 @@
 					</p>
 				</div>
 			{/if}
-		</section>
+		</Panel>
 
-		<section>
-			<h2>Invite someone instead</h2>
+		<Panel title="Invite someone instead">
 			<p class="muted">
 				Read the code out to them. They pick their own username and password at
 				<a href="{base}/register/">the sign-up page</a>.
@@ -402,28 +402,40 @@
 					{/each}
 				</ul>
 			{/if}
-		</section>
+		</Panel>
 
-		<section>
-			<h2>People</h2>
+		<Panel
+			title="People"
+			hint="You can't change your own role — that stops a manager promoting themselves. Another manager or a super can."
+			flush={profiles.length > 0}
+		>
 			{#if profiles.length === 0}
 				<p class="muted">Nobody has registered yet.</p>
 			{:else}
-				<ul class="list people">
+				<Table>
+					{#snippet head()}
+						<tr>
+							<th>Name</th>
+							<th>Username</th>
+							<th>Status</th>
+							<th>Role</th>
+							<th><span class="sr-only">Actions</span></th>
+						</tr>
+					{/snippet}
 					{#each profiles as p (p.id)}
 						{@const self = p.id === auth.profile?.id}
-						<li>
-							<div class="who">
-								<strong>{p.first_name} {p.last_name}</strong>
-								<span class="uname">{p.username}</span>
+						<tr>
+							<td><strong>{p.first_name} {p.last_name}</strong></td>
+							<td><span class="uname">{p.username}</span></td>
+							<td>
 								{#if self}<span class="tag you">you</span>{/if}
 								{#if p.must_change_password}
 									<span class="tag pending" title="Still on the password they were given">
 										not signed in yet
 									</span>
 								{/if}
-							</div>
-							<div class="controls">
+							</td>
+							<td>
 								<Select
 									value={p.role}
 									disabled={busy || self}
@@ -434,21 +446,19 @@
 										...(roleOptions.includes(p.role) ? [] : [{ value: p.role, label: p.role }])
 									]}
 								/>
+							</td>
+							<td>
 								{#if !self && p.role !== 'super'}
 									<Button variant="danger" disabled={busy} onclick={() => revoke(p)}>
 										Revoke
 									</Button>
 								{/if}
-							</div>
-						</li>
+							</td>
+						</tr>
 					{/each}
-				</ul>
-				<p class="muted small">
-					You can't change your own role — that stops a manager promoting
-					themselves. Another manager or a super user can.
-				</p>
+				</Table>
 			{/if}
-		</section>
+		</Panel>
 	{/if}
 
 	{#if msg}<p class="banner ok">{msg}</p>{/if}
@@ -462,6 +472,11 @@
 		   content's min-content width, so two text inputs held this form wider than
 		   a 375px viewport and the right-hand column ran off the screen. */
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		/* Width is a decision about the content. A panel on this page is as wide as
+		   Studio, and a form left to fill it gave "First name" a 300px input and
+		   "Email" a 600px one — which is harder to use, not easier. --w-form is the
+		   token for exactly this and the page was not asking for it. */
+		max-width: var(--w-form);
 		gap: var(--space-3);
 		margin-bottom: var(--space-3);
 	}
@@ -475,8 +490,7 @@
 	.new-grid .field { display: flex; flex-direction: column; gap: var(--space-1); }
 	.new-grid .label { font-weight: 600; font-size: var(--fs-sm); }
 	.new-grid .help { color: var(--text-faint); font-size: var(--fs-xs); }
-	.new-grid input,
-	.new-grid select {
+	.new-grid input {
 		font: inherit;
 		min-height: var(--tap-min);
 		padding: var(--space-2) var(--space-3);
@@ -518,42 +532,12 @@
 	 * design-system: design.md · designed-as-app
 	 */
 
-	main {
-		max-width: 36rem;
-		margin: var(--space-4) auto;
-		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
-	}
-	.page-head {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		margin: var(--space-4) 0;
-	}
-	.back {
-		font-size: var(--fs-xl);
-		text-decoration: none;
-		color: var(--accent);
-		min-width: var(--tap-min);
-		min-height: var(--tap-min);
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-	}
-	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
-	h2 {
-		margin: var(--space-5) 0 var(--space-2);
-		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
 	.sub {
 		margin: var(--space-4) 0 var(--space-2);
 		font-size: var(--fs-sm);
 		color: var(--text-muted);
 	}
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
-	.muted.small { font-size: var(--fs-sm); margin-top: var(--space-3); }
 	.muted a { color: var(--accent); }
 
 	.bulk {
@@ -617,17 +601,6 @@
 	}
 	.field { display: flex; flex-direction: column; gap: var(--space-1); }
 	.label { font-weight: 600; font-size: var(--fs-sm); }
-	select {
-		font: inherit;
-		min-height: var(--tap-min);
-		padding: var(--space-2) var(--space-3);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-md);
-		background: var(--bg-card);
-		color: var(--text-primary);
-		text-transform: capitalize;
-	}
-	select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 	.fresh {
 		display: flex;
@@ -661,10 +634,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 	}
-	.people li { padding: var(--space-3); }
-	.who { display: flex; align-items: baseline; gap: var(--space-2); flex: 1 1 12rem; min-width: 0; flex-wrap: wrap; }
 	.uname { color: var(--text-faint); font-size: var(--fs-sm); }
-	.controls { display: flex; gap: var(--space-2); align-items: center; }
 	.tag {
 		font-size: var(--fs-xs);
 		text-transform: uppercase;
