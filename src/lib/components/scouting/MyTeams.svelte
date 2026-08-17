@@ -1,4 +1,5 @@
 <script>
+	import { auth } from '$lib/auth.svelte.js';
 	// Scout view: the teams the manager has assigned to this device.
 	//
 	// Read-only on purpose. Scouts could once add teams here, but those
@@ -17,11 +18,20 @@
 	<h2>Your teams</h2>
 
 	{#if assignedTeams.length === 0}
+		<!-- Signed in, "check your name matches" is advice a scout cannot act on:
+		     since 0023 the account owns the name and the field is read-only. The
+		     actual cause is diagnosed by MyAssignments, which can tell "none
+		     published yet" from "published, none yours" — two situations needing
+		     opposite responses. Signed out, the typed name IS still editable and
+		     the old advice is the right advice. -->
 		<p class="muted small">
-			Nothing assigned to <strong>{session.scoutName || '(no name set)'}</strong>.
-			Check that your name on <a href="{base}/settings/">Settings</a> matches
-			exactly what your manager typed, then tap Refresh. If it still looks
-			empty, ask them to assign you.
+			{#if auth.signedIn}
+				Nothing assigned to <strong>{auth.displayName || session.scoutName}</strong> yet.
+			{:else}
+				Nothing assigned to <strong>{session.scoutName || '(no name set)'}</strong>.
+				Check that your name on <a href="{base}/settings/">Settings</a> matches
+				exactly what your manager typed, then tap Refresh.
+			{/if}
 		</p>
 	{:else}
 		<div class="team-chips">

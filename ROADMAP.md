@@ -551,9 +551,19 @@ a peer of Scout and Schedule, it is a different application.
    `scout-identity.js` exists because that was already happening between call
    sites; this is the same failure one level earlier, between two humans.
 
-   Still open in this step: removing the typed-name field from Settings and the
-   first-run setup, and finishing `scout_name`'s retirement as a join key. The
-   name is right at the source now, which is the prerequisite for both.
+   The Settings field is done (see the identity commit). On the join itself:
+   `sameScout()` already prefers `profile_id` and falls back to the name only
+   when one side lacks an account, and `auth.me` carries the account id — so the
+   assignment join is account-first today. Removing the name fallback outright
+   waits until every assignment row on production carries `profile_id`; until
+   then it is the thing that keeps a pre-0010 row reaching its scout.
+
+   What was missing was not the join but the *diagnosis*. "Nothing assigned" had
+   two causes needing opposite responses — wait, or go ask someone — and the copy
+   guessed at a third that is no longer actionable: "check your name matches".
+   Since `0023` the account owns the name and the field is read-only, so that
+   sent a scout to a dead end. It now distinguishes "none published yet" from
+   "published, none yours", both verified against seeded data.
 
 10. **The visual pass.** Hallmark runs as a redesign *inside* `design.md`'s
     existing system — tokens, contrast and component checks stay authoritative.
