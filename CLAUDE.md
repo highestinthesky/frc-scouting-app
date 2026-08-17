@@ -120,6 +120,42 @@ exits 0 without a stack, so `npm test` stays green offline.
 **Every assertion in it has been mutation-tested, and that is not a formality** —
 see the failure mode documented under the RLS section below.
 
+## Working locally
+
+The dev server points at **production** by default — `SUPABASE_URL` is hardcoded
+in `src/lib/supabase.js`, because a static bundle has nowhere else to put it. To
+look at the app against the local stack:
+
+```
+supabase start
+node scripts/seed_demo.mjs          # accounts, an event, both reminder kinds
+printf 'VITE_SUPABASE_URL=http://127.0.0.1:54321\nVITE_SUPABASE_ANON_KEY=%s\n' \
+  "$(supabase status -o env | grep '^ANON_KEY' | cut -d= -f2- | tr -d '\"')" > .env.local
+npm run dev
+```
+
+**Delete `.env.local` when finished.** It is gitignored, but leaving it means the
+next `npm run build` produces a bundle pointed at a laptop.
+
+`supabase db reset` wipes `auth.users`, so re-run the seed after every reset.
+Signing in through the UI needs a password field; from a browser tool it is
+easier to drive `getAuthClient().auth.signInWithPassword(...)` from the console.
+
+### Verification traps that have already wasted time
+
+Each of these produced a confident wrong answer before being caught:
+
+- **`scrollWidth - clientWidth` is not horizontal overflow.** It reports 16 on
+  any page with a vertical scrollbar. Test whether the document actually scrolls:
+  set `scrollLeft` and see if it moves.
+- **Programmatic `.focus()` does not trigger `:focus-visible`.** It needs real
+  keyboard intent, so a focus-ring check has to press Tab, not call `.focus()`.
+- **Check the precondition before trusting the measurement.** An "offline sync"
+  test passed while `syncState.eventCode` was null the whole time — it was
+  measuring "never started", not "offline".
+- **A screenshot at a zero-width viewport proves nothing.** Confirm the viewport
+  is what you asked for before reading the picture.
+
 ## Working agreements
 
 - **Commit freely; leave `git push` to the user.** A push deploys.
