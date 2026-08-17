@@ -37,15 +37,30 @@
 		// someone presses Enter.
 		type = 'button',
 		full = false,
+		// Renders an <a> instead. "Compare" and "Picklist" on Insights navigate;
+		// they are links wearing a button's clothes, and building them out of a
+		// <button> plus goto() breaks middle-click, open-in-new-tab and the status
+		// bar preview — on the one surface where a manager has three tabs open.
+		//
+		// The element changes, the styling does not, which is the point: Studio
+		// had four hand-rolled copies of .btn.secondary purely because Button
+		// could not be an anchor.
+		href = '',
 		class: extra = '',
 		children,
 		...rest
 	} = $props();
 </script>
 
-<button {type} class="btn {variant} {extra}" class:full {...rest}>
-	{@render children()}
-</button>
+{#if href}
+	<a {href} class="btn {variant} {extra}" class:full {...rest}>
+		{@render children()}
+	</a>
+{:else}
+	<button {type} class="btn {variant} {extra}" class:full {...rest}>
+		{@render children()}
+	</button>
+{/if}
 
 <style>
 	/* Hallmark · genre: modern-minimal · component: button
@@ -67,6 +82,15 @@
 		transition:
 			background-color var(--dur-short) var(--ease-out),
 			color var(--dur-short) var(--ease-out);
+	}
+	/* An <a> is not a <button>: it lays out inline, ignores min-height, and comes
+	   with an underline. Three lines to make the two elements indistinguishable,
+	   which is the whole contract of the href prop. */
+	a.btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		text-decoration: none;
 	}
 	.btn.full {
 		flex: 1 1 0;

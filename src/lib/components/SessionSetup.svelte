@@ -80,7 +80,6 @@
 		max-width: 28rem;
 		margin: var(--space-6) auto;
 		padding: var(--space-6) var(--space-5);
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	h1 { margin: 0 0 var(--space-5); }
 	.as {

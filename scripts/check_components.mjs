@@ -256,6 +256,37 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 	);
 }
 
+// ─── the font is declared once, on body ────────────────────────────────────
+//
+// It was declared eighteen times, always on a page's own `main`, and three
+// Studio pages never grew a `main` rule: /studio/event, /studio/coverage and
+// /studio/insights rendered entirely in Times. In production. For a release.
+//
+// The failure mode is what makes this worth a check rather than a fix. Every
+// page that HAD the rule looked correct, so the app looked correct, and the
+// missing ones were the three nobody had opened on a laptop since v0.73 moved
+// them. A per-page declaration is a per-page thing to forget, and a redress that
+// adds a fourth Studio page would forget it again.
+{
+	const offenders = [];
+	for (const abs of readdirRecursive(path.join(root, 'src')).filter((f) => f.endsWith('.svelte'))) {
+		const rel = path.relative(root, abs);
+		for (const x of rules(rel)) {
+			if (!declares(x.body, 'font-family')) continue;
+			// Monospace is a deliberate exception: a match key or a code sample is
+			// a different typeface on purpose, not a copy of the body stack.
+			if (/mono/i.test(valueOf(x.body, 'font-family') ?? '')) continue;
+			if (rel === path.join('src', 'routes', '+layout.svelte') && /body/.test(x.selector)) continue;
+			offenders.push(`${rel}  ${unscoped(x.selector)} { font-family: ${valueOf(x.body, 'font-family')} }`);
+		}
+	}
+	ok(
+		'the body font is declared once, in the layout, and inherited',
+		offenders.length === 0,
+		offenders.join('\n        ') + '\n        a page that declares its own font is a page that can omit it'
+	);
+}
+
 // ─── every token referenced is a token that exists ─────────────────────────
 //
 // var(--ok, var(--accent)) compiles, renders, and is wrong: --ok was never
@@ -426,6 +457,21 @@ for (const [label, file] of [
 		offenders.length === 0,
 		offenders.join('\n        ')
 	);
+
+	// The sweep above skips a page with no `.back` rule, which is now the normal
+	// case in Studio — PageHead owns the control. Same shape as Select and the
+	// tap floor: delegating is the better outcome, but the guarantee must not
+	// evaporate into "someone else handles it", so the owner is asserted directly.
+	const r = rules('src/lib/components/studio/PageHead.svelte');
+	ok(
+		'PageHead: the back control pages delegate to is 44 x 44',
+		r.some(
+			(x) =>
+				unscoped(x.selector).includes('.back') &&
+				/var\(--tap-min\)/.test(valueOf(x.body, 'min-width') ?? '') &&
+				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
+		)
+	);
 }
 
 // ─── a parent must not style a child component through a class prop ────────
@@ -477,10 +523,29 @@ for (const [label, file] of [
 // from a nav label to a route is the thing being asserted; deriving it from the
 // nav would make the check agree with whatever the nav happens to say.
 {
+	// Studio's pages hand their <h1> to PageHead, so the heading is a `title`
+	// prop in the page file rather than an element in it. Reading either is the
+	// same guarantee: the string this finds is the string that becomes the
+	// heading. What must NOT happen is inferring it from the nav, which would
+	// make the check agree with whatever the nav happens to say.
 	const headingOf = (file) => {
 		const src = readFileSync(path.join(root, file), 'utf8');
-		return (/<h1[^>]*>([^<]+)/.exec(src)?.[1] ?? '').trim();
+		const literal = /<h1[^>]*>([^<{]+)</.exec(src)?.[1];
+		if (literal) return literal.trim();
+		return (/<PageHead[^>]*\btitle="([^"]+)"/s.exec(src)?.[1] ?? '').trim();
 	};
+
+	// …and PageHead has to actually render one. Without this the check above
+	// passes on a component that renders its title in a <div>, which is the
+	// failure mode where an assertion holds for the wrong reason.
+	{
+		const src = readFileSync(path.join(root, 'src/lib/components/studio/PageHead.svelte'), 'utf8');
+		ok(
+			'PageHead renders its title as the page <h1>',
+			/<h1[^>]*>\s*\{title\}/.test(src),
+			'the nav-label check reads a title prop and trusts it to become the heading'
+		);
+	}
 	for (const [label, file] of [
 		['Scouting', 'src/routes/scouting/+page.svelte'],
 		['Settings', 'src/routes/settings/+page.svelte'],
@@ -512,13 +577,45 @@ for (const [label, file] of [
 // It is invisible in review — `1fr` looks like exactly what you meant — and only
 // shows up on a narrow screen, which is the screen this app is for.
 {
+	/**
+	 * Remove every minmax(...) — including one holding a nested min()/max()/clamp().
+	 *
+	 * A regex cannot do this: `minmax\([^)]*\)` stops at the FIRST `)`, so
+	 * `minmax(min(10rem, 100%), 1fr)` strips down to `, 1fr)` and the check
+	 * reports a bare track that is not there. That is the wrong direction for a
+	 * build-blocking check — a false failure on ordinary CSS teaches people to
+	 * work around the checker, and the whole reason this one exists is that it
+	 * catches something nobody can see by eye.
+	 */
+	function stripMinmax(value) {
+		let out = '';
+		for (let i = 0; i < value.length; i += 1) {
+			if (!value.startsWith('minmax(', i)) {
+				out += value[i];
+				continue;
+			}
+			let depth = 0;
+			for (let j = i + 'minmax'.length; j < value.length; j += 1) {
+				if (value[j] === '(') depth += 1;
+				else if (value[j] === ')') {
+					depth -= 1;
+					if (depth === 0) {
+						i = j;
+						break;
+					}
+				}
+			}
+		}
+		return out;
+	}
+
 	const offenders = [];
 	for (const abs of readdirRecursive(path.join(root, 'src')).filter((f) => f.endsWith('.svelte'))) {
 		const rel = path.relative(root, abs);
 		const src = readFileSync(abs, 'utf8');
 		for (const m of src.matchAll(/grid-template-columns:\s*([^;]+);/g)) {
 			// A bare `<n>fr` not already wrapped in minmax().
-			const withoutMinmax = m[1].replace(/minmax\([^)]*\)/g, '');
+			const withoutMinmax = stripMinmax(m[1]);
 			if (/(?:^|[\s,])\d*fr\b/.test(withoutMinmax)) {
 				offenders.push(`${rel}: ${m[0].trim()}`);
 			}

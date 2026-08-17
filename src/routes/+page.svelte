@@ -103,7 +103,6 @@
 		max-width: 22rem;
 		margin: 0 auto;
 		padding: var(--space-6) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	h1 {
 		margin: 0;

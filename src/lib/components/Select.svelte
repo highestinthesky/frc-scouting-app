@@ -29,6 +29,7 @@
 	 *   disabled?: boolean,
 	 *   invalid?: string,
 	 *   id?: string,
+	 *   inline?: boolean,
 	 *   onchange?: (e: Event) => void
 	 * }}
 	 */
@@ -40,6 +41,16 @@
 		disabled = false,
 		invalid = '',
 		id = '',
+		// Label beside the control instead of above it. A toolbar is a row of
+		// controls at one height, and a stacked label makes this one two lines
+		// tall — which on Insights rendered as a raised box sitting a step out of
+		// line with the search field next to it.
+		//
+		// A variant prop rather than a class, because a class from the parent
+		// carries the parent's scoping hash and never reaches this markup. That
+		// has silently broken two layouts here; check_components.mjs now fails
+		// the build on it.
+		inline = false,
 		onchange
 	} = $props();
 
@@ -48,7 +59,7 @@
 	const hintId = `${uid}-hint`;
 </script>
 
-<div class="field" class:disabled>
+<div class="field" class:disabled class:inline>
 	{#if label}
 		<label class="label" for={uid}>{label}</label>
 	{/if}
@@ -93,6 +104,17 @@
 		font-size: var(--fs-sm);
 		font-weight: 600;
 		color: var(--text-primary);
+	}
+
+	.field.inline {
+		flex-direction: row;
+		align-items: center;
+		gap: var(--space-2);
+	}
+	.field.inline .label {
+		white-space: nowrap;
+		font-weight: 500;
+		color: var(--text-muted);
 	}
 	.hint {
 		font-size: var(--fs-xs);

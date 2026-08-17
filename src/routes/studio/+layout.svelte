@@ -68,7 +68,10 @@
 				<span class="mark">Studio</span>
 				<!-- The event this surface is operating on. "Which event am I editing"
 				     is the one thing that must never be ambiguous here, and the app bar
-				     that used to answer it is gone. -->
+				     that used to answer it is gone.
+				     Sitting ON the purple fill rather than under it: this is the one
+				     member of the palette that takes light text, and the event code is
+				     the fact that must never be missed. -->
 				{#if session.eventCode}
 					<span class="at">{session.eventCode}</span>
 				{/if}
@@ -115,68 +118,74 @@
 		color: var(--accent);
 	}
 
+	/* The sidebar is a SURFACE, flush to the viewport edge and running its full
+	   height, rather than a floating column with padding around it. That is the
+	   difference between "an application with a navigation rail" and "a page that
+	   happens to have links down the side", and it was the second one. */
 	.studio {
 		display: grid;
-		grid-template-columns: 14rem minmax(0, 1fr);
-		gap: var(--space-5);
-		align-items: start;
-		padding: var(--space-4);
+		grid-template-columns: 15rem minmax(0, 1fr);
+		align-items: stretch;
 		/* No reservation for the phone shell's bottom bar — Studio does not render
 		   it. This used to subtract a nav's height from a viewport that has none. */
-		padding-bottom: var(--space-6);
 		min-height: 100dvh;
 	}
 
-	/* Below the tablet breakpoint the sidebar becomes a strip above the content.
-	   Studio is a laptop surface, but a manager WILL open it on a phone to check
-	   one thing, and a 14rem column beside content at 375px is unreadable. */
-	@media (max-width: 47.9375rem) {
-		.studio {
-			grid-template-columns: minmax(0, 1fr);
-			gap: var(--space-3);
-		}
-		nav ul {
-			flex-direction: row !important;
-		}
-		nav li {
-			flex: 1;
-		}
-		.hint {
-			display: none;
-		}
-		/* The exit stays visible on phones. It is the only way out of Studio, and
-		   hiding it was the bug: on a phone there was no route back at all. */
-		.brand .at {
-			display: none;
-		}
-	}
 
+	/* No `align-self: start` here, and that is the whole rule.
+	   A sticky element can only stick INSIDE its containing block, which for a
+	   grid item is its grid area. `align-self: start` shrinks that area to the
+	   item's own height, so the rail pinned for exactly one viewport and then
+	   scrolled away with the page — on Insights, where the table is the thing you
+	   scroll and the navigation is the thing you need while scrolling it.
+	   Stretching keeps the area the full height of the row. */
 	nav {
 		position: sticky;
-		top: var(--space-3);
+		top: 0;
+		/* The app has no box-sizing reset — everything is content-box — so
+		   `height: 100dvh` plus 2rem of padding made this 752px against a 720px
+		   viewport. A sticky element taller than the viewport pins to the TOP only
+		   until its bottom edge arrives, then travels with the page: the rail slid
+		   32px and looked like sticky was simply broken. Border-box here rather
+		   than globally, because flipping the box model under every page in the app
+		   is not a thing to do inside a visual pass. */
+		box-sizing: border-box;
+		height: 100dvh;
+		/* And if the rail ever outgrows the viewport, IT scrolls. */
+		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
+		gap: var(--space-4);
+		padding: var(--space-4) var(--space-3);
+		background: var(--bg-card);
+		border-right: 1px solid var(--border);
 	}
+
+	/* The one fill in the palette that takes light text, spent on the one fact
+	   that must never be ambiguous: which event this surface is editing. */
 	.brand {
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
+		gap: var(--space-1);
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		background: var(--studio-fill);
+		color: var(--on-studio-fill);
 	}
 	.mark {
 		font-size: var(--fs-lg);
 		font-weight: 700;
 		letter-spacing: -0.01em;
-		color: var(--text-primary);
 	}
 	/* Named .at, not .on — `nav a.on` marks the current tab, and a bare `.on`
 	   rule would have matched it too, rendering the active link tiny and
 	   uppercase. Two meanings, one class name, one of them silently wrong. */
 	.at {
 		font-size: var(--fs-xs);
-		color: var(--text-muted);
 		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.06em;
+		font-weight: 600;
+		opacity: 0.85;
 	}
 	nav ul {
 		list-style: none;
@@ -185,6 +194,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
+		margin-right: auto;
+		width: 100%;
 	}
 	nav a {
 		display: flex;
@@ -192,20 +203,25 @@
 		gap: 1px;
 		min-height: var(--tap-min);
 		justify-content: center;
-		padding: var(--space-2);
+		padding: var(--space-2) var(--space-3);
 		border-radius: var(--radius-md);
-		border: 1px solid transparent;
+		border-left: 3px solid transparent;
 		color: var(--text-muted);
 		text-decoration: none;
 	}
 	nav a:hover {
 		background: var(--bg-subtle);
+		color: var(--text-primary);
 	}
-	/* Current section carries a border and a weight change, not colour alone. */
+	/* Current section carries a rule, a fill and a weight change — never colour
+	   alone. The rule is what survives being looked at from across a table. */
 	nav a.on {
 		background: var(--accent-soft);
-		border-color: var(--accent);
+		border-left-color: var(--accent);
 		color: var(--text-primary);
+	}
+	nav a.on .label {
+		color: var(--accent);
 	}
 	.label {
 		font-weight: 600;
@@ -213,14 +229,17 @@
 	}
 	.hint {
 		font-size: var(--fs-xs);
-		color: var(--text-muted);
+		color: var(--text-faint);
 	}
 	.out {
 		display: inline-flex;
 		align-items: center;
-		gap: var(--space-1);
+		/* start, not stretch. As a stretched column child it filled the rail and
+		   its two words centred themselves over two lines on a phone. */
+		align-self: flex-start;
+		gap: var(--space-2);
 		min-height: var(--tap-min);
-		padding: var(--space-2);
+		padding: var(--space-2) var(--space-3);
 		border-radius: var(--radius-md);
 		font-size: var(--fs-sm);
 		font-weight: 600;
@@ -233,5 +252,52 @@
 
 	main {
 		min-width: 0; /* lets wide tables scroll instead of stretching the grid */
+		/* Dense by design, but not unboundedly: --w-board is the width a table is
+		   readable at, and a 2400px row is not more information, it is a longer
+		   saccade. Left-aligned against the rail rather than centred, because the
+		   rail is where the eye starts. */
+		max-width: var(--w-board);
+		padding: var(--space-5);
+	}
+
+	/* Below the tablet breakpoint the sidebar becomes a strip above the content.
+	   Studio is a laptop surface, but a manager WILL open it on a phone to check
+	   one thing, and a 15rem column beside content at 375px is unreadable.
+
+	   LAST in the file, not next to .studio where it reads better. A media query
+	   adds no specificity, so `nav { position: static }` in here and
+	   `nav { position: sticky }` outside it are a tie broken by source order —
+	   and with this block written first, every phone override silently lost. The
+	   rail stayed a 15rem sticky column at 375px. */
+	@media (max-width: 47.9375rem) {
+		.studio {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		nav {
+			position: static;
+			height: auto;
+			border-right: none;
+			border-bottom: 1px solid var(--border);
+		}
+		nav ul {
+			flex-direction: row !important;
+			overflow-x: auto;
+		}
+		nav li {
+			flex: 1 0 auto;
+		}
+		.hint {
+			display: none;
+		}
+		/* The exit stays visible on phones. It is the only way out of Studio, and
+		   hiding it was the bug: on a phone there was no route back at all. */
+		.brand {
+			flex-direction: row;
+			align-items: center;
+			justify-content: space-between;
+		}
+		main {
+			padding: var(--space-4);
+		}
 	}
 </style>

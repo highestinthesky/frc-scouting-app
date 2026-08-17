@@ -10,6 +10,13 @@
 	import { syncState } from '$lib/sync.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
 	import Select from '$lib/components/Select.svelte';
+	import Button from '$lib/components/Button.svelte';
+	import PageHead from '$lib/components/studio/PageHead.svelte';
+	import Panel from '$lib/components/studio/Panel.svelte';
+	import Stats from '$lib/components/studio/Stats.svelte';
+	import Stat from '$lib/components/studio/Stat.svelte';
+	import Toolbar from '$lib/components/studio/Toolbar.svelte';
+	import Table from '$lib/components/studio/Table.svelte';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -29,6 +36,12 @@
 	// Per-team UI state
 	let expanded = $state(new Set());
 	let showAllEntries = $state(new Set()); // teams whose entries are fully expanded
+
+	// Team, Entries, Matches, Scouts, one per metric, Flags, Last, and the
+	// expander. Derived rather than written as a number because the metric count
+	// is data — a season retune adds a column and a hardcoded colspan would tear
+	// the detail row out of alignment with nothing failing.
+	const COLS = 7 + METRIC_FIELDS.length;
 
 	// ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -306,48 +319,63 @@
 </svelte:head>
 
 <main>
-	<!-- ── Header ───────────────────────────────────────────────────── -->
-	<header class="page-head">
-		<h1>Insights</h1>
-		{#if summary}
-			<div class="updated">
-				{summary.totalEntries} entries · last {relTime(summary.lastCreatedAt)} ago
-			</div>
-		{/if}
-	</header>
-
+	<PageHead
+		title="Insights"
+		sub={summary
+			? `${summary.totalEntries} entries · last ${relTime(summary.lastCreatedAt)} ago`
+			: ''}
+	>
+		{#snippet actions()}
+			<Button href="{base}/studio/insights/compare/">Compare</Button>
+			<Button href="{base}/studio/insights/picklist/">Picklist</Button>
+			<Button
+				variant="primary"
+				onclick={doExportCsv}
+				disabled={exportingCsv || !summary || summary.totalEntries === 0}
+			>
+				{exportingCsv ? 'Exporting…' : 'Export CSV'}
+			</Button>
+		{/snippet}
+	</PageHead>
 
 	{#if loading}
 		<p class="muted">Loading…</p>
 
 	{:else if summary.totalEntries === 0}
 		<!-- ── Empty state ─────────────────────────────────────────────── -->
-		<div class="empty">
-			<p>No entries yet.</p>
+		<Panel tone="quiet">
+			<p class="empty-title">No entries yet.</p>
 			<p class="muted">Scout entries appear here as they sync in.</p>
-		</div>
+		</Panel>
 
 	{:else}
-		<!-- ── Stats grid ──────────────────────────────────────────────── -->
-		<section class="stats">
-			<div class="stat"><small>Entries</small><span>{summary.totalEntries}</span></div>
-			<div class="stat"><small>Teams</small><span>{summary.teamCount}</span></div>
-			<div class="stat"><small>Matches</small><span>{summary.matchCount}</span></div>
-			<div class="stat"><small>Scouts</small><span>{summary.scoutCount}</span></div>
-		</section>
+		<Stats>
+			<Stat label="Entries" value={summary.totalEntries} />
+			<Stat label="Teams" value={summary.teamCount} />
+			<Stat label="Matches" value={summary.matchCount} />
+			<Stat
+				label="Scouts"
+				value={summary.scoutCount}
+				note={thinCoverageTeams.length > 0
+					? `${thinCoverageTeams.length} thin`
+					: ''}
+				tone={thinCoverageTeams.length > 0 ? 'warn' : 'default'}
+			/>
+		</Stats>
 
 		<!-- ── Toolbar ─────────────────────────────────────────────────── -->
-		<div class="toolbar">
-			<input
-				class="search"
-				type="text"
-				inputmode="numeric"
-				placeholder="Find team #"
-				bind:value={teamQuery}
-			/>
-			<div class="sort-select">
+		<div class="tools">
+			<Toolbar>
+				<input
+					class="search"
+					type="text"
+					inputmode="numeric"
+					placeholder="Find team #"
+					bind:value={teamQuery}
+				/>
 				<Select
 					label="Sort by"
+					inline
 					bind:value={sortBy}
 					options={[
 						{ value: 'entries', label: 'Most entries' },
@@ -361,18 +389,7 @@
 						{ value: 'defense', label: 'Most defense notes' }
 					]}
 				/>
-			</div>
-			<div class="toolbar-btns">
-				<a class="btn secondary" href="{base}/studio/insights/compare/">Compare</a>
-				<a class="btn secondary" href="{base}/studio/insights/picklist/">Picklist</a>
-				<button
-					class="btn csv"
-					onclick={doExportCsv}
-					disabled={exportingCsv || summary.totalEntries === 0}
-				>
-					{exportingCsv ? 'Exporting…' : 'Export CSV'}
-				</button>
-			</div>
+			</Toolbar>
 		</div>
 
 		<!-- ── Filter chips ────────────────────────────────────────────── -->
@@ -424,288 +441,278 @@
 			</div>
 		{/if}
 
-		<!-- ── Team list ───────────────────────────────────────────────── -->
+		<!-- ── Teams ───────────────────────────────────────────────────────
+		     A table, not a stack of cards.
+
+		     The cards came from a phone, where one team at a time is all that
+		     fits. The job on this page is comparison — "which of these scores
+		     more" is a question you answer by reading DOWN a column — and a card
+		     puts every team's numbers in a different place on the screen. Four
+		     teams filled the viewport that now holds twenty rows.
+
+		     The metrics become columns for the same reason. They were a wrapped
+		     strip inside each card, so comparing two teams' cycle counts meant
+		     finding the cell twice, in two different positions.
+		-->
 		{#if filteredTeams.length === 0}
-			<div class="no-results">
-				<p>No teams match these filters.</p>
-				<button class="btn secondary" onclick={clearFilters}>Clear filters</button>
-			</div>
+			<Panel tone="quiet">
+				<p class="empty-title">No teams match these filters.</p>
+				<Button onclick={clearFilters}>Clear filters</Button>
+			</Panel>
 		{:else}
-			<ul class="teams">
-				{#each filteredTeams as t (t.teamNumber)}
-					{@const isOpen = expanded.has(t.teamNumber)}
-					{@const thin = t.entryCount < 3}
-					<li class="team {isOpen ? 'open' : ''}">
+			<Panel flush>
+				<Table>
+					{#snippet head()}
+						<tr>
+							<th>Team</th>
+							<th data-num>Entries</th>
+							<th data-num>Matches</th>
+							<th data-num>Scouts</th>
+							{#each METRIC_FIELDS as m (m.key)}
+								<th data-num>{m.label}</th>
+							{/each}
+							<th>Flags</th>
+							<th data-num>Last</th>
+							<th><span class="sr-only">Expand</span></th>
+						</tr>
+					{/snippet}
 
-						<!-- ── Header row (always visible, click to expand) ──── -->
-						<button
-							class="team-row"
-							onclick={() => toggle(t.teamNumber)}
-							aria-expanded={isOpen}
-						>
-							<div class="left">
-								<strong class="team-num">Team {t.teamNumber}</strong>
-								{#if thin}
-									<div class="bar thin-bar" aria-hidden="true"></div>
-								{:else}
-									<div class="bar" aria-hidden="true">
-										<span class="red" style="flex:{t.redCount}"></span>
-										<span class="blue" style="flex:{t.blueCount}"></span>
-									</div>
-								{/if}
-								<span class="counts">
-									{#if thin}<em class="thin-label">thin coverage · </em>{/if}{t.entryCount}
-									{t.entryCount === 1 ? 'entry' : 'entries'} · {t.matchesCovered}
-									{t.matchesCovered === 1 ? 'match' : 'matches'} · {t.scoutsCovered}
-									{t.scoutsCovered === 1 ? 'scout' : 'scouts'}
-								</span>
-							</div>
-							<div class="right">
-								{#if t.discrepancyCount > 0}
-									<span class="badge warn" title="Scouts disagree on whether this team broke down in some matches">
-										⚠ {t.discrepancyCount} {t.discrepancyCount === 1 ? 'conflict' : 'conflicts'}
-									</span>
-								{/if}
-								{#if t.breakdownCount > 0}
-									<span class="badge bad"
-										>{t.breakdownCount}
-										{t.breakdownCount === 1 ? 'breakdown' : 'breakdowns'}</span
-									>
-								{/if}
-								{#if t.defenseCount > 0}
-									<span class="badge">{t.defenseCount} defense</span>
-								{/if}
-								{#if t.autoPathEntryCount > 0}
-									<span class="badge path"
-										>{t.autoPathEntryCount} auto {t.autoPathEntryCount === 1
-											? 'path'
-											: 'paths'}</span
-									>
-								{/if}
-								<span class="age">{relTime(t.latestCreatedAt)}</span>
-								<span class="chev" aria-hidden="true">{isOpen ? '▾' : '▸'}</span>
-							</div>
-						</button>
-
-						<!-- ── Metric strip ─────────────────────────────────── -->
-						{#if t.hasMetrics}
-							<div class="metric-strip">
-								{#each METRIC_FIELDS as m (m.key)}
-									{@const s = t.metrics[m.key]}
-									{#if s.n > 0}
-										<div class="ms-cell" class:provisional={!s.confident}>
-											<small class="ms-label">{m.label}</small>
-											<span class="ms-mean">{fmt(s.mean)}</span>
-											<small class="ms-meta">
-												n={s.n}{#if s.max !== null} · max {s.max}{/if}
-											</small>
+					{#each filteredTeams as t (t.teamNumber)}
+						{@const isOpen = expanded.has(t.teamNumber)}
+						{@const thin = t.entryCount < 3}
+						<tr>
+							<td>
+								<div class="team-cell">
+									<!-- The number is a link to the full match log, and the
+									     chevron at the end of the row expands in place. Those were
+									     one control before: the row expanded, and the link to the
+									     full log was INSIDE the thing you had to expand. -->
+									<a class="team-num" href="{base}/studio/insights/team/{t.teamNumber}/">
+										{t.teamNumber}
+									</a>
+									{#if thin}
+										<div class="bar thin-bar" aria-hidden="true"></div>
+									{:else}
+										<div class="bar" aria-hidden="true">
+											<span class="red" style="flex:{t.redCount}"></span>
+											<span class="blue" style="flex:{t.blueCount}"></span>
 										</div>
 									{/if}
-								{/each}
-							</div>
-						{/if}
+								</div>
+							</td>
+							<td data-num>
+								<span class:thin-count={thin} title={thin ? 'Fewer than 3 entries' : undefined}>
+									{t.entryCount}
+								</span>
+							</td>
+							<td data-num>{t.matchesCovered}</td>
+							<td data-num>{t.scoutsCovered}</td>
 
-						<!-- ── Strengths preview (collapsed rows only) ──────── -->
-						{#if !isOpen && t.strengthsPreview}
-							<p class="strength-preview">
-								<span class="preview-label">Strengths:</span>{t.strengthsPreview}
-							</p>
-						{/if}
+							<!-- Blank is not zero. n === 0 means this metric was never
+							     recorded for this team — an entry predating the field, or a
+							     scout who left it empty — and rendering that as 0 is the
+							     corruption readMetric() exists to prevent. An em dash says
+							     "no reading"; 0 would say "they scored none". -->
+							{#each METRIC_FIELDS as m (m.key)}
+								{@const s = t.metrics[m.key]}
+								<td data-num>
+									{#if s.n > 0}
+										<span
+											class="metric"
+											class:provisional={!s.confident}
+											title="n={s.n}{s.max !== null ? ` · max ${s.max}` : ''}{s.confident
+												? ''
+												: ' · fewer than 3 readings'}"
+										>
+											{fmt(s.mean)}
+										</span>
+									{:else}
+										<span class="blank" title="Not recorded">—</span>
+									{/if}
+								</td>
+							{/each}
 
-						<!-- ── Expanded body ──────────────────────────────────── -->
+							<td>
+								<div class="flags">
+									{#if t.discrepancyCount > 0}
+										<span class="badge warn" title="Scouts disagree on whether this team broke down in some matches">
+											⚠ {t.discrepancyCount}
+										</span>
+									{/if}
+									{#if t.breakdownCount > 0}
+										<span class="badge bad" title="{t.breakdownCount} breakdowns">
+											{t.breakdownCount} broke
+										</span>
+									{/if}
+									{#if t.defenseCount > 0}
+										<span class="badge" title="{t.defenseCount} defense notes">
+											{t.defenseCount} def
+										</span>
+									{/if}
+									{#if t.autoPathEntryCount > 0}
+										<span class="badge path" title="{t.autoPathEntryCount} entries with an auto path">
+											{t.autoPathEntryCount} auto
+										</span>
+									{/if}
+									{#if t.uniqueStrengths?.length > 0}
+										<span class="badge good" title={t.uniqueStrengths.join(' · ')}>
+											+{t.uniqueStrengths.length}
+										</span>
+									{/if}
+								</div>
+							</td>
+							<td data-num class="age">{relTime(t.latestCreatedAt)}</td>
+							<td>
+								<button
+									class="expander"
+									onclick={() => toggle(t.teamNumber)}
+									aria-expanded={isOpen}
+									aria-label="{isOpen ? 'Collapse' : 'Expand'} team {t.teamNumber}"
+								>
+									<span aria-hidden="true">{isOpen ? '▾' : '▸'}</span>
+								</button>
+							</td>
+						</tr>
+
 						{#if isOpen}
-							<div class="full-view-row">
-								<a class="full-view-link" href="{base}/studio/insights/team/{t.teamNumber}/">Full match log →</a>
-							</div>
-							{#if t.uniqueStrengths?.length > 0}
-								<div class="paths-block strengths-block">
-									<h3>Strengths</h3>
-									<ul class="strength-list">
-										{#each t.uniqueStrengths as s (s)}
-											<li>+ {s}</li>
-										{/each}
-									</ul>
-								</div>
-							{/if}
-
-							{#if t.autoPathCount > 0}
-								<div class="paths-block">
-									<h3>Auto paths ({t.autoPathEntryCount})</h3>
-									<ul class="path-list">
-										{#each t.autoPaths as p (p.pathName)}
-											<li><span>{p.pathName}</span><strong>{p.count}</strong></li>
-										{/each}
-									</ul>
-								</div>
-							{/if}
-
 							{@const showAll = showAllEntries.has(t.teamNumber)}
 							{@const displayEntries = showAll ? t.entries : t.entries.slice(0, 6)}
-							<ul class="team-entries">
-								{#each displayEntries as e (e.id ?? `${e.matchNumber}-${e.scoutName}-${e.createdAt}`)}
-									<li class="team-entry" data-color={e.allianceColor}>
-										<div class="hdr">
-											<strong>Q{e.matchNumber}</strong>
-											<span class="alliance">{e.allianceColor}</span>
-											<span class="by">by {e.scoutName}</span>
-										</div>
-										{#if recordedCounts(e).length > 0}
-											<p class="entry-counts">
-												{#each recordedCounts(e) as c, i (c.key)}
-													<span class="ec"><em>{c.label}</em> {c.value}</span
-													>{#if i < recordedCounts(e).length - 1}<span class="ec-sep">·</span>{/if}
-												{/each}
-											</p>
+							<tr data-detail>
+								<td colspan={COLS}>
+									<div class="detail">
+										{#if t.uniqueStrengths?.length > 0}
+											<section class="detail-block strengths">
+												<h3>Strengths</h3>
+												<ul class="plain">
+													{#each t.uniqueStrengths as s (s)}
+														<li>+ {s}</li>
+													{/each}
+												</ul>
+											</section>
 										{/if}
-										{#if e.observations?.autoPathing}<p><strong>→</strong> {e.observations.autoPathing}</p>{/if}
-										{#if e.observations?.weaknesses}<p><strong>−</strong> {e.observations.weaknesses}</p>{/if}
-										{#if e.observations?.defense}<p><strong>D</strong> {e.observations.defense}</p>{/if}
-										{#if e.observations?.brokeDown === true}<p class="brokedown"><strong>!</strong> Broke down</p>{/if}
-										{#if e.observations?.comments}<p><strong>·</strong> {e.observations.comments}</p>{/if}
-										<!-- v1 compat: show legacy failures text if brokeDown field not present -->
-										{#if e.observations?.failures && e.observations?.brokeDown === undefined}
-											<p><strong>!</strong> {e.observations.failures}</p>
-										{/if}
-									</li>
-								{/each}
 
-								<!-- "Show all" expander — only shown when entries are capped -->
-								{#if !showAll && t.entries.length > 6}
-									<li class="more-row">
-										<button
-											class="show-more"
-											onclick={() => expandAllEntries(t.teamNumber)}
-										>
-											+ {t.entries.length - 6} more
-											{t.entries.length - 6 === 1 ? 'entry' : 'entries'}
-										</button>
-									</li>
-								{/if}
-							</ul>
+										{#if t.autoPathCount > 0}
+											<section class="detail-block">
+												<h3>Auto paths ({t.autoPathEntryCount})</h3>
+												<ul class="plain path-list">
+													{#each t.autoPaths as p (p.pathName)}
+														<li><span>{p.pathName}</span><strong>{p.count}</strong></li>
+													{/each}
+												</ul>
+											</section>
+										{/if}
+
+										<section class="detail-block entries">
+											<h3>Match log</h3>
+											<ul class="plain team-entries">
+												{#each displayEntries as e (e.id ?? `${e.matchNumber}-${e.scoutName}-${e.createdAt}`)}
+													<li class="team-entry" data-color={e.allianceColor}>
+														<div class="hdr">
+															<strong>Q{e.matchNumber}</strong>
+															<span class="alliance">{e.allianceColor}</span>
+															<span class="by">by {e.scoutName}</span>
+														</div>
+														{#if recordedCounts(e).length > 0}
+															<p class="entry-counts">
+																{#each recordedCounts(e) as c, i (c.key)}
+																	<span class="ec"><em>{c.label}</em> {c.value}</span
+																	>{#if i < recordedCounts(e).length - 1}<span class="ec-sep">·</span>{/if}
+																{/each}
+															</p>
+														{/if}
+														{#if e.observations?.autoPathing}<p><strong>→</strong> {e.observations.autoPathing}</p>{/if}
+														{#if e.observations?.weaknesses}<p><strong>−</strong> {e.observations.weaknesses}</p>{/if}
+														{#if e.observations?.defense}<p><strong>D</strong> {e.observations.defense}</p>{/if}
+														{#if e.observations?.brokeDown === true}<p class="brokedown"><strong>!</strong> Broke down</p>{/if}
+														{#if e.observations?.comments}<p><strong>·</strong> {e.observations.comments}</p>{/if}
+														<!-- v1 compat: show legacy failures text if brokeDown field not present -->
+														{#if e.observations?.failures && e.observations?.brokeDown === undefined}
+															<p><strong>!</strong> {e.observations.failures}</p>
+														{/if}
+													</li>
+												{/each}
+											</ul>
+											{#if !showAll && t.entries.length > 6}
+												<button class="show-more" onclick={() => expandAllEntries(t.teamNumber)}>
+													+ {t.entries.length - 6}
+													{t.entries.length - 6 === 1 ? 'more entry' : 'more entries'}
+												</button>
+											{/if}
+											<a class="full-view-link" href="{base}/studio/insights/team/{t.teamNumber}/">
+												Full match log →
+											</a>
+										</section>
+									</div>
+								</td>
+							</tr>
 						{/if}
-					</li>
-				{/each}
-			</ul>
+					{/each}
+				</Table>
+			</Panel>
 		{/if}
 	{/if}
 </main>
 
 <style>
-	/* ── header ───────────────────────────────────────── */
-	.page-head {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		gap: var(--space-3);
-		margin: var(--space-4) 0;
-	}
-	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
-	.updated { color: var(--text-faint); font-size: var(--fs-sm); }
-	.muted { color: var(--text-faint); font-size: var(--fs-md); }
+	/* What is left after Panel, Stat, Stats, Toolbar and Table took their share.
+	   This page had 92 rules; four shapes repeated made up most of them, and the
+	   remainder is genuinely about teams and entries rather than about boxes. */
 
-	/* ── empty ────────────────────────────────────────── */
-	.empty {
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-		padding: var(--space-4);
+	.muted {
+		color: var(--text-faint);
+		font-size: var(--fs-md);
+	}
+	.empty-title {
+		margin: 0 0 var(--space-2);
+		font-weight: 600;
 	}
 
-	/* ── stats grid ───────────────────────────────────── */
-	.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
-	.stat {
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-		padding: var(--space-3);
+	.tools {
+		margin: var(--space-4) 0 var(--space-3);
 	}
-	.stat small {
-		display: block;
-		color: var(--text-muted);
-		font-size: var(--fs-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
+	.search {
+		flex: 0 1 13rem;
+		min-width: 0;
+		font: inherit;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--text-primary);
 	}
-	.stat span { font-size: var(--fs-xl); font-weight: 700; font-variant-numeric: tabular-nums; }
+	.search:focus-visible {
+		outline: 2px solid var(--accent);
+		border-color: var(--accent);
+		outline-offset: 1px;
+	}
 
-	/* ── toolbar ──────────────────────────────────────── */
-	.toolbar {
-		margin-top: var(--space-3);
+	/* ── filter chips ─────────────────────────────────── */
+	.chips {
 		display: flex;
 		gap: var(--space-2);
 		flex-wrap: wrap;
-		align-items: center;
+		margin-bottom: var(--space-3);
 	}
-	.search {
-		flex: 1 1 8rem;
-		max-width: 13rem;
-		font: inherit;
-		min-height: var(--tap-min);
-		padding: 0 var(--space-3);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-md);
-		background: var(--bg-card);
-		color: var(--text-primary);
-	}
-	.search:focus { outline: 2px solid var(--accent); border-color: var(--accent); outline-offset: 1px; }
-	.sort-select {
-		font: inherit;
-		font-size: var(--fs-sm);
-		min-height: var(--tap-min);
-		padding: 0 var(--space-3);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-md);
-		background: var(--bg-card);
-		color: var(--text-primary);
-		cursor: pointer;
-	}
-	.sort-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-	.toolbar-btns { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-left: auto; }
-
-	/* ── buttons ──────────────────────────────────────── */
-	.btn {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		min-height: var(--tap-min);
-		padding: 0 var(--space-4);
-		border-radius: var(--radius-md);
-		font: inherit;
-		font-size: var(--fs-sm);
-		font-weight: 600;
-		cursor: pointer;
-		border: 1px solid transparent;
-		white-space: nowrap;
-	}
-	.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-	.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-	.btn.primary:hover { background: var(--accent-hover); }
-	.btn.primary:disabled { opacity: 0.6; cursor: progress; }
-	.btn.secondary {
-		background: var(--bg-card);
-		border-color: var(--border-strong);
-		color: var(--text-primary);
-	}
-	.btn.secondary:hover { background: var(--bg-subtle); }
-	.btn.csv { background: var(--success-bg); border-color: var(--success-border); color: var(--success); }
-	.btn.csv:hover { filter: brightness(1.04); }
-	.btn.csv:disabled { opacity: 0.6; cursor: progress; }
-
-	/* ── filter chips ─────────────────────────────────── */
-	.chips { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
 	.chip {
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-pill);
 		min-height: var(--tap-min);
-		padding: 0 var(--space-3);
+		padding: 0 var(--space-4);
 		color: var(--text-muted);
 		font: inherit;
 		font-size: var(--fs-xs);
 		cursor: pointer;
 	}
-	.chip:hover { background: var(--bg-elev); }
-	.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.chip:hover {
+		background: var(--bg-elev);
+		color: var(--text-primary);
+	}
+	.chip:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
 	.chip.active {
 		background: var(--accent-soft);
 		color: var(--accent);
@@ -726,30 +733,33 @@
 	}
 
 	/* ── messages ─────────────────────────────────────── */
-	.info {
-		background: var(--banner-blue-bg);
-		color: var(--accent);
+	.info,
+	.error {
 		padding: var(--space-3);
 		border-radius: var(--radius-md);
-		margin: var(--space-2) 0 0;
-		white-space: pre-wrap;
-		font: inherit;
+		margin: 0 0 var(--space-3);
 		font-size: var(--fs-sm);
-		border: 1px solid var(--banner-blue-border);
+		white-space: pre-wrap;
 	}
-	.info.single { white-space: normal; }
+	.info {
+		background: var(--banner-info-bg);
+		border: 1px solid var(--banner-info-border);
+		color: var(--accent);
+	}
+	.info.single {
+		white-space: normal;
+	}
 	.error {
 		background: var(--danger-bg);
+		border: 1px solid var(--banner-red-border);
 		color: var(--danger);
-		padding: var(--space-3);
-		border-radius: var(--radius-md);
-		margin: var(--space-2) 0 0;
-		font-size: var(--fs-sm);
 	}
 
-	/* ── thin coverage hint ───────────────────────────── */
+	/* Names the thin teams. The table says WHICH rows are thin by colouring the
+	   count, and the Scouts stat says how many — this is the one that says who,
+	   without making anyone scan 40 rows for amber. */
 	.coverage-hint {
-		margin-top: var(--space-3);
+		margin: 0 0 var(--space-3);
 		padding: var(--space-3);
 		background: var(--warning-bg);
 		border: 1px solid var(--warning-border);
@@ -758,40 +768,211 @@
 		color: var(--warning);
 	}
 
-	/* ── metric strip ─────────────────────────────────── */
-	.metric-strip {
+	/* ── the team row ─────────────────────────────────── */
+	.team-cell {
 		display: flex;
-		flex-wrap: wrap;
+		align-items: center;
 		gap: var(--space-2);
-		padding: 0 var(--space-3) var(--space-2);
 	}
-	.ms-cell {
-		flex: 1 1 5rem;
-		min-width: 0;
+	.team-num {
+		font-weight: 700;
+		font-size: var(--fs-md);
+		font-variant-numeric: tabular-nums;
+		color: var(--accent);
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	.team-num:hover {
+		text-decoration: underline;
+	}
+	/* Red/blue split of the entries recorded on this team. A mark, not a
+	   sentence, so the alliance tokens are used at their non-text floor. */
+	.bar {
+		width: 2.5rem;
+		height: 0.5rem;
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-pill);
+		overflow: hidden;
 		display: flex;
-		flex-direction: column;
-		padding: var(--space-2);
-		border-radius: var(--radius-md);
+		flex-shrink: 0;
+	}
+	.bar .red {
+		background: var(--alliance-red);
+	}
+	.bar .blue {
+		background: var(--alliance-blue);
+	}
+	.thin-bar {
 		background: var(--bg-subtle);
 	}
-	/* Fewer than 3 readings — shown, but visibly held at arm's length. */
-	.ms-cell.provisional { opacity: 0.62; }
-	.ms-label {
+	/* Colour is not the only signal — the count carries a title, and the Scouts
+	   stat above the table names the number of thin teams in words. */
+	.thin-count {
+		color: var(--warning);
+		font-weight: 600;
+	}
+
+	.metric {
+		font-weight: 600;
+	}
+	/* Fewer than three readings: shown, but visibly held at arm's length. */
+	.metric.provisional {
+		opacity: 0.55;
+		font-weight: 400;
+	}
+	.blank {
+		color: var(--text-faint);
+	}
+	.age {
+		color: var(--text-faint);
+		font-size: var(--fs-xs);
+		white-space: nowrap;
+	}
+
+	.flags {
+		display: flex;
+		gap: var(--space-1);
+		flex-wrap: wrap;
+	}
+	.badge {
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-pill);
+		padding: 2px var(--space-2);
+		color: var(--text-muted);
+		font-size: var(--fs-xs);
+		white-space: nowrap;
+	}
+	.badge.bad {
+		background: var(--danger-bg);
+		border-color: var(--banner-red-border);
+		color: var(--danger);
+	}
+	.badge.path {
+		background: var(--accent-soft);
+		border-color: var(--banner-info-border);
+		color: var(--accent);
+	}
+	.badge.good {
+		background: var(--success-bg);
+		border-color: var(--success-border);
+		color: var(--success);
+	}
+	.badge.warn {
+		background: var(--warning-bg);
+		border-color: var(--warning-border);
+		color: var(--warning);
+	}
+
+	.expander {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		background: none;
+		border: none;
+		border-radius: var(--radius-md);
+		color: var(--text-muted);
+		font: inherit;
+		cursor: pointer;
+	}
+	.expander:hover {
+		background: var(--bg-elev);
+		color: var(--text-primary);
+	}
+	.expander:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+
+	/* ── the expanded detail ──────────────────────────── */
+	/* Three columns on a laptop, because the detail is three independent lists
+	   and stacking them put the match log below two folds of whitespace. */
+	.detail {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+		gap: var(--space-4);
+		align-items: start;
+	}
+	.detail-block h3 {
+		margin: 0 0 var(--space-2);
 		font-size: var(--fs-xs);
 		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.06em;
 		color: var(--text-muted);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
-	.ms-mean {
-		font-size: var(--fs-lg);
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-		line-height: 1.1;
+	.detail-block.entries {
+		grid-column: 1 / -1;
 	}
-	.ms-meta { font-size: var(--fs-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+	.plain {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		font-size: var(--fs-sm);
+	}
+	.strengths .plain {
+		color: var(--success);
+	}
+	.path-list li {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--space-2);
+	}
+
+	.team-entries {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+		gap: var(--space-2);
+	}
+	.team-entry {
+		background: var(--bg-card);
+		border-radius: var(--radius-md);
+		padding: var(--space-2) var(--space-3);
+		border-left: 3px solid var(--border-strong);
+	}
+	.team-entry[data-color='red'] {
+		border-left-color: var(--alliance-red);
+	}
+	.team-entry[data-color='blue'] {
+		border-left-color: var(--alliance-blue);
+	}
+	.hdr {
+		display: flex;
+		gap: var(--space-2);
+		align-items: baseline;
+		font-size: var(--fs-sm);
+	}
+	.alliance {
+		text-transform: capitalize;
+		color: var(--text-muted);
+	}
+	.by {
+		margin-left: auto;
+		font-size: var(--fs-xs);
+		color: var(--text-faint);
+	}
+	.team-entry p {
+		margin: var(--space-1) 0 0;
+		font-size: var(--fs-sm);
+		line-height: 1.4;
+	}
+	.team-entry p strong {
+		display: inline-block;
+		width: 1rem;
+		color: var(--accent);
+	}
+	.team-entry p.brokedown {
+		color: var(--danger);
+		font-weight: 600;
+	}
+	.team-entry p.brokedown strong {
+		color: var(--danger);
+	}
 	.entry-counts {
 		display: flex;
 		flex-wrap: wrap;
@@ -799,193 +980,21 @@
 		font-size: var(--fs-xs);
 		font-variant-numeric: tabular-nums;
 	}
-	.entry-counts .ec em { font-style: normal; color: var(--text-muted); }
-	.ec-sep { color: var(--text-faint); }
-
-	/* ── no results ───────────────────────────────────── */
-	.no-results { margin-top: var(--space-6); text-align: center; color: var(--text-muted); }
-	.no-results p { margin-bottom: var(--space-3); }
-
-	/* ── team list ────────────────────────────────────── */
-	.teams {
-		list-style: none;
-		padding: 0;
-		margin: var(--space-3) 0 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
-	.team {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-		background: var(--bg-card);
-		overflow: hidden;
-	}
-	.team-row {
-		width: 100%;
-		border: none;
-		background: transparent;
-		min-height: var(--tap-min);
-		padding: var(--space-3) var(--space-3) var(--space-2);
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: var(--space-2);
-		text-align: left;
-		cursor: pointer;
-		font: inherit;
-		flex-wrap: wrap;
-	}
-	.team-row:hover { background: var(--bg-page); }
-	.team-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-	.left {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		flex: 1 1 0;
-		min-width: 0;
-		flex-wrap: wrap;
-	}
-	.team-num { font-size: var(--fs-md); white-space: nowrap; }
-	.bar {
-		width: 3rem;
-		height: 0.6rem;
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-pill);
-		overflow: hidden;
-		display: flex;
-		flex-shrink: 0;
-	}
-	.thin-bar { background: var(--bg-subtle); }
-	/* Was #e24b4a / #378add — literals that never flipped for dark mode. */
-	.bar .red { background: var(--alliance-red); }
-	.bar .blue { background: var(--alliance-blue); }
-	.counts { color: var(--text-muted); font-size: var(--fs-xs); }
-	.thin-label { color: var(--warning); font-style: italic; font-size: var(--fs-xs); }
-	.right {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		flex-wrap: wrap;
-		justify-content: flex-end;
-		flex-shrink: 0;
-	}
-
-	/* ── badges ───────────────────────────────────────── */
-	.badge {
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-pill);
-		padding: var(--space-1) var(--space-2);
-		color: var(--text-primary);
-		font-size: var(--fs-xs);
-		white-space: nowrap;
-	}
-	.badge.bad { background: var(--danger-bg); color: var(--danger); }
-	.badge.path { background: var(--accent-soft); color: var(--accent); }
-	.badge.warn {
-		background: var(--warning-bg);
-		color: var(--warning);
-		border: 1px solid var(--warning-border);
-	}
-	.age { color: var(--text-faint); font-size: var(--fs-xs); }
-	.chev { color: var(--text-faint); font-size: var(--fs-sm); }
-
-	/* ── strengths preview ────────────────────────────── */
-	.strength-preview {
-		margin: 0;
-		padding: 0 var(--space-3) var(--space-2);
-		font-size: var(--fs-sm);
+	.entry-counts .ec em {
+		font-style: normal;
 		color: var(--text-muted);
-		line-height: 1.4;
 	}
-	.preview-label { font-weight: 600; color: var(--accent); margin-right: var(--space-1); }
-
-	/* ── expanded: strengths block ────────────────────── */
-	.strengths-block {
-		border-color: var(--success-border);
-		background: var(--success-bg);
-		color: var(--success);
-	}
-	.strength-list {
-		list-style: none;
-		margin: var(--space-2) 0 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		font-size: var(--fs-sm);
-		color: var(--success);
+	.ec-sep {
+		color: var(--text-faint);
 	}
 
-	/* ── expanded: auto paths ─────────────────────────── */
-	.paths-block {
-		margin: 0 var(--space-2) var(--space-2);
-		padding: var(--space-2) var(--space-3);
-		border: 1px solid var(--banner-info-border);
-		background: var(--accent-soft);
-		color: var(--accent);
-		border-radius: var(--radius-md);
-	}
-	.paths-block h3 { margin: 0; font-size: var(--fs-sm); color: var(--accent); }
-	.path-list {
-		list-style: none;
-		margin: var(--space-2) 0 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-	}
-	.path-list li {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--space-2);
-		font-size: var(--fs-sm);
-	}
-
-	/* ── expanded: entry list ─────────────────────────── */
-	.team-entries {
-		list-style: none;
-		margin: 0;
-		padding: var(--space-2);
-		border-top: 1px solid var(--border);
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
-	.team-entry {
-		background: var(--bg-page);
-		border-radius: var(--radius-md);
-		padding: var(--space-2) var(--space-3);
-		border-left: 3px solid var(--border-strong);
-	}
-	.team-entry[data-color='red'] { border-left-color: var(--alliance-red); }
-	.team-entry[data-color='blue'] { border-left-color: var(--alliance-blue); }
-	.hdr { display: flex; gap: var(--space-2); align-items: baseline; font-size: var(--fs-sm); }
-	.alliance { text-transform: capitalize; color: var(--text-muted); }
-	.by { margin-left: auto; font-size: var(--fs-xs); color: var(--text-faint); }
-	.team-entry p { margin: var(--space-1) 0 0; font-size: var(--fs-sm); line-height: 1.4; }
-	.team-entry p strong { display: inline-block; width: 1rem; color: var(--accent); }
-	.team-entry p.brokedown { color: var(--danger); font-weight: 600; }
-	.team-entry p.brokedown strong { color: var(--danger); }
-
-	/* ── full-view link ───────────────────────────────── */
-	.full-view-row { padding: 0 var(--space-3); text-align: right; }
+	.show-more,
 	.full-view-link {
 		display: inline-flex;
 		align-items: center;
 		min-height: var(--tap-min);
-		font-size: var(--fs-xs);
-		color: var(--accent);
-		text-decoration: none;
-		font-weight: 600;
-	}
-	.full-view-link:hover { text-decoration: underline; }
-
-	/* ── show more ────────────────────────────────────── */
-	.more-row { text-align: center; }
-	.show-more {
+		padding: 0 var(--space-2);
+		margin-top: var(--space-2);
 		background: none;
 		border: none;
 		color: var(--accent);
@@ -993,18 +1002,26 @@
 		font-size: var(--fs-sm);
 		font-weight: 600;
 		cursor: pointer;
-		min-height: var(--tap-min);
-		padding: 0 var(--space-3);
-		text-decoration: underline;
-		text-underline-offset: 2px;
+		text-decoration: none;
 	}
-	.show-more:hover { color: var(--accent-hover); }
-	.show-more:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+	.show-more:hover,
+	.full-view-link:hover {
+		text-decoration: underline;
+	}
+	.show-more:focus-visible,
+	.full-view-link:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
 
-	/* ── responsive ───────────────────────────────────── */
-	@media (max-width: 600px) {
-		.stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-		.search { max-width: 100%; flex-basis: 100%; }
-		.toolbar-btns { margin-left: 0; }
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 </style>

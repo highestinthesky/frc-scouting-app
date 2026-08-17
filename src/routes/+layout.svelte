@@ -655,6 +655,13 @@
 		margin: 0;
 		background: var(--bg-page);
 		color: var(--text-primary);
+		/* Declared ONCE, here, because it was declared eighteen times and three
+		   pages still missed it: /studio/event, /studio/coverage and
+		   /studio/insights rendered entirely in Times, in production. Every copy
+		   sat on a page's own `main`, so the app looked right everywhere anyone
+		   had remembered — and a Studio page that never grew a `main` rule had no
+		   font at all. Inherited from body, a page cannot forget it. */
+		font-family: system-ui, -apple-system, sans-serif;
 	}
 	:global(input), :global(textarea), :global(select) {
 		color: var(--text-primary);
@@ -665,7 +672,6 @@
 		max-width: 26rem;
 		margin: var(--space-6) auto;
 		padding: 0 var(--space-4);
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.gate h1 { margin: 0 0 var(--space-3); font-size: var(--fs-xl); letter-spacing: -0.02em; }
 	.gate p { color: var(--text-muted); line-height: 1.5; margin: 0 0 var(--space-5); }
@@ -696,7 +702,6 @@
 		border-radius: var(--radius-md);
 		background: var(--warning-bg);
 		color: var(--warning);
-		font-family: system-ui, -apple-system, sans-serif;
 		font-size: var(--fs-sm);
 		line-height: 1.45;
 	}
@@ -729,7 +734,6 @@
 		text-align: center;
 		margin-top: calc(2 * var(--space-6));
 		color: var(--text-faint);
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	/* The app bar is identity, not navigation — who you are and whether your
 	   work is safe. It stays purple in both themes: it's the one surface
@@ -740,7 +744,6 @@
 		color: var(--bar-ink);
 		padding: var(--space-2) var(--space-4);
 		padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.app-bar-inner {
 		/* Aligned to --w-list, the width of the busiest surface under it.
@@ -869,7 +872,6 @@
 		background: var(--bg-card);
 		border-top: 1px solid var(--border);
 		padding-bottom: env(safe-area-inset-bottom, 0px);
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.tabs a {
 		flex: 1 1 0;

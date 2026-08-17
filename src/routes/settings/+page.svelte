@@ -249,7 +249,6 @@
 		max-width: var(--w-form); /* A column of fields. Wider inputs are not easier to use. */
 		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {
 		display: flex;

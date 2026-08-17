@@ -115,7 +115,6 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
 		box-shadow: var(--shadow-md);
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 
 	h2 {

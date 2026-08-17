@@ -309,7 +309,6 @@
 		max-width: var(--w-list); /* An entry list. More rows visible is the point, and on a phone it is capped by the viewport anyway. */
 		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.top {
 		display: flex;

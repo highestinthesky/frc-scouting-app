@@ -333,7 +333,6 @@
 		max-width: 32rem;
 		margin: var(--space-5) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-6));
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	.page-head {
 		display: flex;

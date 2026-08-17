@@ -213,7 +213,6 @@
 		max-width: 26rem;
 		margin: 0 auto;
 		padding: var(--space-5) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
-		font-family: system-ui, -apple-system, sans-serif;
 	}
 	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
 	.lede {
