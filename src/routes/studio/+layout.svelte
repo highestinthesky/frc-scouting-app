@@ -23,12 +23,26 @@
 
 	let { children } = $props();
 
+	// Everything that is "running an event" lives here now. Insights folded in
+	// because it was never a different job from Studio — teams, compare and
+	// picklist are all decisions a manager makes at a table — and keeping them in
+	// separate applications is what made the two clash.
 	const TABS = [
 		{ href: 'event', label: 'Event', hint: 'Who is on this event' },
-		{ href: 'coverage', label: 'Coverage', hint: 'What is being watched' }
+		{ href: 'schedule', label: 'Schedule', hint: 'Matches and assignments' },
+		{ href: 'coverage', label: 'Coverage', hint: 'What is being watched' },
+		{ href: 'insights', label: 'Insights', hint: 'Teams, compare, picklist' },
+		{ href: 'accounts', label: 'Accounts', hint: 'Who is on the team' }
 	];
 
-	const current = $derived(page.url.pathname.replace(/\/$/, '').split('/').pop());
+	// The SECOND segment after /studio, not the last one — /studio/insights/team/254
+	// must still light up Insights. Taking the last segment lit nothing on any
+	// sub-page, which is precisely where a manager needs to know where they are.
+	const current = $derived.by(() => {
+		const parts = page.url.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+		const i = parts.indexOf('studio');
+		return i >= 0 ? (parts[i + 1] ?? '') : '';
+	});
 </script>
 
 {#if !auth.signedIn}
@@ -45,7 +59,7 @@
 			Your account is a {auth.role ?? 'scout'}. A super can change that — everything
 			you record is unaffected either way.
 		</p>
-		<a href="{base}/home/">Back to Home</a>
+		<a href="{base}/scouting/">Back to Home</a>
 	</div>
 {:else}
 	<div class="studio">
@@ -76,7 +90,7 @@
 			<!-- The only way out, so it is a real control and it is never hidden.
 			     The global tab bar used to be the escape route and it was a trapdoor:
 			     it left Studio without offering a way back. -->
-			<a class="out" href="{base}/home/">
+			<a class="out" href="{base}/scouting/">
 				<span aria-hidden="true">←</span> Leave Studio
 			</a>
 		</nav>

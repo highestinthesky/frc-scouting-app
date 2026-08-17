@@ -302,13 +302,13 @@
 </script>
 
 <svelte:head>
-	<title>Manager · FRC Scout</title>
+	<title>Insights · FRC Scout</title>
 </svelte:head>
 
 <main>
 	<!-- ── Header ───────────────────────────────────────────────────── -->
 	<header class="page-head">
-		<h1>Manager</h1>
+		<h1>Insights</h1>
 		{#if summary}
 			<div class="updated">
 				{summary.totalEntries} entries · last {relTime(summary.lastCreatedAt)} ago
@@ -316,17 +316,6 @@
 		{/if}
 	</header>
 
-	{#if auth.isManager}
-		<!-- Studio opens in a new tab deliberately. It is the laptop-at-a-table
-		     surface and this page is read on a phone between matches; sending
-		     someone there in place of Insights takes away the thing they were
-		     using. target=_blank without rel=noopener would hand the new tab a
-		     window.opener reference to this one. -->
-		<a class="studio-link" href="{base}/studio/" target="_blank" rel="noopener noreferrer">
-			Open Studio
-			<span class="studio-hint">Staff the event, check coverage</span>
-		</a>
-	{/if}
 
 	{#if loading}
 		<p class="muted">Loading…</p>
@@ -374,8 +363,8 @@
 				/>
 			</div>
 			<div class="toolbar-btns">
-				<a class="btn secondary" href="{base}/insights/compare/">Compare</a>
-				<a class="btn secondary" href="{base}/insights/picklist/">Picklist</a>
+				<a class="btn secondary" href="{base}/studio/insights/compare/">Compare</a>
+				<a class="btn secondary" href="{base}/studio/insights/picklist/">Picklist</a>
 				<button
 					class="btn csv"
 					onclick={doExportCsv}
@@ -526,7 +515,7 @@
 						<!-- ── Expanded body ──────────────────────────────────── -->
 						{#if isOpen}
 							<div class="full-view-row">
-								<a class="full-view-link" href="{base}/insights/team/{t.teamNumber}/">Full match log →</a>
+								<a class="full-view-link" href="{base}/studio/insights/team/{t.teamNumber}/">Full match log →</a>
 							</div>
 							{#if t.uniqueStrengths?.length > 0}
 								<div class="paths-block strengths-block">
@@ -602,42 +591,6 @@
 </main>
 
 <style>
-	.studio-link {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-height: var(--tap-min);
-		justify-content: center;
-		padding: var(--space-3);
-		margin-bottom: var(--space-4);
-		background: var(--accent-soft);
-		border: 1px solid var(--accent);
-		border-radius: var(--radius-lg);
-		color: var(--text-primary);
-		font-weight: 600;
-		text-decoration: none;
-	}
-	.studio-hint {
-		font-weight: 400;
-		font-size: var(--fs-xs);
-		color: var(--text-muted);
-	}
-
-	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
-	 *
-	 * The densest page in the app: four stat tiles, a toolbar, filter chips and
-	 * an expandable team list. Everything below is on tokens so a change to the
-	 * scale moves all of it at once — this page is where drift shows up first.
-	 */
-
-	main {
-		max-width: 38rem;
-		margin: var(--space-4) auto;
-		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
-		font-family: system-ui, -apple-system, sans-serif;
-	}
-
 	/* ── header ───────────────────────────────────────── */
 	.page-head {
 		display: flex;

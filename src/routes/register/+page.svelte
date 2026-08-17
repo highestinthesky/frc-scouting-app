@@ -78,7 +78,7 @@
 			lastName
 		});
 		busy = false;
-		if (res.ok) await goto(`${base}/home/`);
+		if (res.ok) await goto(`${base}/scouting/`);
 		else error = res.message;
 	}
 </script>

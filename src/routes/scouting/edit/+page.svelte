@@ -111,7 +111,7 @@
 			});
 
 			kickSync();
-			await goto(`${base}/home/`);
+			await goto(`${base}/scouting/`);
 		} catch (err) {
 			error = err.message ?? String(err);
 		} finally {
@@ -129,7 +129,7 @@
 		});
 		if (!ok) return;
 		await deleteEntry(entry.id);
-		await goto(`${base}/home/`);
+		await goto(`${base}/scouting/`);
 	}
 </script>
 
@@ -139,7 +139,7 @@
 
 <main>
 	<header class="page-head">
-		<a href="{base}/home/" class="back" aria-label="Back to entries">←</a>
+		<a href="{base}/scouting/" class="back" aria-label="Back to entries">←</a>
 		<h1>Edit entry</h1>
 	</header>
 
@@ -148,7 +148,7 @@
 	{:else if notFound}
 		<div class="not-found">
 			<p>That entry doesn't exist on this device.</p>
-			<a class="back-link" href="{base}/home/">Back to entries</a>
+			<a class="back-link" href="{base}/scouting/">Back to entries</a>
 		</div>
 	{:else}
 		{#if !canEdit}
@@ -190,7 +190,7 @@
 				<div class="push-left">
 					<Button variant="danger" onclick={removeEntry}>Delete</Button>
 				</div>
-				<a href="{base}/home/" class="cancel">Cancel</a>
+				<a href="{base}/scouting/" class="cancel">Cancel</a>
 				<Button variant="primary" type="submit" disabled={saving}>
 					{saving ? 'Saving…' : 'Save changes'}
 				</Button>

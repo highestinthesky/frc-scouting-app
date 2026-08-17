@@ -75,7 +75,7 @@
 
 <main>
 	<header class="page-head">
-		<a class="back" href="{base}/home/" aria-label="Back">←</a>
+		<a class="back" href="{base}/scouting/" aria-label="Back">←</a>
 		<h1>Settings</h1>
 	</header>
 
@@ -87,10 +87,12 @@
 				<span class="uname">{auth.profile.username}</span>
 				<span class="tag">{auth.profile.role}</span>
 			</p>
+			<!-- "Manage accounts" used to sit here as a bare <a> beside a real
+			     <Button>, so the two were visibly different sizes. It is not restyled
+			     — it moved. Managing accounts is running the team, which is Studio's
+			     job, and Settings is left with the one control that belongs to this
+			     device. -->
 			<div class="acct-actions">
-				{#if auth.isManager}
-					<a class="acct-link" href="{base}/accounts/">Manage accounts</a>
-				{/if}
 				<Button onclick={signOut}>Sign out</Button>
 			</div>
 		{:else if auth.orphaned}

@@ -96,7 +96,7 @@
 		// /register either, but an orphaned auth user MUST be allowed to stay
 		// there and retry the invite redemption that failed after signUp().
 		if (auth.signedIn && (onLoginRoute || (onRegisterRoute && !auth.orphaned))) {
-			goto(`${base}/home/`, { replaceState: true });
+			goto(`${base}/scouting/`, { replaceState: true });
 			return;
 		}
 		// Signed out: the login screen is where you land. A device that has never
@@ -246,23 +246,39 @@
 			<span class="role-badge" class:manager={shellIdentity.isManager}>
 				{shellIdentity.role}
 			</span>
+			{#if shellIdentity.isManager}
+				<!-- Opens in its own tab, so it carries a pop-out mark. The mark is not
+				     decoration: a link that replaces the page and a link that opens a
+				     new one should not look identical, and this one takes you out of
+				     the app you are standing in. rel=noopener because target=_blank
+				     otherwise hands the new tab a reference back to this window. -->
+				<a
+					class="studio-btn"
+					href="{base}/studio/"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					Studio
+					<svg viewBox="0 0 12 12" width="10" height="10" fill="none" aria-hidden="true">
+						<path d="M4.5 1.5h6v6M10.5 1.5 5 7M8 9.5v1h-6.5V4h1"
+							stroke="currentColor" stroke-width="1.4"
+							stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+					<span class="sr-only">(opens in a new tab)</span>
+				</a>
+			{/if}
 		</div>
 	</header>
 
 	<!-- Bottom-docked on phones, top strip from 40rem up. See design.md
 	     § Three deviations — a scout holds this one-handed. -->
+	<!-- Two tabs, not four. This app records matches; running an event is Studio's
+	     job and Studio is not a peer of these — it is a different application, so
+	     it is a button in the bar above rather than a tab down here. -->
 	<nav class="tabs" aria-label="Main">
-		<a href="{base}/home/" class:active={isActive('/home')} aria-current={isActive('/home') ? 'page' : undefined}>
-			Home
-		</a>
 		<a href="{base}/scouting/" class:active={isActive('/scouting')} aria-current={isActive('/scouting') ? 'page' : undefined}>
 			Scouting
 		</a>
-		{#if shellIdentity.isManager}
-			<a href="{base}/insights/" class:active={isActive('/insights')} aria-current={isActive('/insights') ? 'page' : undefined}>
-				Insights
-			</a>
-		{/if}
 		<a href="{base}/settings/" class:active={isActive('/settings')} aria-current={isActive('/settings') ? 'page' : undefined}>
 			Settings
 		</a>
@@ -541,6 +557,45 @@
 	}
 	.sep { opacity: 0.6; }
 	.name { opacity: 0.95; }
+	/* Visually hidden, still announced. The pop-out glyph is aria-hidden, so
+	   without this a screen reader gets no warning that the link leaves the app. */
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+		border: 0;
+	}
+
+	.studio-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+		min-height: var(--tap-min);
+		padding: var(--space-1) var(--space-2);
+		margin-left: var(--space-2);
+		border-radius: var(--radius-pill);
+		background: var(--bar-chip-bg);
+		color: var(--bar-ink);
+		font-size: var(--fs-xs);
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	.studio-btn:hover {
+		background: var(--bar-badge-bg);
+		color: var(--bar-badge-ink);
+	}
+	.studio-btn:focus-visible {
+		outline: 2px solid var(--bar-ink);
+		outline-offset: 2px;
+	}
+
 	.role-badge {
 		background: var(--bar-chip-bg);
 		padding: var(--space-1) var(--space-2);

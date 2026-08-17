@@ -298,7 +298,7 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 for (const [label, file] of [
 	['login', 'src/routes/+page.svelte'],
 	['register', 'src/routes/register/+page.svelte'],
-	['accounts', 'src/routes/accounts/+page.svelte']
+	['accounts', 'src/routes/studio/accounts/+page.svelte']
 ]) {
 	const r = rules(file);
 	const ownRule = r.some(
@@ -343,17 +343,23 @@ for (const [label, file] of [
 	);
 }
 
-// Home has no inputs — it is a directory, so its tap targets are links.
+// The scout's own page. It had a directory until v0.73 — Scouting (itself),
+// Insights, Accounts, Settings — and every one of those is now a tab or lives
+// behind the Studio button, so the directory went rather than being restyled.
+//
+// The assertion follows: what a scout actually taps here is the entry list, and
+// each row opens a saved entry for editing. That is the most-tapped control in
+// the app and it is what has to clear the floor.
 {
-	const r = rules('src/routes/home/+page.svelte');
+	const r = rules('src/routes/scouting/+page.svelte');
 	ok(
-		'/home: directory links meet the tap floor',
+		'/scouting: entry rows meet the tap floor',
 		r.some(
 			(x) =>
-				unscoped(x.selector).includes('.directory a') &&
+				/\.(entry|row|item)\b/.test(unscoped(x.selector)) &&
 				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
 		),
-		'the directory is the whole point of the page; its rows are the most-tapped thing in the app'
+		'the entry list is the page; its rows are the most-tapped thing in the app'
 	);
 }
 
@@ -456,6 +462,41 @@ for (const [label, file] of [
 		offenders.length === 0,
 		offenders.join('\n        ')
 	);
+}
+
+
+// ─── a tab must open the page it names ─────────────────────────────────────
+//
+// Three of four labels disagreed with their page before v0.73: Home opened
+// "Your entries", Scouting opened "Schedule", Insights opened "Manager". That
+// one table was the root of four separate complaints, and nothing in the code
+// would ever have caught it — a label and a heading are strings in different
+// files that no test related.
+//
+// This relates them. The pairs are listed rather than inferred, because the map
+// from a nav label to a route is the thing being asserted; deriving it from the
+// nav would make the check agree with whatever the nav happens to say.
+{
+	const headingOf = (file) => {
+		const src = readFileSync(path.join(root, file), 'utf8');
+		return (/<h1[^>]*>([^<]+)/.exec(src)?.[1] ?? '').trim();
+	};
+	for (const [label, file] of [
+		['Scouting', 'src/routes/scouting/+page.svelte'],
+		['Settings', 'src/routes/settings/+page.svelte'],
+		['Event', 'src/routes/studio/event/+page.svelte'],
+		['Schedule', 'src/routes/studio/schedule/+page.svelte'],
+		['Coverage', 'src/routes/studio/coverage/+page.svelte'],
+		['Insights', 'src/routes/studio/insights/+page.svelte'],
+		['Accounts', 'src/routes/studio/accounts/+page.svelte']
+	]) {
+		const h = headingOf(file);
+		ok(
+			`"${label}" opens a page headed "${label}"`,
+			h === label,
+			`heading is "${h}"`
+		);
+	}
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

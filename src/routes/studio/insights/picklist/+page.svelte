@@ -373,7 +373,7 @@
 
 <main>
 	<header class="page-head">
-		<a class="back" href="{base}/insights/" aria-label="Back to insights">←</a>
+		<a class="back" href="{base}/studio/insights/" aria-label="Back to Insights">←</a>
 		<h1>Picklist</h1>
 		{#if eventCode}<small class="event">· {eventCode}</small>{/if}
 	</header>
@@ -622,7 +622,7 @@
 								{#if t.discrepancyCount > 0} · ⚠ {t.discrepancyCount}{/if}
 							</span>
 							<div class="ops">
-								<a class="peek" href="{base}/insights/team/{t.teamNumber}/" title="Open team page">peek</a>
+								<a class="peek" href="{base}/studio/insights/team/{t.teamNumber}/" title="Open team page">peek</a>
 								<button
 									onclick={() => addToPick(t.teamNumber)}
 									disabled={!isManager}

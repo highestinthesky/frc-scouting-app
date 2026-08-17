@@ -174,13 +174,20 @@ const ok = (name, cond, detail = '') => {
 {
 	const shellSrc = readFileSync(path.join(here, '../routes/+layout.svelte'), 'utf8');
 	const settingsSrc = readFileSync(path.join(here, '../routes/settings/+page.svelte'), 'utf8');
-	const scoutingSrc = readFileSync(path.join(here, '../routes/scouting/+page.svelte'), 'utf8');
+	// The manager surfaces moved to Studio in v0.73 — /scouting is the act of
+	// scouting now, which is what the word always meant. This assertion follows
+	// the job, not the path: whichever page renders the manager components is the
+	// one that must ask auth rather than re-deriving the answer.
+	const scoutingSrc = readFileSync(
+		path.join(here, '../routes/studio/schedule/+page.svelte'),
+		'utf8'
+	);
 
 	ok('role.svelte.js is gone', !existsSync(path.join(here, 'role.svelte.js')));
 	for (const [label, text] of [
 		['the layout', shellSrc],
 		['settings', settingsSrc],
-		['the scouting page', scoutingSrc]
+		['the studio schedule page', scoutingSrc]
 	]) {
 		ok(`${label} no longer imports the local role store`, !/role\.svelte\.js/.test(text));
 	}
@@ -203,7 +210,7 @@ const ok = (name, cond, detail = '') => {
 	);
 	ok('no passphrase survives in auth', !/session\.managerToken/.test(src));
 	ok(
-		'the scouting page asks auth rather than re-deriving',
+		'the manager surface asks auth rather than re-deriving',
 		/isManager = \$derived\(auth\.showsManagerTools\)/.test(scoutingSrc)
 	);
 }

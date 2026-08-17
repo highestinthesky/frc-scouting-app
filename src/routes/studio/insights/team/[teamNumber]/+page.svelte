@@ -42,7 +42,7 @@
 
 <main>
 	<header class="page-head">
-		<a class="back" href="{base}/insights/" aria-label="Back to manager">←</a>
+		<a class="back" href="{base}/studio/insights/" aria-label="Back to Insights">←</a>
 		<h1>Team {teamNumber}</h1>
 	</header>
 
@@ -51,12 +51,12 @@
 	{:else if !team}
 		<div class="not-found">
 			<p>No entries on file for team {teamNumber}.</p>
-			<a class="back-link" href="{base}/insights/">Back to manager</a>
+			<a class="back-link" href="{base}/studio/insights/">Back to Insights</a>
 		</div>
 	{:else}
 		<!-- Quick links -->
 		<div class="quick-actions">
-			<a class="action" href="{base}/insights/compare/?teams={teamNumber}">Compare with another team →</a>
+			<a class="action" href="{base}/studio/insights/compare/?teams={teamNumber}">Compare with another team →</a>
 		</div>
 
 		<!-- Summary line -->

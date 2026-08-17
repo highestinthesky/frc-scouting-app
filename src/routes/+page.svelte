@@ -16,7 +16,7 @@
 	// it: after the cutover there is nothing left to carry on without.
 	async function later() {
 		await session.update({ loginDeferred: true });
-		goto(`${base}/home/`, { replaceState: true });
+		goto(`${base}/scouting/`, { replaceState: true });
 	}
 
 	async function submit(e) {
@@ -25,7 +25,7 @@
 		error = '';
 		const res = await auth.signIn(username, password);
 		busy = false;
-		if (res.ok) await goto(`${base}/home/`);
+		if (res.ok) await goto(`${base}/scouting/`);
 		else error = res.message;
 	}
 </script>

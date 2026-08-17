@@ -421,90 +421,82 @@ of the IA work costs nothing: none of it gets redone when routes move.*
   text inputs held the Accounts form wider than a 375px viewport. Now
   `minmax(0, 1fr)`, and that form collapses to one column.
 
-### v0.73 — names and routes tell the truth
+### v0.73 — one reorganisation, done in steps
 
-*Notes 4, 5, 9. Nothing else in the series is safe to build until this lands.*
+Everything still outstanding, combined into one release because the pieces are
+the same cut: **the app splits into recording and running an event.** Doing them
+separately would mean moving the same routes twice.
 
-- Recording gets a route that says so. `/scouting` becomes the act of scouting —
-  the entry form and this device's entries — not the schedule.
-- The schedule and assignment planning move out of `/scouting` to their own
-  place. They are a manager job that happens to be about matches.
-- `/insights` stops being titled "Manager". It is analysis: teams, compare,
-  picklist. Manager *operations* belong to Studio, which resolves the clash in
-  note 9 by giving each a job rather than a better label.
-- Every nav label equals the `<h1>` of the page it opens. Enforced by a check in
-  `npm test`, because this drifted once and will drift again.
-- Redirects from the old paths. A scout with a bookmark or a cached PWA must not
-  get a 404 the morning of an event.
+**The split.** A scout opens this app to record a match. A manager opens it to
+run an event. Those are different jobs, different devices and different rooms,
+and today they are interleaved: `/scouting` holds nine components, five of them
+manager-only, while the actual recording lives on Home.
 
-### v0.74 — the shell earns its space
+    the scout app        Scout · Schedule · Settings
+    Studio               Event · Schedule · Insights · Accounts
 
-*Notes 3, 10, 11.*
+Studio is reached by a button at the top of the screen carrying a pop-out
+indicator, because it opens in its own tab. It stops being a nav tab: it is not
+a peer of Scout and Schedule, it is a different application.
 
-- One breakpoint system, replacing the four ad-hoc values. Phone / tablet /
-  desktop, named in tokens.
-- Desktop stops being a phone in the middle of a screen. Content width becomes a
-  per-surface decision: a form stays narrow because line length is readability,
-  a table or a board goes wide because density is the point.
-- The top bar slims. It currently spends a full-width band on an event code, a
-  name and a role chip; on a phone that is chrome eating the space the app is
-  for.
-- Bottom tab bar stays on phones — it is right there — and becomes a side rail on
-  desktop, where a fixed bottom bar is a phone affordance on a device that has
-  no thumbs near the bottom.
-- Verified at 320 / 375 / 414 / 768 / 1280, not just "looks fine on my laptop".
+**The steps**, in order, each shippable on its own:
 
-### v0.75 — Studio's remaining chrome
+1. **Recording moves to `/scouting`.** It is what the word means and what the
+   tab has always claimed. Home's entry list and record button go there, with
+   the scout's own next match and assigned teams.
 
-*Note 6.*
+2. **Event planning moves to Studio.** `PublishSchedule`, `AssignScouts`,
+   `ScoutRoster`, `CoverageCheck` and `ReminderPanel` are manager surfaces that
+   have been sitting behind a tab labelled Scouting. `SchedulePreview`,
+   `MyTeams` and `UpcomingMatches` stay scout-side as a read-only `/schedule`.
 
-- Studio loses the global navigation entirely. It is a separate surface and the
-  tab bar is a trapdoor out of it with no way back.
-- It gets its own way home — one explicit exit, not a nav bar that silently
-  drops you into a different app.
-- Studio's own chrome carries the event it is operating on, because "which event
-  am I editing" is the one thing that must never be ambiguous there.
+3. **Insights folds into Studio.** It gives no advantage as a separate surface —
+   teams, compare and picklist are all "running the event", and keeping them
+   apart is what made Insights and Studio clash. `/insights/*` becomes
+   `/studio/insights/*`.
 
-### v0.76 — identity without typing
+4. **Accounts folds into Studio** and leaves Settings. It is a manager job, and
+   moving it dissolves the sizing complaint rather than restyling it: Settings
+   is left with sign-out as its only account control, so there is no mismatched
+   pair.
 
-*Note 7. The deepest change in the series; it touches the join key.*
+5. **Every old path redirects.** A cached PWA or a bookmark must not 404 on the
+   morning of an event.
 
-- A manager or super types the person's real full name when creating the invite
-  or the account. The name is bound to the invite at creation.
-- Whatever username the scout picks, the name stays what the manager typed.
-  Redemption cannot detach it.
-- The "type your name" field disappears from setup. It exists today only because
-  assignments were matched on a typed string, and `submitted_by` replaced that.
-- `scout_name` finishes retiring as a join key and becomes a display label only.
-  It stays in the dedupe fingerprint, which is content, not identity.
-- Requires a migration and an RLS suite pass; the fingerprint invariant in
-  `CLAUDE.md` is the thing most at risk here and gets an assertion.
+6. **Nav labels equal the `<h1>` they open**, enforced by a check, because this
+   drifted once and will drift again.
 
-### v0.77 — reminders rebuilt
+7. **Reminders stop being a shelf.** Today they are a static stack under the nav
+   — up to three at once, pushing every page down, persisting until dismissed.
+   That is not a notification, it is furniture. They become:
+   - a **fly-by** that slides in, reads, and leaves on its own, for anything
+     informational;
+   - a **popup** that interrupts, for the ones that need an action now — you are
+     up in two matches, you have an unrecorded team.
 
-*Note 8. Sequenced after v0.75 because reminders target people.*
+   Reduced-motion collapses the fly-by to a fade, and neither may steal focus
+   from a form a scout is mid-way through filling in.
 
-- Reminders target accounts, not typed names.
-- The composer stops being a text box bolted to the schedule page and moves to
-  wherever manager operations end up living after v0.72.
-- Expiry and delivery state are visible: a manager should be able to see that a
-  reminder was seen, or that it aged out unread.
+8. **The shell earns its space.** One breakpoint system replaces the four ad-hoc
+   values (`28rem`, `40rem`, `47.9375rem`, `600px`). Desktop stops being a phone
+   in the middle of a screen: content width becomes a per-surface decision — a
+   form stays narrow because line length is readability, a board goes wide
+   because density is the point. The top bar slims; it currently spends a
+   full-width band on an event code, a name and a role chip.
 
-### v0.78 — the component and visual pass
+9. **Identity without typing.** A manager types the person's real full name when
+   creating the invite or account, and it is bound there. Whatever username the
+   scout picks, the name stays what the manager typed. The "type your name"
+   field disappears. `scout_name` finishes retiring as a join key and becomes a
+   display label; it stays in the dedupe fingerprint, which is content, not
+   identity. Needs a migration and an RLS pass — the deepest step, and last of
+   the structural ones for that reason.
 
-*Notes 2 and 12. Last, deliberately: styling a layout that is about to move is
-wasted work.*
+10. **The visual pass.** Hallmark runs as a redesign *inside* `design.md`'s
+    existing system — tokens, contrast and component checks stay authoritative.
+    Every interactive component ships all eight states. This is last because
+    styling a layout that is about to move is wasted work.
 
-- Native `<select>` and other browser-default controls are replaced with the
-  app's own components. The event dropdown in Studio is the visible offender and
-  is not the only one.
-- Every interactive component ships all eight states, per Hallmark's component
-  discipline: default, hover, focus-visible, active, disabled, loading, error,
-  success.
-- Hallmark runs as a **redesign inside `design.md`'s existing system** — tokens,
-  contrast checks and the component checks stay authoritative. This is not a
-  reskin and not a new palette; `design.md` is a locked system and Hallmark
-  defers to it.
 
 ### Out of scope for v0.7
 
