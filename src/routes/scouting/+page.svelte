@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { session } from '$lib/session.svelte.js';
-	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
+	import { auth } from '$lib/auth.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import { rowScout, scoutRef } from '$lib/scout-identity.js';
 	import { listEntries, getSetting, setSetting } from '$lib/db.js';
@@ -34,10 +34,6 @@
 		teamStatus
 	} from '$lib/coverage.js';
 	import {
-		isPassphraseSet,
-		setPassphrase as setPassphraseRemote,
-		verifyPassphrase,
-		rotatePassphrase as rotatePassphraseRemote,
 		resetEventData
 	} from '$lib/event-meta.js';
 	import {
@@ -49,7 +45,6 @@
 	import { relativeTime, timeOfDay } from '$lib/format.js';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import PublishSchedule from '$lib/components/scouting/PublishSchedule.svelte';
-	import ManagerPassphrase from '$lib/components/scouting/ManagerPassphrase.svelte';
 	import AssignScouts from '$lib/components/scouting/AssignScouts.svelte';
 	import ScoutRoster from '$lib/components/scouting/ScoutRoster.svelte';
 	import CoverageCheck from '$lib/components/scouting/CoverageCheck.svelte';
@@ -73,18 +68,14 @@
 	// showsManagerTools, which replaced a local self-asserted role toggle that
 	// revealed buttons for anyone who ticked it.
 	const isManager = $derived(auth.showsManagerTools);
-	// auth.managerCredentials() is the shared form; this local alias stays only
-	// because several call sites here take a bare token rather than a bag.
-	const legacyManagerToken = $derived(auth.managerCredentials().managerToken);
 	// Who authored a reminder or a schedule publish. Same reasoning as the app
 	// bar badge in +layout.svelte: the account name when one exists, because
 	// attributing a manager action to whatever name this device happened to have
 	// typed is how "who published this?" became unanswerable.
-	const managerName = $derived(
-		AUTH_ENFORCED
-			? auth.displayName || auth.profile?.username || ''
-			: auth.displayName || session.scoutName
-	);
+	// The account, full stop. There is no signed-out manager any more, so the
+	// fallback to session.scoutName would only ever produce a typed name where an
+	// account exists — which is how "who published this?" became unanswerable.
+	const managerName = $derived(auth.displayName || auth.profile?.username || '');
 
 	// ── live coverage (shared with home + manager analytics) ────────────────
 	// Index of which (match, team) cells have at least one entry. A teammate's
@@ -143,15 +134,8 @@
 	// Canonical TBA event key to fetch from (e.g. "2027nyny"), decoupled from
 	// the team's sync event code (e.g. "2027nyc"). Empty falls back to the code.
 	let tbaEventKey = $state(session.tbaEventKey);
-	let passphraseSetRemote = $state(false);
-	let passphraseLocallyKnown = $derived(!AUTH_ENFORCED && Boolean(session.managerToken));
-	let pwInput = $state('');
-	let pwInput2 = $state('');
-	let verifyInput = $state('');
 
 	// Rotation + reset state
-	let rotateNew = $state('');
-	let rotateNew2 = $state('');
 	let showForgotHelp = $state(false);
 
 	// Send-reminder state
@@ -402,16 +386,11 @@
 			err = 'Pick both a scout and a team.';
 			return;
 		}
-		if (!AUTH_ENFORCED && passphraseSetRemote && !session.managerToken) {
-			err = 'Verify the manager passphrase before saving overrides.';
-			return;
-		}
 		try {
 			busy = true;
 			await addOverride(
 				session.eventCode,
 				{ matchNumber, scoutName: d.scout.trim(), teamNumber: Number(d.team) },
-				legacyManagerToken,
 				roster
 			);
 			d.scout = '';
@@ -430,7 +409,7 @@
 		msg = '';
 		try {
 			busy = true;
-			await removeOverride(session.eventCode, id, legacyManagerToken);
+			await removeOverride(session.eventCode, id);
 			overrideList = overrideList.filter((o) => o.id !== id);
 		} catch (e) {
 			err = e?.message ?? String(e);
@@ -508,7 +487,7 @@
 		msg = 'Draft discarded — showing the saved assignments.';
 	}
 
-	// ─── mount: load cached schedule, entries, assignments, passphrase state ─
+	// ─── mount: load cached schedule, entries, assignments and the roster ──
 
 	onMount(async () => {
 		await reload();
@@ -523,7 +502,7 @@
 	//
 	// Only entries, deliberately — NOT reload(). Everything here that shows
 	// coverage derives from `entries`, a single indexed local read, while reload()
-	// also refetches assignments, overrides, the account roster and the passphrase
+	// also refetches assignments, overrides and the account roster
 	// state over the network. inboundChanges increments once per ROW, so a
 	// cold-start backfill would fire that hundreds of times.
 	let entriesInFlight = false;
@@ -557,9 +536,6 @@
 			entries = await listEntries();
 			cached = session.eventCode ? await getCachedSchedule(session.eventCode) : null;
 			if (isManager && session.eventCode) {
-				passphraseSetRemote = AUTH_ENFORCED
-					? false
-					: await isPassphraseSet(session.eventCode);
 				roster = auth.signedIn ? await auth.listProfiles().catch(() => []) : [];
 				const all = await listAssignments(session.eventCode);
 				// Group team_number by scout_name for the editor.
@@ -703,9 +679,6 @@
 		let safety;
 		try {
 			if (!cached) throw new Error('Fetch the schedule from TBA first.');
-			if (!AUTH_ENFORCED && passphraseSetRemote && !session.managerToken) {
-				throw new Error('Enter and verify the manager passphrase below before publishing.');
-			}
 			const qmCount = qmList.length;
 			const totalCount = cached.matches.length;
 			// Confirm so a stray tap (especially on the wrong event code) can't
@@ -721,7 +694,6 @@
 			busy = true;
 			safety = armSafetyTimer();
 			const res = await publishSchedule(session.eventCode, cached.matches, {
-				managerToken: legacyManagerToken,
 				fetchedBy: managerName || null,
 				tbaEventKey: (tbaEventKey || '').trim() || session.eventCode
 			});
@@ -740,84 +712,11 @@
 		msg = 'Local schedule cache cleared. (This does not delete the published schedule.)';
 	}
 
-	async function setPassphrase() {
-		if (AUTH_ENFORCED) return;
-		busy = true;
-		err = '';
-		msg = '';
-		try {
-			if (!pwInput.trim()) throw new Error('Passphrase is empty.');
-			if (pwInput !== pwInput2) throw new Error('Passphrases do not match.');
-			const token = await setPassphraseRemote(session.eventCode, pwInput);
-			await session.update({ managerToken: token });
-			passphraseSetRemote = true;
-			pwInput = '';
-			pwInput2 = '';
-			msg = 'Manager passphrase set. Other manager devices will need this passphrase to publish.';
-		} catch (e) {
-			err = e?.message ?? String(e);
-		} finally {
-			busy = false;
-		}
-	}
-
-	async function verifyAndStorePassphrase() {
-		if (AUTH_ENFORCED) return;
-		busy = true;
-		err = '';
-		msg = '';
-		try {
-			if (!verifyInput.trim()) throw new Error('Enter the passphrase.');
-			const res = await verifyPassphrase(session.eventCode, verifyInput);
-			if (!res.ok) throw new Error('That passphrase is not correct.');
-			await session.update({ managerToken: res.token });
-			verifyInput = '';
-			msg = 'Passphrase verified. You can now publish.';
-		} catch (e) {
-			err = e?.message ?? String(e);
-		} finally {
-			busy = false;
-		}
-	}
-
-	async function forgetPassphrase() {
-		if (AUTH_ENFORCED) return;
-		await session.update({ managerToken: '' });
-		msg = 'Forgot the passphrase on this device. Re-enter it to publish again.';
-	}
-
-	async function rotatePassphrase() {
-		if (AUTH_ENFORCED) return;
-		busy = true;
-		err = '';
-		msg = '';
-		try {
-			if (!rotateNew.trim()) throw new Error('Enter a new passphrase.');
-			if (rotateNew !== rotateNew2) throw new Error('New passphrases do not match.');
-			const newToken = await rotatePassphraseRemote(
-				session.eventCode,
-				legacyManagerToken,
-				rotateNew
-			);
-			await session.update({ managerToken: newToken });
-			rotateNew = '';
-			rotateNew2 = '';
-			msg = 'Passphrase rotated. Other manager devices will need the new passphrase before they can publish.';
-		} catch (e) {
-			err = e?.message ?? String(e);
-		} finally {
-			busy = false;
-		}
-	}
-
 	async function sendReminder() {
 		err = '';
 		msg = '';
 		try {
 			if (!reminderText.trim()) throw new Error('Reminder message is empty.');
-			if (!AUTH_ENFORCED && passphraseSetRemote && !session.managerToken) {
-				throw new Error('Verify the manager passphrase before sending.');
-			}
 			busy = true;
 			const matchNum = Number(reminderMatch);
 			await createReminder(session.eventCode, {
@@ -825,7 +724,6 @@
 				matchNumber: Number.isFinite(matchNum) && matchNum > 0 ? matchNum : undefined,
 				message: reminderText,
 				author: managerName || null,
-				managerToken: legacyManagerToken,
 				roster
 			});
 			reminderText = '';
@@ -848,7 +746,7 @@
 		msg = '';
 		try {
 			busy = true;
-			await deleteReminder(session.eventCode, id, legacyManagerToken);
+			await deleteReminder(session.eventCode, id);
 			recentReminders = recentReminders.filter((r) => r.id !== id);
 			await reminderStore.pull();
 		} catch (e) {
@@ -862,29 +760,19 @@
 		err = '';
 		msg = '';
 		try {
-			if (!AUTH_ENFORCED && !session.managerToken) {
-				throw new Error('Enter the current passphrase on this device first.');
-			}
 			const ok = await dialog.confirm({
 				title: `Reset scheduling for ${session.eventCode}?`,
-				body: AUTH_ENFORCED
-					? `Removes the published schedule, assignments, overrides, reminders and shared ` +
-						`picklist for this event.\n\nScout-collected entries are NOT touched.`
-					: `Removes the manager passphrase, the published schedule and every scout ` +
-						`assignment for this event, from the server.\n\n` +
-						`Scout-collected entries are NOT touched.\n\n` +
-						`Afterwards the next device to set a passphrase becomes the manager.`,
+				body:
+					`Removes the published schedule, assignments, overrides, reminders and shared ` +
+					`picklist for this event.\n\nScout-collected entries are NOT touched.`,
 				confirmLabel: 'Reset scheduling',
 				danger: true
 			});
 			if (!ok) return;
 			busy = true;
-			await resetEventData(session.eventCode, legacyManagerToken, AUTH_ENFORCED);
-			if (!AUTH_ENFORCED) await session.update({ managerToken: '' });
+			await resetEventData(session.eventCode);
 			await reload();
-			msg = AUTH_ENFORCED
-				? 'Event planning data reset. Scouting entries were kept.'
-				: 'Scheduling reset. Set a fresh passphrase and re-publish the schedule.';
+			msg = 'Event planning data reset. Scouting entries were kept.';
 		} catch (e) {
 			err = e?.message ?? String(e);
 		} finally {
@@ -981,9 +869,6 @@
 		err = '';
 		msg = '';
 		try {
-			if (!AUTH_ENFORCED && passphraseSetRemote && !session.managerToken) {
-				throw new Error('Verify the manager passphrase before saving assignments.');
-			}
 			const rows = [];
 			for (const r of assignRows) {
 				const name = r.scout_name.trim();
@@ -992,7 +877,6 @@
 				for (const t of dedup) rows.push({ scout_name: name, team_number: t });
 			}
 			const inserted = await replaceAssignments(session.eventCode, rows, {
-				managerToken: legacyManagerToken,
 				roster
 			});
 
@@ -1002,8 +886,7 @@
 			let overrideNote = '';
 			if (pendingOverrides) {
 				const n = await replaceOverrides(session.eventCode, pendingOverrides, {
-					managerToken: legacyManagerToken,
-					roster
+						roster
 				});
 				overrideList = await listOverrides(session.eventCode);
 				pendingOverrides = null;
@@ -1058,24 +941,6 @@
 				onFetch={fetchFromTba}
 				onPublish={publishToTeammates}
 				onClearCache={clearLocalCache}
-			/>
-
-			<ManagerPassphrase
-				bind:pwInput
-				bind:pwInput2
-				bind:verifyInput
-				bind:rotateNew
-				bind:rotateNew2
-				bind:showForgotHelp
-				{passphraseSetRemote}
-				{passphraseLocallyKnown}
-				accountManaged={AUTH_ENFORCED}
-				{busy}
-				onSet={setPassphrase}
-				onVerify={verifyAndStorePassphrase}
-				onForget={forgetPassphrase}
-				onRotate={rotatePassphrase}
-				onReset={resetScheduling}
 			/>
 
 			<AssignScouts

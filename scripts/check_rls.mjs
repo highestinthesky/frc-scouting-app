@@ -9,15 +9,21 @@
 // claims, and a policy that permits the wrong thing looks exactly like one that
 // does not — same name, same table, same green checkmark.
 //
-// Migrations 0008 through 0012 were written, reviewed and syntax-checked
-// without ever executing. This is the file that makes "the cutover is safe" a
-// measurement instead of a belief.
+// Migrations 0008 onward were written, reviewed and syntax-checked without ever
+// executing. This is the file that makes "the cutover is safe" a measurement
+// instead of a belief — and it earned that twice, catching 0019's policy-name
+// collision with 0011 and the role check that was never being reached.
 //
-// It goes through PostgREST rather than psql on purpose. `current_session_header()`
-// reads `request.headers`, which only exists when the request arrived over HTTP,
-// so a psql test would have to fake the very mechanism that partitions events —
-// and would pass whether or not the real one works. These requests are the
-// same shape the app sends.
+// It goes through PostgREST rather than psql on purpose. Authorisation rides the
+// access token, and PostgREST is what turns that token into the `authenticated`
+// role and an auth.uid() the policies can read. psql has neither, so a psql test
+// would have to fake the very mechanism under test and would pass whether or not
+// the real one works. These requests are the same shape the app sends.
+//
+// Since 0020 no request carries an event header at all. Membership is the only
+// thing that grants access, so an assertion that passes here passes for that
+// reason and no other — which was NOT true during the 0019 expand window, when
+// `x-session-id` alone would satisfy the older policy.
 //
 // ─── reading a failure ──────────────────────────────────────────────────────
 //
@@ -85,8 +91,12 @@ const sql = async (text, params = []) => (await db.query(text, params)).rows;
 
 // Two events, because "can this member see event data" and "can this member see
 // THIS event's data" are different questions and only the second one is hard.
-const EVENT_A = { session: '1a1a1a1a-0000-4000-8000-000000000001', code: 'rlstest-a' };
-const EVENT_B = { session: '2b2b2b2b-0000-4000-8000-000000000002', code: 'rlstest-b' };
+//
+// These uuids are now `events.id` rather than a hash of the code. 0020 dropped
+// session_id, so an event is a row that must exist before anything can reference
+// it, and membership is the only thing that grants access to it.
+const EVENT_A = { id: '1a1a1a1a-0000-4000-8000-000000000001', code: 'rlstest-a' };
+const EVENT_B = { id: '2b2b2b2b-0000-4000-8000-000000000002', code: 'rlstest-b' };
 
 const PASSWORD = 'rls-test-password';
 const MARK = 'rlstest';
@@ -95,11 +105,23 @@ const admin = createClient(url, serviceKey, {
 	auth: { persistSession: false, autoRefreshToken: false }
 });
 
-/** A client shaped like the app's: anon key, a bearer token, an event header. */
+/**
+ * A client shaped like the app's: anon key plus a bearer token, and NO event
+ * header.
+ *
+ * The header used to be the whole authorisation story — `x-session-id` carrying
+ * a hash of a public event code. 0020 dropped every policy that read it, so
+ * sending one now would prove nothing and hide everything: any assertion that
+ * passed because of it would be passing for a mechanism that no longer exists.
+ *
+ * `event` is kept in the signature because callers read `event.id` and
+ * `event.code`, and because which event a client is *for* is still the thing
+ * most of these assertions are about.
+ */
 async function clientFor(user, event) {
+	void event;
 	const c = createClient(url, anonKey, {
-		auth: { persistSession: false, autoRefreshToken: false },
-		global: { headers: { 'x-session-id': event.session } }
+		auth: { persistSession: false, autoRefreshToken: false }
 	});
 	if (user) {
 		const { error } = await c.auth.signInWithPassword({
@@ -147,7 +169,7 @@ async function makeUser(username, role) {
 }
 
 const entryRow = (event, over = {}) => ({
-	session_id: event.session,
+	event_id: event.id,
 	event_code: event.code,
 	match_number: 1,
 	team_number: 3419,
@@ -161,10 +183,14 @@ const entryRow = (event, over = {}) => ({
 
 async function reset() {
 	for (const t of EVENT_TABLES) {
-		await sql(`delete from public.${t} where session_id = any($1::uuid[])`, [
-			[EVENT_A.session, EVENT_B.session]
+		await sql(`delete from public.${t} where event_id = any($1::uuid[])`, [
+			[EVENT_A.id, EVENT_B.id]
 		]);
 	}
+	await sql(`delete from public.event_scouts where event_id = any($1::uuid[])`, [
+		[EVENT_A.id, EVENT_B.id]
+	]);
+	await sql(`delete from public.events where code like $1`, [`${MARK}%`]);
 	await sql(`delete from public.invites where code like $1`, [`${MARK}%`]);
 	await sql(`delete from public.profiles where username like $1`, [`${MARK}%`]);
 	// Auth users go through SQL rather than the admin API. Cleanup used to call
@@ -177,41 +203,51 @@ async function reset() {
 
 async function seed() {
 	for (const e of [EVENT_A, EVENT_B]) {
-		const args = [e.session, e.code];
-		await sql(`insert into public.event_meta (session_id, event_code) values ($1, $2)`, args);
+		// The event row has to exist before anything can reference it — the FK from
+		// every table says so, and that is the model change in one line.
+		await sql(`insert into public.events (id, code, name) values ($1, $2, $2)
+		           on conflict (id) do nothing`, [e.id, e.code]);
+		const args = [e.id, e.code];
+		await sql(`insert into public.event_meta
+			   (event_id, event_code) values ($1, $2)`, args);
 		await sql(
 			`insert into public.entries
-			   (session_id, event_code, match_number, team_number, alliance_color,
+			   (event_id, event_code, match_number, team_number, alliance_color,
 			    scout_name, observations, schema_version, created_at)
 			 values ($1, $2, 1, 3419, 'red', 'fixture', '{}'::jsonb, 3, now())`,
 			args
 		);
 		await sql(
-			`insert into public.schedules (session_id, event_code, matches) values ($1, $2, '[]'::jsonb)`,
+			`insert into public.schedules
+			   (event_id, event_code, matches) values ($1, $2, '[]'::jsonb)`,
 			args
 		);
 		await sql(
-			`insert into public.assignments (session_id, event_code, scout_name, team_number)
+			`insert into public.assignments
+			   (event_id, event_code, scout_name, team_number)
 			 values ($1, $2, 'fixture', 3419)`,
 			args
 		);
 		await sql(
 			`insert into public.assignment_overrides
-			   (session_id, event_code, match_number, scout_name, team_number)
+			   (event_id, event_code, match_number, scout_name, team_number)
 			 values ($1, $2, 1, 'fixture', 3419)`,
 			args
 		);
 		await sql(
-			`insert into public.reminders (session_id, event_code, message) values ($1, $2, 'fixture')`,
+			`insert into public.reminders
+			   (event_id, event_code, message) values ($1, $2, 'fixture')`,
 			args
 		);
 		await sql(
-			`insert into public.picklist (session_id, event_code, team_number, rank)
+			`insert into public.picklist
+			   (event_id, event_code, team_number, rank)
 			 values ($1, $2, 3419, 1)`,
 			args
 		);
 		await sql(
-			`insert into public.picklist_prefs (session_id, event_code, weights)
+			`insert into public.picklist_prefs
+			   (event_id, event_code, weights)
 			 values ($1, $2, '{}'::jsonb)`,
 			args
 		);
@@ -239,7 +275,7 @@ async function visible(client, table, columns = '*') {
  *
  * From outside they look identical — the row is not there either way — and that
  * ambiguity already cost one assertion. `a scout cannot write schedules` was an
- * INSERT into a table keyed on session_id alone, so it collided with the row the
+ * INSERT into a table keyed on the event alone, so it collided with the row the
  * event already had and reported success at refusing something the policy would
  * happily have allowed. It stayed green with is_manager() stubbed to true.
  *
@@ -270,13 +306,43 @@ const manager = await makeUser(`${MARK}_manager`, 'manager');
 const superUser = await makeUser(`${MARK}_super`, 'super');
 const orphan = await makeUser(`${MARK}_orphan`, null);
 
+// ─── membership, which is now the whole authorisation story ────────────────
+//
+// Under the old model nobody had to be "on" an event — knowing the code was
+// enough, and the header carried it. 0020 made membership the only way in, so
+// the fixtures have to state who belongs where, and the split is the point:
+//
+//   scout, scout2, manager  are on EVENT_A
+//   scout2 alone            is also on EVENT_B
+//
+// so `scout` is a real, fully-provisioned team member who is simply not on
+// event B. That is the case worth testing — not an outsider, but a colleague
+// pointed at the wrong event.
+//
+// superUser is deliberately on NEITHER. manages_event() lets a super reach any
+// event without being added, and an assertion that put them on one would never
+// exercise it.
+for (const [event, members] of [
+	[EVENT_A, [scout, scout2, manager]],
+	[EVENT_B, [scout2]]
+]) {
+	for (const m of members) {
+		await sql(
+			`insert into public.event_scouts (event_id, profile_id) values ($1, $2)
+			 on conflict do nothing`,
+			[event.id, m.id]
+		);
+	}
+}
+
 const anonA = await clientFor(null, EVENT_A);
 const orphanA = await clientFor(orphan, EVENT_A);
 const scoutA = await clientFor(scout, EVENT_A);
 const scout2A = await clientFor(scout2, EVENT_A);
 const managerA = await clientFor(manager, EVENT_A);
 const superA = await clientFor(superUser, EVENT_A);
-const scoutB = await clientFor(scout, EVENT_B);
+// scout2 is on both events; used to prove B's fixture is visible to somebody.
+const scout2B = await clientFor(scout2, EVENT_B);
 
 // ─── anon sees nothing ──────────────────────────────────────────────────────
 //
@@ -306,31 +372,39 @@ const scoutB = await clientFor(scout, EVENT_B);
 
 // ─── event scope holds in both directions ───────────────────────────────────
 //
-// Membership and event scope are separate requirements. A real member of the
-// team pointed at another event is the case that matters, because that is one
-// header away from normal use.
+// This block used to test that the x-session-id header scoped reads. There is no
+// header now, so it tests the thing the header was standing in for: a real,
+// fully-provisioned team member is bound to the events they are ON.
+//
+// `scout` is on A and not on B. Not an outsider — a colleague pointed at the
+// wrong event, which is the case that actually happens.
 {
 	ok('a member reads their own event', (await visible(scoutA, 'entries')) === 1);
 
 	// Both events hold an identical fixture row, so a count alone cannot tell
 	// "scoped correctly" from "scoped to the wrong event". Check which one came back.
-	const { data: seenA } = await scoutA.from('entries').select('session_id');
-	ok('and sees only that event', seenA?.every((r) => r.session_id === EVENT_A.session));
+	const { data: seenA } = await scoutA.from('entries').select('event_id');
+	ok('and sees only that event', seenA?.every((r) => r.event_id === EVENT_A.id));
 
-	const { data: seenB } = await scoutB.from('entries').select('session_id');
-	ok(
-		'switching the header switches the event, not the scope',
-		seenB?.length === 1 && seenB[0].session_id === EVENT_B.session
-	);
+	// The same account asking for B's rows explicitly. Membership, not the query,
+	// is what refuses — which is why the filter is written out rather than left
+	// implicit.
+	const { data: seenB } = await scoutA.from('entries').select('event_id').eq('event_id', EVENT_B.id);
+	ok('and cannot reach an event it is not on', (seenB ?? []).length === 0, JSON.stringify(seenB));
 
-	// Header says A, row says B. The row must not land: otherwise the header is
-	// a suggestion rather than a boundary.
+	// scout2 IS on both, so the fixture in B is genuinely visible to somebody —
+	// otherwise the assertion above would pass against an empty table.
+	const { data: bothB } = await scout2B.from('entries').select('event_id').eq('event_id', EVENT_B.id);
+	ok('while a member of that event does reach it', (bothB ?? []).length === 1, JSON.stringify(bothB));
+
+	// A member of A writing a row tagged B. It must not land: otherwise the event
+	// on the row is a suggestion rather than a boundary.
 	const { error } = await scoutA.from('entries').insert(entryRow(EVENT_B, { scout_name: 'crosser' }));
 	ok('a member cannot write into another event by changing the row', denied(error), error?.code);
 
 	const leaked = await sql(
-		`select id from public.entries where session_id = $1 and scout_name = 'crosser'`,
-		[EVENT_B.session]
+		`select id from public.entries where event_id = $1 and scout_name = 'crosser'`,
+		[EVENT_B.id]
 	);
 	ok('and nothing crossed', leaked.length === 0);
 }
@@ -343,19 +417,19 @@ const scoutB = await clientFor(scout, EVENT_B);
 	for (const [t, row] of [
 		[
 			'assignments',
-			{ session_id: EVENT_A.session, event_code: EVENT_A.code, scout_name: 'x', team_number: 1 }
+			{ event_id: EVENT_A.id, event_code: EVENT_A.code, scout_name: 'x', team_number: 1 }
 		],
-		['reminders', { session_id: EVENT_A.session, event_code: EVENT_A.code, message: 'x' }],
+		['reminders', { event_id: EVENT_A.id, event_code: EVENT_A.code, message: 'x' }],
 		[
 			'picklist',
-			{ session_id: EVENT_A.session, event_code: EVENT_A.code, team_number: 1, rank: 2 }
+			{ event_id: EVENT_A.id, event_code: EVENT_A.code, team_number: 1, rank: 2 }
 		]
 	]) {
 		const { error } = await scoutA.from(t).insert(row);
 		ok(`a scout cannot write ${t}`, denied(error), error?.code);
 	}
 
-	// schedules is keyed on session_id alone, so an INSERT collides with the row
+	// schedules is keyed on event_id alone, so an INSERT collides with the row
 	// this event already has and fails whatever the policy says. That is not a
 	// hypothetical: this assertion was an INSERT, and it passed while is_manager()
 	// was stubbed to return true. UPDATE is also the real operation — publishing a
@@ -363,23 +437,23 @@ const scoutB = await clientFor(scout, EVENT_B);
 	const { count: scoutSched, error: scoutSchedErr } = await scoutA
 		.from('schedules')
 		.update({ matches: [] }, { count: 'exact' })
-		.eq('session_id', EVENT_A.session);
+		.eq('event_id', EVENT_A.id);
 	ok('a scout cannot rewrite the schedule', denied(scoutSchedErr) || scoutSched === 0);
 
 	const { count: mgrSched } = await managerA
 		.from('schedules')
 		.update({ matches: [] }, { count: 'exact' })
-		.eq('session_id', EVENT_A.session);
+		.eq('event_id', EVENT_A.id);
 	ok('a manager rewrites the schedule', mgrSched === 1);
 
 	const { error: mgrErr } = await managerA
 		.from('reminders')
-		.insert({ session_id: EVENT_A.session, event_code: EVENT_A.code, message: 'from a manager' });
+		.insert({ event_id: EVENT_A.id, event_code: EVENT_A.code, message: 'from a manager' });
 	ok('a manager writes a manager surface', !mgrErr, mgrErr?.message);
 
 	const { error: mgrCross } = await managerA
 		.from('reminders')
-		.insert({ session_id: EVENT_B.session, event_code: EVENT_B.code, message: 'cross-event' });
+		.insert({ event_id: EVENT_B.id, event_code: EVENT_B.code, message: 'cross-event' });
 	ok('a manager is still bound to one event', denied(mgrCross), mgrCross?.code);
 }
 
@@ -388,8 +462,8 @@ const scoutB = await clientFor(scout, EVENT_B);
 	await scoutA.from('entries').insert(entryRow(EVENT_A, { match_number: 11, scout_name: 'attr' }));
 	const [mine] = await sql(
 		`select id, submitted_by from public.entries
-		  where session_id = $1 and scout_name = 'attr'`,
-		[EVENT_A.session]
+		  where event_id = $1 and scout_name = 'attr'`,
+		[EVENT_A.id]
 	);
 	ok('an insert is stamped from the token', mine?.submitted_by === scout.id);
 
@@ -399,18 +473,28 @@ const scoutB = await clientFor(scout, EVENT_B);
 		.insert(entryRow(EVENT_A, { match_number: 12, scout_name: 'forged', submitted_by: manager.id }));
 	const [forged] = await sql(
 		`select submitted_by from public.entries
-		  where session_id = $1 and scout_name = 'forged'`,
-		[EVENT_A.session]
+		  where event_id = $1 and scout_name = 'forged'`,
+		[EVENT_A.id]
 	);
 	ok('a forged submitted_by is overwritten, not honoured', forged?.submitted_by === scout.id);
 
-	// The grant withholds UPDATE(submitted_by), so this is refused rather than
-	// silently ignored.
+	// Asserted as the invariant, not the mechanism — the third time that
+	// distinction has mattered in this file. 0011 withheld UPDATE(submitted_by)
+	// at the grant, so a clear was REFUSED; 0020's trigger restores
+	// OLD.submitted_by instead, so it is CORRECTED and reports success.
+	//
+	// Demanding an error would have failed here while the system was behaving
+	// perfectly. What actually matters is that the stored value did not move.
 	const { error: clearErr } = await scoutA
 		.from('entries')
 		.update({ submitted_by: null })
 		.eq('id', mine.id);
-	ok('attribution cannot be cleared', Boolean(clearErr));
+	const [afterClear] = await sql('select submitted_by from public.entries where id = $1', [mine.id]);
+	ok(
+		'attribution cannot be cleared',
+		afterClear?.submitted_by === scout.id,
+		clearErr ? `refused (${clearErr.code})` : `stored ${afterClear?.submitted_by}`
+	);
 
 	const { error: ownErr } = await scoutA
 		.from('entries')
@@ -533,7 +617,7 @@ const scoutB = await clientFor(scout, EVENT_B);
 		['reminders', { message: 'targeted at an account' }]
 	]) {
 		const { error } = await managerA.from(table).insert({
-			session_id: EVENT_A.session,
+			event_id: EVENT_A.id,
 			event_code: EVENT_A.code,
 			scout_name: 'dualwrite',
 			profile_id: scout.id,
@@ -543,8 +627,8 @@ const scoutB = await clientFor(scout, EVENT_B);
 
 		const [back] = await sql(
 			`select profile_id from public.${table}
-			  where session_id = $1 and scout_name = 'dualwrite'`,
-			[EVENT_A.session]
+			  where event_id = $1 and scout_name = 'dualwrite'`,
+			[EVENT_A.id]
 		);
 		ok(`and ${table}.profile_id survives the round trip`, back?.profile_id === scout.id);
 	}
@@ -566,8 +650,8 @@ const scoutB = await clientFor(scout, EVENT_B);
 	const countIn = async (table, event) =>
 		Number(
 			(
-				await sql(`select count(*)::int as n from public.${table} where session_id = $1`, [
-					event.session
+				await sql(`select count(*)::int as n from public.${table} where event_id = $1`, [
+					event.id
 				])
 			)[0].n
 		);
@@ -575,10 +659,10 @@ const scoutB = await clientFor(scout, EVENT_B);
 	const beforeEntries = await countIn('entries', EVENT_A);
 	const beforeOther = await countIn('assignments', EVENT_B);
 
-	const { error: scoutReset } = await scoutA.rpc('reset_event_data');
+	const { error: scoutReset } = await scoutA.rpc('reset_event_data', { p_event: EVENT_A.id });
 	ok('a scout cannot archive the event', Boolean(scoutReset));
 
-	const { error: mgrReset } = await managerA.rpc('reset_event_data');
+	const { error: mgrReset } = await managerA.rpc('reset_event_data', { p_event: EVENT_A.id });
 	ok('a manager archives the event', !mgrReset, mgrReset?.message);
 
 	const afterEntries = await countIn('entries', EVENT_A);
@@ -755,15 +839,17 @@ const scoutB = await clientFor(scout, EVENT_B);
 
 // ─── events and membership (0019) ───────────────────────────────────────────
 //
-// 0019 is an EXPAND migration: the session_id policies and the membership
-// policies are both live, and Postgres ORs permissive policies together. So a
-// membership test run through the normal harness client would pass whether or
-// not membership works — the x-session-id header alone would carry it. That is
-// the same false-confidence shape the create_managed_profile assertion had.
+// These were written during 0019's expand window, when the session_id policies
+// and the membership policies were BOTH live and Postgres ORed them together —
+// so a membership test run through the normal client would have passed whether
+// or not membership worked, carried by the x-session-id header alone. Every
+// client here therefore sent no header, deliberately.
 //
-// Every client below therefore sends NO x-session-id header. current_session_header()
-// returns null, every session_id policy evaluates false, and the only thing that
-// can permit a row is membership. If these pass, they pass for the right reason.
+// 0020 removed the other path entirely, so that precaution is now the default
+// and `noHeader` below is the same thing clientFor() builds. It is kept as a
+// separate local for one reason: it documents WHY these assertions are trusted,
+// and the day someone adds a header back for convenience, this block is the one
+// that should keep telling the truth.
 {
 	const noHeader = async (user) => {
 		const c = createClient(url, anonKey, {
@@ -816,9 +902,9 @@ const scoutB = await clientFor(scout, EVENT_B);
 	// One entry, no header. The scout is not a member yet.
 	await sql(
 		`insert into public.entries
-		   (id, session_id, event_id, event_code, match_number, team_number,
+		   (id, event_id, event_code, match_number, team_number,
 		    alliance_color, scout_name, schema_version, created_at)
-		 values (gen_random_uuid(), $1, $1, $2, 1, 3419, 'red', $3, 3, now())`,
+		 values (gen_random_uuid(), $1, $2, 1, 3419, 'red', $3, 3, now())`,
 		[eventId, code, `${MARK}_scout`]
 	);
 
@@ -871,7 +957,6 @@ const scoutB = await clientFor(scout, EVENT_B);
 	);
 
 	const { error: memberPlans } = await scoutNH.from('assignments').insert({
-		session_id: eventId,
 		event_id: eventId,
 		event_code: code,
 		scout_name: `${MARK}_scout`
@@ -916,12 +1001,17 @@ const scoutB = await clientFor(scout, EVENT_B);
 	ok('a manager cannot staff an event they are not on', denied(outsideMgr), outsideMgr?.code);
 
 	// ─── scouts see their own events, and only those ────────────────────────
+	// scout2 is on EVENT_A and EVENT_B from the fixtures, and was just added to
+	// the event created above. Exactly those three, and no others — the assertion
+	// is the SET, because "sees at least its own" would pass for a policy that
+	// showed everything.
 	const scoutEvents = await scout2NH.from('events').select('id');
-	const ids = (scoutEvents.data ?? []).map((r) => r.id);
+	const ids = new Set((scoutEvents.data ?? []).map((r) => r.id));
+	const expected = [EVENT_A.id, EVENT_B.id, eventId];
 	ok(
 		'a scout lists exactly the events they belong to',
-		ids.length === 1 && ids[0] === eventId,
-		JSON.stringify(ids)
+		ids.size === 3 && expected.every((e) => ids.has(e)),
+		JSON.stringify([...ids])
 	);
 
 	// The question that had no answer before this migration: you needed the event
@@ -947,7 +1037,6 @@ const scoutB = await clientFor(scout, EVENT_B);
 	// against the caller. Demanding one specific outcome would pass in one
 	// ordering and fail in the other while the system was correct in both.
 	const { error: forged } = await scoutNH.from('entries').insert({
-		session_id: eventId,
 		event_id: eventId,
 		event_code: code,
 		match_number: 2,
@@ -969,7 +1058,6 @@ const scoutB = await clientFor(scout, EVENT_B);
 	);
 
 	const { error: own } = await scoutNH.from('entries').insert({
-		session_id: eventId,
 		event_id: eventId,
 		event_code: code,
 		match_number: 3,

@@ -6,8 +6,8 @@
 // into session.assignedTeams. The entry form reads that list to suggest the
 // next match to scout.
 //
-// Manager writes require the `x-manager-token` header (gated by the
-// `has_manager_token()` Postgres function). Reads work for anyone scoped to
+// Manager writes are gated by manages_event() — membership plus role, read from
+// the access token. Reads work for any member of
 // the event_code.
 //
 // Note: we don't keep a separate IndexedDB mirror of the assignments table.
@@ -17,7 +17,7 @@
 // freshens it.
 
 import { createSupabaseClient } from './supabase.js';
-import { scopeIdForCode } from './events.js';
+import { eventIdForCode } from './events.js';
 import { session } from './session.svelte.js';
 import { rowScout, sameScout } from './scout-identity.js';
 import { assignmentRows, overrideRows } from './planning-rows.js';
@@ -30,19 +30,15 @@ import { assignmentRows, overrideRows } from './planning-rows.js';
  * @param {string} eventCode
  * @param {{scout_name: string, team_number: number}[]} rows
  * @param {object} opts
- * @param {string} opts.managerToken  hex hash; required after passphrase set
  * @param {any[]} [opts.roster]  profiles, so typed names can carry an account
  * @returns {Promise<number>}  number of rows inserted
  */
 export async function replaceAssignments(eventCode, rows, opts) {
 	const code = (eventCode ?? '').trim().toLowerCase();
-	if (!code) throw new Error('No event code.');
-	if (!opts?.managerToken && opts?.managerToken !== '') {
-		// Allow empty-string explicitly for bootstrap (no passphrase set yet).
-	}
-	const sid = await scopeIdForCode(code);
-	if (!sid) throw new Error('Could not derive session id.');
-	const client = createSupabaseClient(sid, { managerToken: opts?.managerToken ?? '' });
+	if (!code) throw new Error('No event chosen.');
+	const sid = await eventIdForCode(code);
+	if (!sid) throw new Error('That event is not one you are on.');
+	const client = createSupabaseClient(sid);
 
 	const cleaned = assignmentRows(rows, { sessionId: sid, eventCode: code, roster: opts?.roster });
 
@@ -70,7 +66,7 @@ export async function replaceAssignments(eventCode, rows, opts) {
 export async function listAssignments(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return [];
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return [];
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
@@ -152,7 +148,7 @@ export async function pullAndApplyForScout(eventCode, me) {
 export async function listOverrides(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return [];
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return [];
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
@@ -169,18 +165,16 @@ export async function listOverrides(eventCode) {
  *
  * @param {string} eventCode
  * @param {{matchNumber: number, scoutName: string, teamNumber: number}} args
- * @param {string} managerToken
  */
 export async function addOverride(
 	eventCode,
 	{ matchNumber, scoutName, teamNumber },
-	managerToken,
 	roster
 ) {
 	const code = (eventCode ?? '').trim().toLowerCase();
-	const sid = await scopeIdForCode(code);
-	if (!sid) throw new Error('Could not derive session id.');
-	const client = createSupabaseClient(sid, { managerToken });
+	const sid = await eventIdForCode(code);
+	if (!sid) throw new Error('That event is not one you are on.');
+	const client = createSupabaseClient(sid);
 	const [row] = overrideRows(
 		[{ match_number: matchNumber, scout_name: scoutName, team_number: teamNumber }],
 		{ sessionId: sid, eventCode: code, roster }
@@ -206,16 +200,15 @@ export async function addOverride(
  * @param {string} eventCode
  * @param {{match_number: number, scout_name: string, team_number: number}[]} rows
  * @param {object} opts
- * @param {string} opts.managerToken
  * @param {any[]} [opts.roster]  profiles, so typed names can carry an account
  * @returns {Promise<number>} rows inserted
  */
 export async function replaceOverrides(eventCode, rows, opts) {
 	const code = (eventCode ?? '').trim().toLowerCase();
-	if (!code) throw new Error('No event code.');
-	const sid = await scopeIdForCode(code);
-	if (!sid) throw new Error('Could not derive session id.');
-	const client = createSupabaseClient(sid, { managerToken: opts?.managerToken ?? '' });
+	if (!code) throw new Error('No event chosen.');
+	const sid = await eventIdForCode(code);
+	if (!sid) throw new Error('That event is not one you are on.');
+	const client = createSupabaseClient(sid);
 
 	const cleaned = overrideRows(rows, { sessionId: sid, eventCode: code, roster: opts?.roster });
 
@@ -243,12 +236,11 @@ export async function replaceOverrides(eventCode, rows, opts) {
  *
  * @param {string} eventCode
  * @param {string} id
- * @param {string} managerToken
  */
-export async function removeOverride(eventCode, id, managerToken) {
-	const sid = await scopeIdForCode(eventCode);
-	if (!sid) throw new Error('Could not derive session id.');
-	const client = createSupabaseClient(sid, { managerToken });
+export async function removeOverride(eventCode, id) {
+	const sid = await eventIdForCode(eventCode);
+	if (!sid) throw new Error('That event is not one you are on.');
+	const client = createSupabaseClient(sid);
 	const { error } = await client.from('assignment_overrides').delete().eq('id', id);
 	if (error) throw mapErr(error, 'remove override');
 }
@@ -265,7 +257,7 @@ function mapErr(err, action) {
 	const msg = err?.message || String(err);
 	if (/row-level security/i.test(msg) || err?.code === '42501') {
 		return new Error(
-			`Permission denied — couldn't ${action}. Check the manager passphrase, or have whoever set up scheduling re-add it.`
+			`Permission denied — couldn't ${action}. You need to be a manager on this event.`
 		);
 	}
 	return new Error(`Couldn't ${action}: ${msg}`);

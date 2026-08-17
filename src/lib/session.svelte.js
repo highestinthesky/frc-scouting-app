@@ -40,13 +40,6 @@ class Session {
 	 */
 	overrides = $state(/** @type {any[]} */ ([]));
 	/**
-	 * Manager passphrase token — SHA-256 hex of (passphrase + ':' + eventCode).
-	 * Sent as `x-manager-token` on writes that hit schedules/assignments.
-	 * Only meaningful on devices acting as managers. Stored in plaintext in
-	 * IndexedDB because it's already a hash, not the raw passphrase.
-	 */
-	managerToken = $state('');
-	/**
 	 * The Blue Alliance v3 read API key. Only used by the manager device that
 	 * fetches the schedule and publishes it to Supabase. Scouts never need
 	 * this set. Get a free key at thebluealliance.com/account.
@@ -85,13 +78,15 @@ class Session {
 		this.assignedTeams = normaliseTeams(at);
 		const ov = await getSetting('overrides');
 		this.overrides = Array.isArray(ov) ? ov : [];
-		this.managerToken = (await getSetting('managerToken')) ?? '';
 		this.tbaApiKey = (await getSetting('tbaApiKey')) ?? '';
 		this.tbaEventKey = (await getSetting('tbaEventKey')) ?? '';
 		this.loginDeferred = (await getSetting('loginDeferred')) === true;
 		// One-time migration cleanup: drop obsolete settings so they don't sit in
 		// IndexedDB forever. Safe to remove these a few months after release.
-		for (const key of ['scoutPosition', 'localExtraTeams']) {
+		// managerToken joins them: it is a hash that is access-equivalent to a
+		// shared passphrase, and 0020 dropped the function that honoured it. Leaving
+		// a dead credential sitting in IndexedDB on twenty phones is not neutral.
+		for (const key of ['scoutPosition', 'localExtraTeams', 'managerToken']) {
 			const legacy = await getSetting(key);
 			if (legacy !== undefined && legacy !== null) await setSetting(key, null);
 		}
@@ -116,10 +111,6 @@ class Session {
 			const cleaned = Array.isArray(patch.overrides) ? patch.overrides : [];
 			this.overrides = cleaned;
 			await setSetting('overrides', cleaned);
-		}
-		if (patch.managerToken !== undefined) {
-			this.managerToken = patch.managerToken;
-			await setSetting('managerToken', patch.managerToken);
 		}
 		if (patch.tbaApiKey !== undefined) {
 			this.tbaApiKey = patch.tbaApiKey;

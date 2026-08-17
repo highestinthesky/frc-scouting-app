@@ -23,7 +23,13 @@ const compact = (text) => text.toLowerCase().replace(/\s+/g, ' ').trim();
 
 const auth = uncomment(migration('0008_auth.sql'));
 const identity = uncomment(migration('0010_identity.sql'));
-const cutover = uncomment(migration('0011_policies.sql'));
+// The cutover was 0011 for most of this project's life. 0011 never reached
+// production, was superseded by 0019's membership model, and left migrations/
+// the way 0013 did — so these checks now read the migrations that ARE the
+// cutover. Concatenated because it landed in two halves: 0019 expanded (events,
+// membership, the new policies) and 0020 contracted (session_id, the legacy
+// policies, the passphrase).
+const cutover = uncomment(migration('0019_events.sql')) + '\n' + uncomment(migration('0020_contract.sql'));
 
 let pass = 0;
 let fail = 0;
@@ -101,12 +107,21 @@ function requiredClauses(policy) {
 	);
 }
 
-const hasMembership = (expression) =>
+// Membership used to mean "has a profile at all" — app_role() IS NOT NULL —
+// with event scope carried separately by the session header. 0019 merged the
+// two: is_event_member(event_id) and manages_event(event_id) each answer "this
+// person, this event" in one call, which is why the scope check below looks for
+// the argument rather than for a second clause.
+// Two different questions, and conflating them once already made the roster
+// check assert the wrong thing:
+//   hasProfile     — is this person on the team at all (0008's roster policy)
+//   hasMembership  — is this person on THIS event (0019's event-data policies)
+const hasProfile = (expression) =>
 	/public\.app_role\s*\(\s*\)\s+is\s+not\s+null/i.test(expression);
+const hasMembership = (expression) =>
+	/public\.(is_event_member|manages_event)\s*\(/i.test(expression);
 const hasSessionScope = (expression) =>
-	/(?:\(\s*)?session_id(?:\s*\))?\s*::\s*text\s*=\s*public\.current_session_header\s*\(\s*\)/i.test(
-		expression
-	);
+	/public\.(is_event_member|manages_event)\s*\(\s*event_id\s*\)/i.test(expression);
 
 // ─── 0008: a profile cannot award privileges to itself or another manager ─
 
@@ -174,7 +189,7 @@ ok(
 const profilesRead = authPolicies.find((policy) => policy.name === 'profiles_read');
 ok(
 	'0008 exposes the roster only to users with a profile',
-	Boolean(profilesRead) && clauseExpressions(profilesRead.source, 'using').every(hasMembership)
+	Boolean(profilesRead) && clauseExpressions(profilesRead.source, 'using').every(hasProfile)
 );
 
 // ─── 0011: auth membership and event scope are independent boundaries ─────
@@ -194,7 +209,7 @@ const tablesWithoutPolicies = [...eventTables].filter(
 	(table) => !eventPolicies.some((policy) => policy.table === table)
 );
 ok(
-	'0011 replaces policies on every event-data table',
+	'the cutover replaces policies on every event-data table',
 	tablesWithoutPolicies.length === 0,
 	tablesWithoutPolicies.join(', ')
 );
@@ -207,7 +222,7 @@ const tablesWithoutRls = [...eventTables].filter(
 		).test(cutover)
 );
 ok(
-	'0011 enables RLS on every event-data table',
+	'the cutover enables RLS on every event-data table',
 	tablesWithoutRls.length === 0,
 	tablesWithoutRls.join(', ')
 );
@@ -229,7 +244,7 @@ for (const policy of eventPolicies) {
 	}
 }
 ok(
-	'0011 gives each operation every required RLS clause',
+	'the cutover gives each operation every required RLS clause',
 	missingClauses.length === 0,
 	missingClauses.join(', ')
 );
@@ -238,7 +253,7 @@ const withoutMembership = conditions
 	.filter(({ expression }) => !hasMembership(expression))
 	.map(({ policy, kind }) => `${policy}:${kind}`);
 ok(
-	'0011 requires profile membership in every event-data policy clause',
+	'the cutover requires event membership in every event-data policy clause',
 	withoutMembership.length === 0,
 	withoutMembership.join(', ')
 );
@@ -247,7 +262,7 @@ const withoutScope = conditions
 	.filter(({ expression }) => !hasSessionScope(expression))
 	.map(({ policy, kind }) => `${policy}:${kind}`);
 ok(
-	'0011 preserves session scope in every event-data policy clause',
+	'the cutover scopes every membership check to the row\'s own event',
 	withoutScope.length === 0,
 	withoutScope.join(', ')
 );
@@ -260,7 +275,7 @@ const wrongPolicyRole = eventPolicies
 	)
 	.map((policy) => policy.name);
 ok(
-	'0011 exposes event-data policies only to authenticated callers',
+	'the cutover exposes event-data policies only to authenticated callers',
 	wrongPolicyRole.length === 0,
 	wrongPolicyRole.join(', ')
 );
@@ -270,21 +285,38 @@ const managerMutations = eventPolicies.filter(
 );
 const managerClausesMissingRole = managerMutations.flatMap((policy) =>
 	requiredClauses(policy)
-		.filter(({ expression }) => !/public\.is_manager\s*\(\s*\)/i.test(expression))
+		.filter(({ expression }) => !/public\.manages_event\s*\(/i.test(expression))
 		.map(({ kind }) => `${policy.name}:${kind}`)
 );
 ok(
-	'0011 requires manager role in every planning-data mutation clause',
+	'the cutover requires manages_event in every planning-data mutation clause',
 	managerClausesMissingRole.length === 0,
 	managerClausesMissingRole.join(', ')
 );
 
-const entriesInsert = eventPolicies.find((policy) => policy.name === 'entries_insert');
+// Attribution is stamped by a BEFORE INSERT trigger rather than asserted in the
+// policy. The policy clause alone permitted a NULL — a signed-in client that
+// omitted the column produced an unattributed row — and "an immutable account id
+// stamped server-side" is the model. Both are asserted: the trigger sets it, the
+// policy still refuses a forgery if the trigger were ever removed.
+const stampBody = functionBodies(cutover, 'stamp_submitted_by').at(-1) ?? '';
 ok(
-	'0011 binds each inserted entry to the authenticated submitter',
+	'the cutover stamps attribution from the token on INSERT',
+	/new\.submitted_by\s*:=\s*\(?\s*select\s+auth\.uid\s*\(\s*\)/i.test(stampBody),
+	stampBody ? 'trigger exists but does not set submitted_by from auth.uid()' : 'no trigger'
+);
+ok(
+	'and installs it BEFORE INSERT only',
+	/\bbefore\s+insert\s+on\s+public\.entries\b/i.test(cutover) &&
+		!/\bbefore\s+(insert\s+or\s+)?update[^;]*on\s+public\.entries\b/i.test(cutover),
+	'a BEFORE UPDATE trigger would undo ON DELETE SET NULL and break revoking a scout with entries'
+);
+const entriesInsert = eventPolicies.find((policy) => policy.name === 'entries_evt_insert');
+ok(
+	'and the policy still refuses a forged submitter',
 	Boolean(entriesInsert) &&
 		clauseExpressions(entriesInsert.source, 'with check').some((expression) =>
-			/submitted_by\s*=\s*auth\.uid\s*\(\s*\)/i.test(expression)
+			/submitted_by\s*=\s*\(\s*select\s+auth\.uid\s*\(\s*\)\s*\)/i.test(expression)
 		)
 );
 
@@ -294,7 +326,7 @@ const broadUsing = eventPolicies.flatMap((policy) =>
 		.map(() => policy.name)
 );
 ok(
-	'0011 leaves no USING (true) event-data policy',
+	'the cutover leaves no USING (true) event-data policy',
 	broadUsing.length === 0,
 	broadUsing.join(', ')
 );
@@ -320,27 +352,27 @@ const grantedUpdateColumns = new Set(
 );
 
 ok(
-	'0011 grants entry UPDATE per column, not wholesale',
+	'the cutover grants entry UPDATE per column, not wholesale',
 	grantedUpdateColumns.size > 0,
 	'a bare GRANT UPDATE lets a crafted correction rewrite any column, attribution included'
 );
 ok(
-	'0011 withholds submitted_by from the entry UPDATE grant',
+	'the cutover withholds submitted_by from the entry UPDATE grant',
 	grantedUpdateColumns.size > 0 && !grantedUpdateColumns.has('submitted_by'),
 	'a crafted correction must not forge or clear the original submitter'
 );
 ok(
-	'0011 revokes UPDATE (submitted_by) explicitly as well',
+	'the cutover revokes UPDATE (submitted_by) explicitly as well',
 	/\brevoke\s+update\s*\(\s*submitted_by\s*\)\s*on\s+public\.entries\s+from\b/i.test(cutover),
 	'belt and braces: an earlier wholesale grant must not survive a partial re-run'
 );
 ok(
-	'0011 also withholds the server-managed columns',
+	'the cutover also withholds the server-managed columns',
 	['id', 'updated_at'].every((c) => !grantedUpdateColumns.has(c)),
 	'id is the identity and updated_at is set by the 0007 trigger; neither is the client to set'
 );
 ok(
-	'0011 does NOT reinstate a BEFORE UPDATE attribution trigger',
+	'the cutover does NOT reinstate a BEFORE UPDATE attribution trigger',
 	!/\bcreate\s+(?:or\s+replace\s+)?trigger\s+[a-z_][a-z0-9_]*\s+before\s+update(?:\s+of\s+[a-z0-9_,\s]+)?\s+on\s+public\.entries\b/i.test(
 		cutover
 	),
@@ -351,73 +383,73 @@ ok(
 // remain an anon-callable bypass even after table RLS was corrected.
 const resetBody = functionBodies(cutover, 'reset_event_data').at(-1) ?? '';
 ok(
-	'0011 rewrites reset_event_data',
+	'the cutover rewrites reset_event_data',
 	resetBody.length > 0,
 	'the cutover must replace the earlier passphrase-gated function'
 );
 ok(
-	'0011 reset_event_data requires a manager profile',
-	/public\.is_manager\s*\(\s*\)/i.test(resetBody)
+	'the cutover reset_event_data requires a manager ON THAT EVENT',
+	/public\.manages_event\s*\(/i.test(resetBody),
+	'is_manager() alone would let a manager archive an event they are not on'
 );
 ok(
-	'0011 reset_event_data scopes deletes through the session helper',
-	/public\.current_session_header\s*\(\s*\)/i.test(resetBody) &&
-		/where\s+session_id\s*=\s*[a-z_][a-z0-9_]*/i.test(resetBody)
+	'the cutover reset_event_data scopes deletes to the event it was given',
+	/where\s+event_id\s*=\s*[a-z_][a-z0-9_]*/i.test(resetBody) &&
+		!/where\s+session_id\s*=/i.test(resetBody),
+	'the event arrives as an argument now; it used to be read from a request header'
 );
 ok(
-	'0011 reset_event_data no longer trusts the passphrase helper',
+	'the cutover reset_event_data no longer trusts the passphrase helper',
 	resetBody.length > 0 && !/public\.has_manager_token\s*\(/i.test(resetBody)
 );
 
+// picklist and picklist_prefs are deliberately absent: this function has never
+// deleted them, and widening what the one destructive operation destroys is not
+// a change to make while renaming a column.
 const archivedTables = [
 	'assignment_overrides',
 	'reminders',
 	'assignments',
 	'schedules',
-	'picklist',
-	'picklist_prefs',
 	'event_meta'
 ];
 const notArchived = archivedTables.filter(
 	(table) =>
 		!new RegExp(
-			`delete\\s+from\\s+public\\.${escapeRe(table)}\\s+where\\s+session_id\\s*=`,
+			`delete\\s+from\\s+public\\.${escapeRe(table)}\\s+where\\s+event_id\\s*=`,
 			'i'
 		).test(resetBody)
 );
 ok(
-	'0011 reset_event_data clears every event-planning store',
+	'the cutover reset_event_data clears every event-planning store',
 	notArchived.length === 0,
 	notArchived.join(', ')
 );
 
 ok(
-	'0011 revokes anon execution of reset_event_data',
-	/revoke\s+(?:all|execute)\s+on\s+function\s+public\.reset_event_data\s*(?:\(\s*\))?\s+from\s+[^;]*\banon\b[^;]*;/i.test(
+	'the cutover revokes anon execution of reset_event_data',
+	/revoke\s+(?:all|execute)\s+on\s+function\s+public\.reset_event_data\s*(?:\([^)]*\))?\s+from\s+[^;]*\banon\b[^;]*;/i.test(
 		cutover
 	)
 );
 const resetGrants = [
 	...cutover.matchAll(
-		/grant\s+execute\s+on\s+function\s+public\.reset_event_data\s*(?:\(\s*\))?\s+to\s+([^;]+);/gi
+		/grant\s+execute\s+on\s+function\s+public\.reset_event_data\s*(?:\([^)]*\))?\s+to\s+([^;]+);/gi
 	)
 ].map((match) => match[1].toLowerCase());
 ok(
-	'0011 grants reset_event_data only to authenticated callers',
+	'the cutover grants reset_event_data only to authenticated callers',
 	resetGrants.some((roles) => /\bauthenticated\b/.test(roles)) &&
 		resetGrants.every((roles) => !/\banon\b/.test(roles)),
 	resetGrants.join(' | ')
 );
 
+// The cutover used to re-state 0010's revokes on profile_for_name, because 0011
+// touched that function. 0019 and 0020 do not, and asserting a migration
+// contains a line it has no reason to contain is how a check starts failing for
+// being right. 0010 is where the revoke lives, and that is asserted directly
+// below against `identity`.
 for (const role of ['anon', 'authenticated']) {
-	ok(
-		`0011 revokes ${role} execution of the backfill-only profile lookup`,
-		new RegExp(
-			`revoke\\s+(?:all|execute)\\s+on\\s+function\\s+public\\.profile_for_name` +
-				`\\s*\\(\\s*text\\s*\\)\\s+from\\s+[^;]*\\b${role}\\b[^;]*;`,
-			'i'
-		).test(cutover)
-	);
 	ok(
 		`0010 never grants ${role} the backfill-only profile lookup`,
 		new RegExp(

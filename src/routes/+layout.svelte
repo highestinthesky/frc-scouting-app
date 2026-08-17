@@ -103,39 +103,15 @@
 		}
 	});
 
-	// Before cutover, the local role/name and manager passphrase remain the
-	// operational authority. After cutover, the account profile becomes the
-	// only identity and role source. Keeping this branch next to the flag avoids
-	// a half-cutover where the badge and manager navigation disagree.
-	const shellIdentity = $derived.by(() =>
-		AUTH_ENFORCED
-			? {
-					name: auth.displayName || auth.profile?.username || '',
-					role: auth.role ?? 'scout',
-					isManager: auth.isManager
-				}
-			: {
-					// The NAME comes from the account as soon as there is one, before
-					// the cutover. "Am I signed in, and as whom" is the question this
-					// badge exists to answer, and it answered it with the name typed
-					// into Settings on this device — so signing in changed nothing
-					// visible, and a shared phone showed the previous scout.
-					//
-					// Safe to move now, and only now, because the joins no longer
-					// depend on this string: auth.me carries the account alongside
-					// session.scoutName, so what the badge displays and what the
-					// assignment board matches on are finally two different things.
-					//
-					// Role and manager rights deliberately do NOT move with it. Those
-					// still ride the passphrase until 0011 and AUTH_ENFORCED flip
-					// together; auth.canManage owns that decision.
-					name: auth.displayName || session.scoutName,
-					// Both from auth. This used to read a local toggle anybody could
-					// set to 'manager'.
-					role: auth.roleLabel,
-					isManager: auth.showsManagerTools
-				}
-	);
+	// The account is the only identity and role source. This used to be a
+	// two-branch derivation keyed on AUTH_ENFORCED, kept so the badge and the
+	// manager navigation could not disagree during a half-cutover. There is no
+	// half any more: the passphrase is gone and role rides the profile.
+	const shellIdentity = $derived.by(() => ({
+		name: auth.displayName || auth.profile?.username || '',
+		role: auth.role ?? 'scout',
+		isManager: auth.isManager
+	}));
 
 	// Re-scope the sync layer whenever the user changes their event code in
 	// Identity. Empty/missing event code pauses sync; otherwise the layer

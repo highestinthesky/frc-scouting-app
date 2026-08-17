@@ -84,9 +84,10 @@
 	/**
 	 * Push local edits and pull everyone else's.
 	 *
-	 * Only managers can write — the RLS policy requires x-manager-token — so a
-	 * scout device pulls and displays but never pushes. Its rows stay pending
-	 * forever, which is correct: they are a local scratchpad, not the list.
+	 * Only managers can write — the policy asks manages_event(), which is
+	 * membership plus role — so a scout device pulls and displays but never
+	 * pushes. Its rows stay pending forever, which is correct: they are a local
+	 * scratchpad, not the list.
 	 */
 	async function syncNow() {
 		if (!eventCode) return;
@@ -390,8 +391,8 @@
 				</span>
 			{/if}
 		{:else}
-			Read-only on this device. Enter the manager passphrase on
-			<a href="{base}/scouting/">Scouting</a> to edit the shared list.
+			Read-only on this device — the shared list is a manager surface. Ask a
+			manager to edit it, or to change your role.
 		{/if}
 	</p>
 

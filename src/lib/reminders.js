@@ -14,7 +14,7 @@
 // forever.
 
 import { createSupabaseClient } from './supabase.js';
-import { scopeIdForCode } from './events.js';
+import { eventIdForCode } from './events.js';
 import { getSetting, setSetting } from './db.js';
 import { reminderTarget } from './planning-rows.js';
 import { teamsInMatch } from './tba.js';
@@ -33,7 +33,7 @@ const DISMISSED_KEY = 'dismissedReminders';
 export async function listReminders(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return [];
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return [];
 	const client = createSupabaseClient(sid);
 	const { data, error } = await client
@@ -56,17 +56,16 @@ export async function listReminders(eventCode) {
  * @param {string} opts.message
  * @param {string} [opts.author]
  * @param {string} [opts.expiresAt]      ISO; default = +2h
- * @param {string} opts.managerToken
  * @param {any[]} [opts.roster]    profiles, so a targeted reminder carries an account
  * @returns {Promise<Reminder>}
  */
 export async function createReminder(eventCode, opts) {
 	const code = (eventCode ?? '').trim().toLowerCase();
-	if (!code) throw new Error('No event code.');
+	if (!code) throw new Error('No event chosen.');
 	if (!opts?.message?.trim()) throw new Error('Reminder message is empty.');
-	const sid = await scopeIdForCode(code);
-	if (!sid) throw new Error('Could not derive session id.');
-	const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
+	const sid = await eventIdForCode(code);
+	if (!sid) throw new Error('That event is not one you are on.');
+	const client = createSupabaseClient(sid);
 	const target = reminderTarget(opts.scoutName, opts.roster);
 	const row = {
 		session_id: sid,
@@ -94,12 +93,11 @@ export async function createReminder(eventCode, opts) {
  * Delete a reminder (manager-only).
  * @param {string} eventCode
  * @param {string} reminderId
- * @param {string} managerToken
  */
-export async function deleteReminder(eventCode, reminderId, managerToken) {
-	const sid = await scopeIdForCode(eventCode);
-	if (!sid) throw new Error('Could not derive session id.');
-	const client = createSupabaseClient(sid, { managerToken });
+export async function deleteReminder(eventCode, reminderId) {
+	const sid = await eventIdForCode(eventCode);
+	if (!sid) throw new Error('That event is not one you are on.');
+	const client = createSupabaseClient(sid);
 	const { error } = await client.from('reminders').delete().eq('id', reminderId);
 	if (error) throw mapErr(error, 'delete reminder');
 }
@@ -207,7 +205,7 @@ function mapErr(err, action) {
 	const msg = err?.message || String(err);
 	if (/row-level security/i.test(msg) || err?.code === '42501') {
 		return new Error(
-			`Permission denied — couldn't ${action}. Check the manager passphrase.`
+			`Permission denied — couldn't ${action}. You need to be a manager on this event.`
 		);
 	}
 	return new Error(`Couldn't ${action}: ${msg}`);

@@ -51,7 +51,7 @@ import { scoutRef } from './scout-identity.js';
  * auth is live gets it wrong exactly once — during a deploy — and locks
  * everyone out of an app they are standing in a gym trying to use.
  */
-export const AUTH_ENFORCED = false;
+export const AUTH_ENFORCED = true;
 
 const PROFILE_CACHE_KEY = 'frc-scout-last-profile';
 
@@ -155,42 +155,34 @@ export const auth = {
 	 * May this device write manager-scoped data — schedules, assignments,
 	 * reminders, the picklist?
 	 *
-	 * Before the cutover the database gates on has_manager_token(), so the
-	 * answer is "does this device hold the passphrase hash". Afterwards it gates
-	 * on is_manager(), so the answer is the account's role. Both live here, in
-	 * ONE place, because the two pages that ask this had already drifted apart:
-	 * /scouting derived it from AUTH_ENFORCED while /insights/picklist read
-	 * session.managerToken raw, so flipping the flag would have locked one and
-	 * left the other offering buttons that silently fail.
+	 * The account's role, and nothing else. Before the cutover this asked "does
+	 * this device hold the passphrase hash", because production gated on
+	 * has_manager_token(); 0019's manages_event() replaced that with membership
+	 * plus role, and 0020 dropped the function.
 	 *
-	 * Callers must not re-derive this. `check_components.mjs` fails the build if
-	 * they do.
+	 * It still lives here, in ONE place, for the reason it always did: the two
+	 * pages that ask had already drifted apart once, /scouting deriving it from
+	 * the cutover flag while /insights/picklist read the stored passphrase hash
+	 * directly. That is why check_components.mjs fails the build if a caller
+	 * re-derives it.
 	 */
 	get canManage() {
-		return AUTH_ENFORCED ? this.isManager : Boolean(session.managerToken);
+		return this.isManager;
 	},
 
 	/**
 	 * Should this device SHOW the manager surfaces at all?
 	 *
-	 * Deliberately not the same question as canManage, and the difference is why
-	 * the old local role toggle existed. Pre-cutover a manager's writes are gated
-	 * by the passphrase, but the passphrase entry form lives INSIDE the manager
-	 * surface — so gating the surface on already holding it locks the only door
-	 * to it. The toggle was the way in, and it was a self-asserted checkbox that
-	 * revealed buttons which then failed silently for anyone without the
-	 * passphrase.
+	 * Now the same question as canManage, which it was always going to become.
 	 *
-	 * The account answers it properly. If this device has signed in, the profile
-	 * says whether the person is a manager, and that is not a claim they can
-	 * make about themselves. If it has not, fall back to "does this device hold
-	 * the passphrase" — which is what the server will ask anyway.
-	 *
-	 * After the cutover both branches collapse to the role, and this becomes the
-	 * same answer as canManage.
+	 * The two differed only because the passphrase entry form lived INSIDE the
+	 * surface it unlocked, so gating the surface on already holding the
+	 * passphrase sealed the only door to it. There is no door any more: the role
+	 * arrives with the session, and a scout who should be a manager is promoted
+	 * by a super rather than by typing a shared secret.
 	 */
 	get showsManagerTools() {
-		return state.signedIn ? this.isManager : Boolean(session.managerToken);
+		return this.isManager;
 	},
 
 	/**
@@ -203,17 +195,17 @@ export const auth = {
 	},
 
 	/**
-	 * The credential bag every manager-scoped write passes to
-	 * createSupabaseClient().
+	 * Kept as an empty bag rather than deleted, so the 20-odd call sites that
+	 * spread it into createSupabaseClient() do not all have to change in the same
+	 * commit as the policy cutover. It returns nothing and sends nothing;
+	 * authorisation rides the access token.
 	 *
-	 * After the cutover this is empty: the passphrase header is meaningless
-	 * because 0011 drops has_manager_token(), and authorisation rides the
-	 * access token instead. Sending it anyway would cost nothing functionally
-	 * and would leave a dead security mechanism looking live, which is how
-	 * someone later mistakes it for protection.
+	 * Sending a passphrase header now would be worse than useless — 0020 drops
+	 * has_manager_token(), so it would be a dead mechanism that still looks live,
+	 * which is how someone later mistakes it for protection.
 	 */
 	managerCredentials() {
-		return AUTH_ENFORCED ? {} : { managerToken: session.managerToken };
+		return {};
 	},
 	/**
 	 * Is this device still on a password somebody handed over?

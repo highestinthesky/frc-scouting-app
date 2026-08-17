@@ -20,7 +20,7 @@
 import { getSetting, setSetting } from './db.js';
 import { scoutRef, rowScout, sameScout } from './scout-identity.js';
 import { createSupabaseClient } from './supabase.js';
-import { scopeIdForCode } from './events.js';
+import { eventIdForCode } from './events.js';
 
 const TBA_BASE = 'https://www.thebluealliance.com/api/v3';
 
@@ -174,16 +174,15 @@ async function cacheAlliances(eventCode, alliances, fetchedAt) {
  * @param {string} eventCode
  * @param {any[]} alliances
  * @param {object} opts
- * @param {string} [opts.managerToken]
  * @returns {Promise<boolean>} whether the upload landed
  */
 export async function publishAlliances(eventCode, alliances, opts = {}) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code || !Array.isArray(alliances)) return false;
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return false;
 	try {
-		const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
+		const client = createSupabaseClient(sid);
 		const { error } = await client
 			.from('schedules')
 			.update({ alliances, alliances_fetched_at: new Date().toISOString() })
@@ -209,7 +208,7 @@ export async function publishAlliances(eventCode, alliances, opts = {}) {
 export async function pullAlliances(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return null;
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return null;
 	try {
 		const client = createSupabaseClient(sid);
@@ -266,15 +265,13 @@ export async function clearScheduleCache(eventCode) {
 /**
  * Manager-only: upload the fetched schedule to Supabase so other devices in
  * the event can pull it without needing their own TBA key. Requires a valid
- * manager token (the event's passphrase hash). On a first-time event there
- * is no passphrase yet and the upload is unauthenticated (bootstrap allowed
- * by the has_manager_token() helper).
+ * Authorised by the access token: the policy asks manages_event(), which is
+ * membership plus role. There is no bootstrap case any more — an event only
+ * exists because a manager created it, and creating it made them a member.
  *
  * @param {string} eventCode
  * @param {TBAMatch[]} matches
  * @param {object} opts
- * @param {string} [opts.managerToken]  hex SHA-256 hash; required after
- *                                       passphrase has been set for the event
  * @param {string} [opts.fetchedBy]     display name to stamp on the row
  * @param {string} [opts.tbaEventKey]   canonical TBA key this schedule came
  *                                       from; stored so a second manager
@@ -283,11 +280,11 @@ export async function clearScheduleCache(eventCode) {
  */
 export async function publishSchedule(eventCode, matches, opts = {}) {
 	const code = (eventCode ?? '').trim().toLowerCase();
-	if (!code) throw new Error('No event code.');
+	if (!code) throw new Error('No event chosen.');
 	if (!Array.isArray(matches)) throw new Error('publishSchedule requires a match array.');
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) throw new Error('Could not derive session id from event code.');
-	const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
+	const client = createSupabaseClient(sid);
 	const fetchedAt = new Date().toISOString();
 	const tbaEventKey = (opts.tbaEventKey ?? '').trim().toLowerCase() || null;
 	const baseRow = {
@@ -336,7 +333,7 @@ function isMissingColumn(err, column) {
 export async function pullSchedule(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return null;
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return null;
 	const client = createSupabaseClient(sid);
 	// Try selecting the TBA key column; fall back if the DB predates 0006.
@@ -377,7 +374,7 @@ export async function pullSchedule(eventCode) {
 export async function getPublishedTbaEventKey(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return null;
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return null;
 	try {
 		const client = createSupabaseClient(sid);
@@ -405,7 +402,7 @@ export async function getPublishedTbaEventKey(eventCode) {
 export async function pullScheduleIfStale(eventCode) {
 	const code = (eventCode ?? '').trim().toLowerCase();
 	if (!code) return false;
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return false;
 	const client = createSupabaseClient(sid);
 	// First just ask for the timestamp.
@@ -426,7 +423,7 @@ function mapSupabaseError(err, action) {
 	const msg = err.message || String(err);
 	if (/row-level security/i.test(msg) || err.code === '42501') {
 		return new Error(
-			`Permission denied — couldn't ${action}. Check the manager passphrase, or ask whoever set the schedule up.`
+			`Permission denied — couldn't ${action}. You need to be a manager on this event.`
 		);
 	}
 	return new Error(`Couldn't ${action}: ${msg}`);

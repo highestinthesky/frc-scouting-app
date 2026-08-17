@@ -185,13 +185,23 @@ const ok = (name, cond, detail = '') => {
 		ok(`${label} no longer imports the local role store`, !/role\.svelte\.js/.test(text));
 	}
 
-	// Showing the surface and being allowed to write it are different questions,
-	// and conflating them locks the passphrase form inside the surface it unlocks.
+	// Showing the surface and being allowed to write it used to be different
+	// questions, because the passphrase form lived inside the surface it unlocked
+	// — gating the surface on already holding the passphrase sealed the only door
+	// to it. There is no door now, so both collapse to the role.
+	//
+	// This assertion previously required showsManagerTools to branch on
+	// `state.signedIn ? this.isManager`. It now requires the opposite: that
+	// neither question consults a passphrase, because a device that still
+	// believed in one would render manager buttons whose every write is refused
+	// by manages_event().
 	ok('auth owns whether manager surfaces render', /get showsManagerTools\(\)/.test(src));
 	ok(
-		'the surface gate prefers the account over the passphrase',
-		/showsManagerTools\(\) \{[\s\S]*?state\.signedIn \? this\.isManager/.test(src)
+		'both manager questions are the role and nothing else',
+		/get canManage\(\) \{\s*return this\.isManager;/.test(src) &&
+			/get showsManagerTools\(\) \{\s*return this\.isManager;/.test(src)
 	);
+	ok('no passphrase survives in auth', !/session\.managerToken/.test(src));
 	ok(
 		'the scouting page asks auth rather than re-deriving',
 		/isManager = \$derived\(auth\.showsManagerTools\)/.test(scoutingSrc)
@@ -217,13 +227,23 @@ const ok = (name, cond, detail = '') => {
 
 // ─── the cutover flag ──────────────────────────────────────────────────────
 {
-	// Not a correctness assertion — a tripwire. Flipping this locks every
-	// device out until its user signs in, and it must happen together with
-	// the policy cutover migration. If this test fails, that is the reminder.
+	// This was a tripwire asserting AUTH_ENFORCED === false, with the note that
+	// flipping it locks every device out until its user signs in and must happen
+	// together with the policy cutover migration.
+	//
+	// It fired, and the cutover is what got finished: 0020 dropped session_id,
+	// the legacy policies and has_manager_token(), and the client lost the
+	// passphrase entirely. This is the assertion changing last, which is the
+	// order the tripwire asked for.
+	//
+	// It stays as an assertion rather than being deleted, pointing the other way.
+	// Turning the flag back off would now be the dangerous move — the database no
+	// longer has an anonymous path, so a client that thinks auth is optional
+	// would offer a UI where every write fails.
 	ok(
-		'auth is still additive (flip with migration 0011, not before)',
-		AUTH_ENFORCED === false,
-		'AUTH_ENFORCED is true — 0011 must be applied and every user must have an account'
+		'auth is enforced, and 0020 is what made that safe',
+		AUTH_ENFORCED === true,
+		'AUTH_ENFORCED is false — the database has no anon path any more, so every write would fail'
 	);
 }
 

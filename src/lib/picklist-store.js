@@ -14,7 +14,7 @@
 
 import { db } from './db.js';
 import { createSupabaseClient } from './supabase.js';
-import { scopeIdForCode } from './events.js';
+import { eventIdForCode } from './events.js';
 import {
 	mergeRows,
 	ordered,
@@ -154,13 +154,12 @@ export async function putWeights(eventCode, weights) {
  *
  * @param {string} eventCode
  * @param {object} opts
- * @param {string} [opts.managerToken]
  * @param {string} [opts.updatedBy]
  * @returns {Promise<{weights: object, updatedAt: string}|null>}
  */
 export async function syncWeights(eventCode, opts = {}) {
 	const code = norm(eventCode);
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return null;
 
 	const mine = await localWeights(code);
@@ -188,9 +187,9 @@ export async function syncWeights(eventCode, opts = {}) {
 		return remote;
 	}
 
-	if (mine && !mine.pushed && opts.managerToken) {
+	if (mine && !mine.pushed) {
 		try {
-			const client = createSupabaseClient(sid, { managerToken: opts.managerToken });
+			const client = createSupabaseClient(sid);
 			const { error } = await client.from('picklist_prefs').upsert(
 				{
 					session_id: sid,
@@ -224,7 +223,7 @@ export async function syncWeights(eventCode, opts = {}) {
  */
 export async function pull(eventCode) {
 	const code = norm(eventCode);
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return false;
 
 	const client = createSupabaseClient(sid);
@@ -275,19 +274,18 @@ export async function pull(eventCode) {
  *
  * @param {string} eventCode
  * @param {object} opts
- * @param {string} opts.managerToken
  * @param {string} [opts.updatedBy]
  * @returns {Promise<number>} rows pushed
  */
-export async function push(eventCode, { managerToken, updatedBy } = {}) {
+export async function push(eventCode, { updatedBy } = {}) {
 	const code = norm(eventCode);
-	const sid = await scopeIdForCode(code);
+	const sid = await eventIdForCode(code);
 	if (!sid) return 0;
 
 	const pending = await localPending(code);
 	if (pending.length === 0) return 0;
 
-	const client = createSupabaseClient(sid, { managerToken: managerToken ?? '' });
+	const client = createSupabaseClient(sid);
 	const stamp = now();
 	let sent = 0;
 
@@ -344,14 +342,13 @@ export async function push(eventCode, { managerToken, updatedBy } = {}) {
  *
  * @param {string} eventCode
  * @param {object} opts
- * @param {string} [opts.managerToken]
  * @param {string} [opts.updatedBy]
  * @returns {Promise<{changed: boolean, pending: number, error: string}>}
  */
 export async function sync(eventCode, opts = {}) {
 	let error = '';
 
-	if (opts.managerToken) {
+	{
 		try {
 			await push(eventCode, opts);
 		} catch (e) {

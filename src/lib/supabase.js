@@ -54,20 +54,19 @@ export async function deriveSessionId(eventCode) {
  * `current_setting('request.headers')` — every SELECT/INSERT/DELETE we make
  * automatically carries the event's scope.
  *
- * Optionally include an x-manager-token header. That header is required by
- * the schedules and assignments tables' write policies (event_meta gates
- * everything via has_manager_token()). Reads don't need it.
+ * No credential header any more. Manager writes used to carry x-manager-token,
+ * a hash of a shared passphrase, and 0020 dropped the function that read it.
+ * Authorisation now rides the access token: the policies ask manages_event(),
+ * which is membership plus role.
  *
  * @param {string} sessionId
- * @param {object} [opts]
- * @param {string} [opts.managerToken]  Hex SHA-256 hash of (passphrase + ':' + eventCode).
+ * @param {object} [opts]  reserved; no options are read today
  */
 export function createSupabaseClient(sessionId, opts = {}) {
 	if (!isUuid(sessionId)) {
 		throw new Error('Supabase client requires a valid session id.');
 	}
 	const headers = { 'x-session-id': sessionId };
-	if (opts.managerToken) headers['x-manager-token'] = opts.managerToken;
 	return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 		auth: {
 			// Event clients never own or persist an auth session. Their fetch
@@ -135,28 +134,6 @@ export function getAuthClient() {
 		});
 	}
 	return authClient;
-}
-
-// ─── client-side passphrase hashing ────────────────────────────────────────
-
-/**
- * Compute the manager-token hash for a passphrase + event code combination.
- * This is what gets sent as `x-manager-token` and stored in `event_meta`.
- *
- * Threat model: this hash is access-equivalent to the passphrase (replay), so
- * treat it like a password. Per-event salting (via the event code suffix)
- * means hashes from different events don't collide.
- *
- * @param {string} passphrase
- * @param {string} eventCode
- * @returns {Promise<string>}  64-char lowercase hex SHA-256
- */
-export async function hashManagerToken(passphrase, eventCode) {
-	if (!passphrase) return '';
-	const code = (eventCode ?? '').trim().toLowerCase();
-	const data = new TextEncoder().encode(`${passphrase}:${code}`);
-	const buf = await crypto.subtle.digest('SHA-256', data);
-	return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** RFC 4122 / v8 UUID, lowercase, with hyphens. */
