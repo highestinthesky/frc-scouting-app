@@ -442,10 +442,11 @@ export async function withdrawEntry(entry) {
 				message: 'Not connected to this event, so it can only be removed from this device.'
 			};
 		}
-		const { error } = await clientFor(sid)
-			.from('entries')
-			.update({ deleted_at: new Date().toISOString() })
-			.eq('id', entry.remoteId);
+		// Through withdraw_entry(), not a column write. 0022 revoked UPDATE on
+		// deleted_at precisely because entries_evt_update already lets a scout edit
+		// their own row, so the grant handed them the tombstone too — the RPC is
+		// where "only a manager of this event" is actually enforced.
+		const { error } = await clientFor(sid).rpc('withdraw_entry', { p_id: entry.remoteId });
 		if (error) {
 			// 42501 is the policy refusing it — a scout, or a manager who is not on
 			// this event. Say which rather than showing a Postgres code.

@@ -63,7 +63,7 @@ passphrase and every write silently fails.
 turning it back off would be the dangerous move, because the database no longer
 has an anonymous path and the UI would offer writes that all fail.
 
-**`0020` and `0021` are applied to production** (2026-08-17), and how `0020`
+**`0020`–`0022` are applied to production** (2026-08-17), and how `0020`
 got there is the lesson. It had to land *after* a push, so the client shipped
 first — and then the migration was forgotten. For three days production had a
 client that no longer sent `session_id` and eight tables where the column was
@@ -77,6 +77,18 @@ control case that located the cause.
 **A client change that depends on a migration must not be pushed before the
 migration is on production.** That ordering was already written down here. It
 failed anyway, because nothing enforced it and the two halves were days apart.
+
+**A grant is not what a comment says it is.** `0021` granted
+`UPDATE (deleted_at)` to `authenticated` under a comment asserting "a scout is
+deliberately NOT given this". `entries_evt_update` already permits a row where
+`submitted_by = auth.uid()`, so a scout editing their own entry was inside the
+policy and the grant handed them the tombstone. `0022` replaced it with
+`withdraw_entry()`.
+
+Two assertions cover it, not one, and that split is the point: the RPC's
+authority check and the column grant are separate holes, and the RPC being right
+is exactly what made the grant look fine. Mutating either turns its own
+assertion red and leaves the other green.
 
 **The `entries` dedupe index is a content fingerprint** —
 `[eventCode+matchNumber+teamNumber+scoutName+createdAt]`. Sync relies on it

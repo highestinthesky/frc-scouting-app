@@ -1093,10 +1093,9 @@ const scout2B = await clientFor(scout2, EVENT_B);
 
 	// A scout may correct their own entry — that is the mistake they actually
 	// make — but withdrawing the record of a match is an event-operations call.
-	const { error: scoutKill } = await scoutA
-		.from('entries')
-		.update({ deleted_at: new Date().toISOString() })
-		.eq('id', target);
+	// Through the RPC, because 0022 revoked the column grant. A direct UPDATE is
+	// asserted below as well — a scout must not have a second way in.
+	const { error: scoutKill } = await scoutA.rpc('withdraw_entry', { p_id: target });
 	const [{ still }] = await sql(
 		'select (deleted_at is null) as still from public.entries where id = $1',
 		[target]
@@ -1107,10 +1106,43 @@ const scout2B = await clientFor(scout2, EVENT_B);
 		scoutKill ? `denied (${scoutKill.code})` : 'UPDATE reported success'
 	);
 
-	const { error: mgrKill } = await managerA
+	// The direct column write, which is what 0021 wrongly allowed. Asserted
+	// separately from the RPC because the RPC being right does not stop the grant
+	// from being wrong — that is exactly how 0021 shipped.
+	const { error: scoutDirect } = await scoutA
 		.from('entries')
 		.update({ deleted_at: new Date().toISOString() })
 		.eq('id', target);
+	const [{ untouched }] = await sql(
+		'select (deleted_at is null) as untouched from public.entries where id = $1',
+		[target]
+	);
+	ok(
+		'a scout cannot reach deleted_at directly either',
+		untouched === true,
+		scoutDirect ? `denied (${scoutDirect.code})` : 'UPDATE reported success'
+	);
+
+	// The edit they DO keep. Withdrawing is an event decision; fixing your own
+	// typo is not, and taking both away sends a scout looking for a manager
+	// mid-match. Needs an entry the scout actually owns — entries_evt_update keys
+	// on submitted_by, so a fixture row attributed to nobody would be refused for
+	// the wrong reason and this would pass without meaning anything.
+	const [own] = await sql(
+		`insert into public.entries
+		   (event_id, event_code, match_number, team_number, alliance_color,
+		    scout_name, schema_version, created_at, submitted_by)
+		 values ($1, $2, 87, 3419, 'red', $3, 3, now(), $4)
+		 returning id`,
+		[EVENT_A.id, EVENT_A.code, `${MARK}_scout`, scout.id]
+	);
+	const { error: scoutEdit } = await scoutA
+		.from('entries')
+		.update({ team_number: 9999 })
+		.eq('id', own.id);
+	ok('a scout can still correct their own entry', !scoutEdit, scoutEdit?.message);
+
+	const { error: mgrKill } = await managerA.rpc('withdraw_entry', { p_id: target });
 	ok('a manager withdraws an entry', !mgrKill, mgrKill?.message);
 
 	const [{ gone }] = await sql(
@@ -1125,6 +1157,19 @@ const scout2B = await clientFor(scout2, EVENT_B);
 		target
 	]);
 	ok('the row is kept, not destroyed', rows === 1);
+
+	// Undo. The row is kept precisely so a manager who withdrew the wrong entry
+	// is not told to re-record a match nobody watched twice.
+	const { error: undoErr } = await managerA.rpc('withdraw_entry', {
+		p_id: target,
+		p_undo: true
+	});
+	const [{ back }] = await sql(
+		'select (deleted_at is null) as back from public.entries where id = $1',
+		[target]
+	);
+	ok('a withdrawal can be undone', !undoErr && back === true, undoErr?.message);
+	await managerA.rpc('withdraw_entry', { p_id: target });
 
 	// A withdrawn row must free its fingerprint, or re-recording the same
 	// observation collides with the tombstone and sync adopts a dead row's id.
