@@ -394,9 +394,29 @@ export const auth = {
 
 	// ─── manager surface ────────────────────────────────────────────────────
 
-	/** @param {'scout'|'manager'|'super'} role */
-	async createInvite(role = 'scout') {
-		const { data, error } = await getAuthClient().rpc('create_invite', { p_role: role });
+	/**
+	 * Mint an invite for a NAMED person.
+	 *
+	 * The name is required, and that is the point of 0023. It used to be typed by
+	 * whoever redeemed the code, so the manager assigned "Haolun Ning" a team and
+	 * the scout registered as "haolun" — nothing to compare against, nothing
+	 * rejected, and an assignment addressed to a person who did not exist. Asked
+	 * once, by the person who is also typing the assignments, it cannot disagree
+	 * with itself.
+	 *
+	 * @param {{role?: 'scout'|'manager'|'super', firstName: string, lastName: string}} req
+	 */
+	async createInvite(req) {
+		const first = String(req?.firstName ?? '').trim();
+		const last = String(req?.lastName ?? '').trim();
+		if (!first || !last) {
+			throw new Error('Enter the person’s first and last name — the invite carries it.');
+		}
+		const { data, error } = await getAuthClient().rpc('create_invite', {
+			p_role: req.role ?? 'scout',
+			p_first: first,
+			p_last: last
+		});
 		if (error) throw new Error(error.message);
 		return /** @type {string} */ (data);
 	},
@@ -404,7 +424,7 @@ export const auth = {
 	async listInvites() {
 		const { data, error } = await getAuthClient()
 			.from('invites')
-			.select('code, role, created_at, expires_at, redeemed_at, redeemed_by')
+			.select('code, role, first_name, last_name, created_at, expires_at, redeemed_at, redeemed_by')
 			.order('created_at', { ascending: false });
 		if (error) throw new Error(error.message);
 		return data ?? [];

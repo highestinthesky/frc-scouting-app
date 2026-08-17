@@ -527,13 +527,21 @@ a peer of Scout and Schedule, it is a different application.
    because density is the point. The top bar slims; it currently spends a
    full-width band on an event code, a name and a role chip.
 
-9. **Identity without typing.** A manager types the person's real full name when
-   creating the invite or account, and it is bound there. Whatever username the
-   scout picks, the name stays what the manager typed. The "type your name"
-   field disappears. `scout_name` finishes retiring as a join key and becomes a
-   display label; it stays in the dedupe fingerprint, which is content, not
-   identity. Needs a migration and an RLS pass — the deepest step, and last of
-   the structural ones for that reason.
+9. **Identity without typing. ✅ partly — `0023`.** The invite now carries the
+   name the manager typed, and `redeem_invite` uses it rather than whatever the
+   redeemer sends. `/register` shows "Joining as Haolun Ning" instead of asking a
+   question whose answer is already decided; the fields only appear for codes
+   minted before the migration.
+
+   The mismatch this closes: a manager assigns "Haolun Ning" a team, the scout
+   registers as "haolun", nothing compares the two, and the assignment addresses
+   a person who does not exist — with an empty Your Teams and no way to tell why.
+   `scout-identity.js` exists because that was already happening between call
+   sites; this is the same failure one level earlier, between two humans.
+
+   Still open in this step: removing the typed-name field from Settings and the
+   first-run setup, and finishing `scout_name`'s retirement as a join key. The
+   name is right at the source now, which is the prerequisite for both.
 
 10. **The visual pass.** Hallmark runs as a redesign *inside* `design.md`'s
     existing system — tokens, contrast and component checks stay authoritative.

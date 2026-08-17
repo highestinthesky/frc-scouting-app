@@ -1198,6 +1198,92 @@ const scout2B = await clientFor(scout2, EVENT_B);
 	);
 }
 
+// ─── the invite carries the name (0023) ─────────────────────────────────────
+//
+// The name used to be typed by whoever redeemed the code, so a manager could
+// assign "Haolun Ning" a team and the scout could register as "haolun". Nothing
+// compared the two, so nothing rejected it, and the assignment addressed a
+// person who did not exist.
+//
+// What must hold: the invite's name wins over whatever the redeemer sends. A
+// client that keeps sending its own first/last — an older bundle, or a hostile
+// one — must not be able to override it.
+{
+	const { data: code, error: mintErr } = await managerA.rpc('create_invite', {
+		p_role: 'scout',
+		p_first: 'Haolun',
+		p_last: 'Ning'
+	});
+	ok('a manager mints a named invite', !mintErr && Boolean(code), mintErr?.message);
+
+	// Anyone holding the code can see whose it is, before they have a session —
+	// which is how a person learns they were handed the wrong one.
+	const { data: peeked } = await anonA.rpc('peek_invite', { p_code: code });
+	ok(
+		'the code shows whose invite it is, before signing up',
+		peeked?.[0]?.valid === true && peeked[0].first_name === 'Haolun',
+		JSON.stringify(peeked?.[0])
+	);
+
+	// Redeem it while sending a DIFFERENT name, which is exactly what an older
+	// client does. The invite has to win.
+	const joiner = await makeUser(`${MARK}_joiner`, null);
+	const joinerClient = await clientFor(joiner, EVENT_A);
+	const { error: redeemErr } = await joinerClient.rpc('redeem_invite', {
+		p_code: code,
+		p_username: `${MARK}_hz`,
+		p_first: 'haolun',
+		p_last: 'n',
+		p_recovery_email: 'hz@example.com'
+	});
+	ok('the invite is redeemed', !redeemErr, redeemErr?.message);
+
+	const [made] = await sql(
+		'select first_name, last_name, role from public.profiles where id = $1',
+		[joiner.id]
+	);
+	ok(
+		"the manager's spelling wins over the redeemer's",
+		made?.first_name === 'Haolun' && made?.last_name === 'Ning',
+		JSON.stringify(made)
+	);
+	ok('and the invited role is what lands', made?.role === 'scout', made?.role);
+
+	// A scout cannot mint invites at all — the role check is inside create_invite,
+	// not just hidden in the UI.
+	const { error: scoutMint } = await scoutA.rpc('create_invite', {
+		p_role: 'scout',
+		p_first: 'Nope',
+		p_last: 'Nope'
+	});
+	ok('a scout cannot mint an invite', Boolean(scoutMint), scoutMint?.code);
+
+	// And a manager cannot mint one above themselves.
+	const { error: escalate } = await managerA.rpc('create_invite', {
+		p_role: 'super',
+		p_first: 'Too',
+		p_last: 'High'
+	});
+	ok('a manager cannot invite a super', Boolean(escalate), escalate?.code);
+
+	const { data: superMint, error: superErr } = await superA.rpc('create_invite', {
+		p_role: 'manager',
+		p_first: 'Fine',
+		p_last: 'Here'
+	});
+	ok('a super can invite a manager', !superErr && Boolean(superMint), superErr?.message);
+
+	// One signature only. Adding defaulted parameters OVERLOADS rather than
+	// replaces, and PostgREST binds by the keys in the body — so a leftover
+	// create_invite(app_role) would silently accept a nameless call and mint
+	// exactly the invite this migration exists to prevent.
+	const [{ n: sigs }] = await sql(
+		`select count(*)::int as n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+		  where n.nspname = 'public' and p.proname = 'create_invite'`
+	);
+	ok('create_invite has exactly one signature', sigs === 1, `${sigs} found`);
+}
+
 await reset();
 await db.end();
 

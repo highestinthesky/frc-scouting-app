@@ -51,15 +51,19 @@
 
 	const nameProblem = $derived(username ? usernameProblem(username) : null);
 	const suggestion = $derived(
-		firstName && lastName
-			? `${firstName}.${lastName}`.toLowerCase().replace(/[^a-z0-9._-]/g, '')
-			: ''
+		(() => {
+			const f = invite?.first_name || firstName;
+			const l = invite?.last_name || lastName;
+			return f && l ? `${f}.${l}`.toLowerCase().replace(/[^a-z0-9._-]/g, '') : '';
+		})()
 	);
+
+	/** A named invite carries the name, so the form does not have to collect it. */
+	const inviteNamed = $derived(Boolean(invite?.valid && invite?.first_name));
 
 	const canSubmit = $derived(
 		invite?.valid &&
-			firstName.trim() &&
-			lastName.trim() &&
+			(inviteNamed || (firstName.trim() && lastName.trim())) &&
 			username &&
 			!nameProblem &&
 			(resuming || (email.includes('@') && password.length >= 8))
@@ -107,22 +111,37 @@
 			{#if checking}
 				<small class="note">Checking…</small>
 			{:else if invite?.valid}
-				<small class="note good">✓ Valid — you'll join as {invite.role}.</small>
+				<small class="note good">
+				✓ Valid — you'll join as {invite.role}{invite.first_name
+					? ` (${invite.first_name} ${invite.last_name ?? ''})`.trimEnd() + ''
+					: ''}.
+			</small>
 			{:else if invite}
 				<small class="note bad">Not valid, already used, or expired.</small>
 			{/if}
 		</label>
 
-		<div class="row">
-			<label class="field">
-				<span class="label">First name</span>
-				<input bind:value={firstName} autocomplete="given-name" required />
-			</label>
-			<label class="field">
-				<span class="label">Last name</span>
-				<input bind:value={lastName} autocomplete="family-name" required />
-			</label>
-		</div>
+		<!-- The name comes from the invite (0023). Asking here is what let a scout
+		     register as a spelling their manager never typed, so the field only
+		     appears for codes minted before that migration — which is a real case
+		     for as long as an unredeemed one is outstanding. -->
+		{#if invite?.valid && invite.first_name}
+			<p class="named">
+				Joining as <strong>{invite.first_name} {invite.last_name ?? ''}</strong>.
+				<small>Your manager set this so your assignments reach you. Not you? Ask them for your own code.</small>
+			</p>
+		{:else}
+			<div class="row">
+				<label class="field">
+					<span class="label">First name</span>
+					<input bind:value={firstName} autocomplete="given-name" required />
+				</label>
+				<label class="field">
+					<span class="label">Last name</span>
+					<input bind:value={lastName} autocomplete="family-name" required />
+				</label>
+			</div>
+		{/if}
 
 		<label class="field">
 			<span class="label">Username</span>
@@ -202,6 +221,23 @@
 		color: var(--text-muted);
 		font-size: var(--fs-md);
 	}
+	.named {
+		margin: 0;
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		font-size: var(--fs-md);
+		color: var(--text-primary);
+	}
+	.named small {
+		font-size: var(--fs-xs);
+		color: var(--text-muted);
+	}
+
 	.row { display: flex; gap: var(--space-3); }
 	.row .field { flex: 1 1 0; min-width: 0; }
 	.field {

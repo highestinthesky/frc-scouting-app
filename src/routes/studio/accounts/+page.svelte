@@ -19,6 +19,8 @@
 	let msg = $state('');
 	let freshCode = $state('');
 	let inviteRole = $state(/** @type {'scout'|'manager'|'super'} */ ('scout'));
+	let inviteFirst = $state('');
+	let inviteLast = $state('');
 
 	// Create-an-account form. The draft's flow: type a name, hand over what comes
 	// back. Email is ours, not the draft's — an account with no routable address
@@ -86,7 +88,13 @@
 		msg = '';
 		freshCode = '';
 		try {
-			freshCode = await auth.createInvite(inviteRole);
+			freshCode = await auth.createInvite({
+				role: inviteRole,
+				firstName: inviteFirst,
+				lastName: inviteLast
+			});
+			inviteFirst = '';
+			inviteLast = '';
 			await load();
 		} catch (e) {
 			err = e.message;
@@ -228,6 +236,19 @@
 				<a href="{base}/register/">the sign-up page</a>.
 			</p>
 
+			<!-- The name is typed HERE, by the person who also types the assignments.
+			     It used to be typed by whoever redeemed the code, which is how an
+			     assignment ended up addressed to a spelling the scout never used. -->
+			<div class="new-grid">
+				<label class="field">
+					<span class="label">First name</span>
+					<input bind:value={inviteFirst} autocomplete="off" />
+				</label>
+				<label class="field">
+					<span class="label">Last name</span>
+					<input bind:value={inviteLast} autocomplete="off" />
+				</label>
+			</div>
 			<div class="invite-row">
 				<div class="field">
 					<Select
