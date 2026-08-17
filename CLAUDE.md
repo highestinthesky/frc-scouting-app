@@ -128,6 +128,13 @@ restriction is load-bearing: the name is still the join key, so overwriting one
 a device already had would silently detach it from every assignment, override
 and reminder addressed to the old spelling.
 
+`0023` narrows how often that can happen rather than lifting the rule. The
+invite now carries the name the manager typed and `redeem_invite` uses it over
+whatever the redeemer sends, so a profile and the assignments agree by
+construction. Where a device's stored name still diverges, Settings **shows**
+the mismatch and offers to adopt the account name — visible and fixed on
+request, which is the difference between repairing it and doing it to someone.
+
 **The event code is a label. `session_id` is gone.** `0019` made events real
 rows with membership deciding access; `0020` dropped `session_id` from all eight
 tables along with 29 policies, `has_manager_token()` and the passphrase.

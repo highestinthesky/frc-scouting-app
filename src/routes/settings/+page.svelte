@@ -11,6 +11,31 @@
 
 	let scoutName = $state(session.scoutName);
 	let saving = $state(false);
+
+	/**
+	 * Does what this device records as differ from the account it is signed into?
+	 *
+	 * Only meaningful while scout_name is still a join key. Compared through
+	 * scout-identity's normalisation rather than raw, because "Ning" and "ning"
+	 * are one person and warning about that would be noise.
+	 */
+	const nameDiverges = $derived(
+		auth.signedIn &&
+			Boolean(auth.displayName) &&
+			Boolean(session.scoutName?.trim()) &&
+			session.scoutName.trim().toLowerCase() !== auth.displayName.trim().toLowerCase()
+	);
+
+	async function adoptAccountName() {
+		saving = true;
+		try {
+			await session.update({ scoutName: auth.displayName });
+			scoutName = auth.displayName;
+			savedMsg = 'This device now records as your account name.';
+		} finally {
+			saving = false;
+		}
+	}
 	let savedMsg = $state('');
 	let clearMsg = $state('');
 
@@ -119,19 +144,40 @@
 				<EventPicker />
 			</div>
 
-			<label class="field">
-				<span class="label">Your name</span>
-				<small class="help">
-					{#if auth.signedIn}
-						Filled from your account. Still editable, because assignments,
-						overrides and reminders are matched on this name until every
-						device is signed in — so it has to match what the manager typed.
+			<!-- Signed in, the account owns the name. 0023 makes the invite carry the
+			     spelling the manager typed, so the profile and the assignments agree
+			     by construction — and a free-text box here is the one place they can
+			     be pulled apart again.
+			     It is not silently overwritten. CLAUDE.md: the name is still a join
+			     key, so replacing one a device already had would detach it from
+			     everything addressed to the old spelling. A divergence is SHOWN and
+			     fixed on request, which is the difference between repairing it and
+			     doing it to someone. -->
+			{#if auth.signedIn}
+				<div class="field">
+					<span class="label">Your name</span>
+					<p class="named">{auth.displayName || '(not set on your account)'}</p>
+					{#if nameDiverges}
+						<small class="help warn">
+							This device still records as <strong>{session.scoutName}</strong>.
+							Assignments addressed to your account name will not reach it.
+						</small>
+						<Button type="button" disabled={saving} onclick={adoptAccountName}>
+							Use my account name
+						</Button>
 					{:else}
-						Match what the manager typed when assigning you teams.
+						<small class="help">
+							From your account. Your manager set it, so assignments reach you.
+						</small>
 					{/if}
-				</small>
-				<input bind:value={scoutName} autocomplete="name" />
-			</label>
+				</div>
+			{:else}
+				<label class="field">
+					<span class="label">Your name</span>
+					<small class="help">Match what the manager typed when assigning you teams.</small>
+					<input bind:value={scoutName} autocomplete="name" />
+				</label>
+			{/if}
 
 			<Button variant="primary" type="submit" disabled={saving}>
 				{saving ? 'Saving…' : 'Save'}
