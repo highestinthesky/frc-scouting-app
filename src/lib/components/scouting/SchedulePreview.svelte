@@ -165,7 +165,7 @@
 	}
 	@media (max-width: 28rem) {
 		.sched-row {
-			grid-template-columns: 2.5rem 1fr auto auto;
+			grid-template-columns: 2.5rem minmax(0, 1fr) auto auto;
 			grid-template-rows: auto auto;
 			row-gap: var(--space-1);
 			column-gap: var(--space-2);

@@ -28,6 +28,7 @@
 	import { eventLabel } from '$lib/event-rules.js';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import Button from '$lib/components/Button.svelte';
+	import Select from '$lib/components/Select.svelte';
 	import EventPicker from '$lib/components/EventPicker.svelte';
 
 	let events = $state([]);
@@ -185,14 +186,18 @@
 </header>
 
 {#if events.length > 1}
-	<label class="pick">
-		<span class="label">Editing</span>
-		<select bind:value={selectedId} onchange={refreshRoster} disabled={busy}>
-			{#each events as e (e.id)}
-				<option value={e.id}>{eventLabel(e)}{e.archived_at ? ' (archived)' : ''}</option>
-			{/each}
-		</select>
-	</label>
+	<div class="pick">
+		<Select
+			label="Editing"
+			bind:value={selectedId}
+			onchange={refreshRoster}
+			disabled={busy}
+			options={events.map((e) => ({
+				value: e.id,
+				label: eventLabel(e) + (e.archived_at ? ' (archived)' : '')
+			}))}
+		/>
+	</div>
 {/if}
 
 {#if !selected}
@@ -338,7 +343,7 @@
 
 	.columns {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		gap: var(--space-4);
 	}
 	@media (max-width: 47.9375rem) {

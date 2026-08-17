@@ -1,4 +1,5 @@
 <script>
+	import Select from '$lib/components/Select.svelte';
 	// Manager surface: invite people, change roles, revoke access.
 	//
 	// Every restriction here is also enforced in Postgres (migration 0008) —
@@ -191,14 +192,13 @@
 					<small class="help">Only ever used for a password reset.</small>
 					<input type="email" bind:value={newEmail} autocomplete="off" />
 				</label>
-				<label class="field">
-					<span class="label">Joins as</span>
-					<select bind:value={newRole}>
-						{#each roleOptions as r (r)}
-							<option value={r}>{r}</option>
-						{/each}
-					</select>
-				</label>
+				<div class="field">
+					<Select
+						label="Joins as"
+						bind:value={newRole}
+						options={roleOptions.map((r) => ({ value: r, label: r }))}
+					/>
+				</div>
 			</div>
 			<Button variant="primary" disabled={busy} onclick={createAccount}>
 				{busy ? 'Creating…' : 'Create account'}
@@ -229,14 +229,13 @@
 			</p>
 
 			<div class="invite-row">
-				<label class="field">
-					<span class="label">Joins as</span>
-					<select bind:value={inviteRole}>
-						{#each roleOptions as r (r)}
-							<option value={r}>{r}</option>
-						{/each}
-					</select>
-				</label>
+				<div class="field">
+					<Select
+						label="Joins as"
+						bind:value={inviteRole}
+						options={roleOptions.map((r) => ({ value: r, label: r }))}
+					/>
+				</div>
 				<Button variant="primary" disabled={busy} onclick={mint}>Create invite</Button>
 			</div>
 
@@ -288,19 +287,16 @@
 								{/if}
 							</div>
 							<div class="controls">
-								<select
+								<Select
 									value={p.role}
 									disabled={busy || self}
 									onchange={(e) => changeRole(p, e.currentTarget.value)}
-									aria-label="Role for {p.first_name} {p.last_name}"
-								>
-									{#each roleOptions as r (r)}
-										<option value={r}>{r}</option>
-									{/each}
-									{#if !roleOptions.includes(p.role)}
-										<option value={p.role}>{p.role}</option>
-									{/if}
-								</select>
+									label=""
+									options={[
+										...roleOptions.map((r) => ({ value: r, label: r })),
+										...(roleOptions.includes(p.role) ? [] : [{ value: p.role, label: p.role }])
+									]}
+								/>
 								{#if !self && p.role !== 'super'}
 									<Button variant="danger" disabled={busy} onclick={() => revoke(p)}>
 										Revoke
@@ -325,9 +321,18 @@
 <style>
 	.new-grid {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		/* minmax(0, 1fr), not 1fr. A bare fr track refuses to shrink below its
+		   content's min-content width, so two text inputs held this form wider than
+		   a 375px viewport and the right-hand column ran off the screen. */
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		gap: var(--space-3);
 		margin-bottom: var(--space-3);
+	}
+	/* And on a phone there is no room for two columns of anything. */
+	@media (max-width: 30rem) {
+		.new-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
 	}
 	.new-grid .wide { grid-column: 1 / -1; }
 	.new-grid .field { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -354,7 +359,7 @@
 	.handover-lead { margin: 0 0 var(--space-3); font-weight: 600; color: var(--success); }
 	.handover dl {
 		display: grid;
-		grid-template-columns: auto 1fr;
+		grid-template-columns: auto minmax(0, 1fr);
 		gap: var(--space-2) var(--space-4);
 		margin: 0 0 var(--space-3);
 	}

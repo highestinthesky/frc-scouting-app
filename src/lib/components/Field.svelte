@@ -1,4 +1,5 @@
 <script>
+	import Select from './Select.svelte';
 	// Generic input renderer. Picks the right HTML control based on the
 	// field's `type`. Used by every form so adding a new field type only
 	// happens here.
@@ -285,12 +286,16 @@
 		</div>
 
 	{:else if field.type === 'select'}
-		<select bind:value required={field.required}>
-			<option value="" disabled selected>Choose…</option>
-			{#each field.options as opt}
-				<option value={opt}>{opt}</option>
-			{/each}
-		</select>
+		<!-- The label is rendered by Field's own header above, so the Select is
+		     label-less here rather than repeating it. -->
+		<Select
+			bind:value
+			label=""
+			options={[
+				{ value: '', label: 'Choose…', disabled: true },
+				...field.options.map((opt) => ({ value: opt, label: opt }))
+			]}
+		/>
 
 	{:else if field.type === 'pills'}
 		<div class="pills" role="radiogroup" aria-label={field.label}>

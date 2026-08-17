@@ -301,14 +301,45 @@ for (const [label, file] of [
 	['accounts', 'src/routes/accounts/+page.svelte']
 ]) {
 	const r = rules(file);
+	const ownRule = r.some(
+		(x) =>
+			/^(input|select)/.test(unscoped(x.selector)) &&
+			/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
+	);
+	// A page may satisfy the floor by delegating to Select.svelte rather than
+	// styling a bare control. That is the better outcome — one component owning
+	// the floor beats five pages each remembering it — but the guarantee must not
+	// evaporate into "someone else handles it", so Select.svelte's own rule is
+	// asserted directly below.
+	const delegates = /from '[^']*components\/Select\.svelte'/.test(
+		readFileSync(path.join(root, file), 'utf8')
+	);
 	ok(
 		`/${label}: inputs and selects meet the tap floor`,
+		ownRule || delegates,
+		'a login field is the first thing anyone touches'
+	);
+}
+
+// The component the pages above delegate to. If this rule goes, so does the
+// floor on every page that stopped styling its own control.
+{
+	const r = rules('src/lib/components/Select.svelte');
+	ok(
+		'Select: the control itself meets the tap floor',
 		r.some(
 			(x) =>
-				/^(input|select)/.test(unscoped(x.selector)) &&
+				/^select/.test(unscoped(x.selector)) &&
 				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
 		),
-		'a login field is the first thing anyone touches'
+		'pages delegate their tap floor to this component'
+	);
+	// appearance:none is what makes it ours rather than the platform's — the
+	// whole reason the component exists. Without it this is a native select
+	// wearing a border.
+	ok(
+		'Select: the platform chrome is actually stripped',
+		r.some((x) => /^select/.test(unscoped(x.selector)) && /none/.test(valueOf(x.body, 'appearance') ?? ''))
 	);
 }
 

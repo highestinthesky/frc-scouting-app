@@ -197,7 +197,7 @@
 	}
 	.assign-row {
 		display: grid;
-		grid-template-columns: 1fr 2fr auto;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
 		gap: var(--space-2);
 		margin-bottom: var(--space-2);
 	}

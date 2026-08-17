@@ -19,6 +19,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { auth } from '$lib/auth.svelte.js';
+	import { session } from '$lib/session.svelte.js';
 
 	let { children } = $props();
 
@@ -49,7 +50,15 @@
 {:else}
 	<div class="studio">
 		<nav aria-label="Studio sections">
-			<span class="brand">Studio</span>
+			<div class="brand">
+				<span class="mark">Studio</span>
+				<!-- The event this surface is operating on. "Which event am I editing"
+				     is the one thing that must never be ambiguous here, and the app bar
+				     that used to answer it is gone. -->
+				{#if session.eventCode}
+					<span class="at">{session.eventCode}</span>
+				{/if}
+			</div>
 			<ul>
 				{#each TABS as tab (tab.href)}
 					<li>
@@ -64,7 +73,12 @@
 					</li>
 				{/each}
 			</ul>
-			<a class="out" href="{base}/insights/">Leave Studio</a>
+			<!-- The only way out, so it is a real control and it is never hidden.
+			     The global tab bar used to be the escape route and it was a trapdoor:
+			     it left Studio without offering a way back. -->
+			<a class="out" href="{base}/home/">
+				<span aria-hidden="true">←</span> Leave Studio
+			</a>
 		</nav>
 
 		<main>{@render children()}</main>
@@ -93,8 +107,10 @@
 		gap: var(--space-5);
 		align-items: start;
 		padding: var(--space-4);
-		/* The bottom nav belongs to the phone shell and overlaps a long table. */
-		padding-bottom: calc(var(--nav-bottom-h) + var(--space-5));
+		/* No reservation for the phone shell's bottom bar — Studio does not render
+		   it. This used to subtract a nav's height from a viewport that has none. */
+		padding-bottom: var(--space-6);
+		min-height: 100dvh;
 	}
 
 	/* Below the tablet breakpoint the sidebar becomes a strip above the content.
@@ -114,8 +130,9 @@
 		.hint {
 			display: none;
 		}
-		.brand,
-		.out {
+		/* The exit stays visible on phones. It is the only way out of Studio, and
+		   hiding it was the bug: on a phone there was no route back at all. */
+		.brand .at {
 			display: none;
 		}
 	}
@@ -128,10 +145,24 @@
 		gap: var(--space-3);
 	}
 	.brand {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+	.mark {
 		font-size: var(--fs-lg);
 		font-weight: 700;
 		letter-spacing: -0.01em;
 		color: var(--text-primary);
+	}
+	/* Named .at, not .on — `nav a.on` marks the current tab, and a bare `.on`
+	   rule would have matched it too, rendering the active link tiny and
+	   uppercase. Two meanings, one class name, one of them silently wrong. */
+	.at {
+		font-size: var(--fs-xs);
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 	}
 	nav ul {
 		list-style: none;
@@ -171,8 +202,19 @@
 		color: var(--text-muted);
 	}
 	.out {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+		min-height: var(--tap-min);
+		padding: var(--space-2);
+		border-radius: var(--radius-md);
 		font-size: var(--fs-sm);
+		font-weight: 600;
 		color: var(--accent);
+		text-decoration: none;
+	}
+	.out:hover {
+		background: var(--bg-subtle);
 	}
 
 	main {

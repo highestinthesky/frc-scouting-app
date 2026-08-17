@@ -1,4 +1,5 @@
 <script>
+	import Select from '../Select.svelte';
 	import Button from '$lib/components/Button.svelte';
 	// Manager: compose a reminder (broadcast or to one scout) and manage the
 	// ones already out there. The banner itself lives in the layout.
@@ -20,15 +21,11 @@
 	<p class="muted">Banner shows until dismissed, or 2 hours.</p>
 
 	<div class="reminder-form">
-		<label class="field">
-			<span class="label">Recipient</span>
-			<select bind:value={reminderTarget}>
-				<option value="">Everyone</option>
-				{#each reminderScouts as name}
-					<option value={name}>{name}</option>
-				{/each}
-			</select>
-		</label>
+		<Select
+			label="Recipient"
+			bind:value={reminderTarget}
+			options={[{ value: '', label: 'Everyone' }, ...reminderScouts.map((n) => ({ value: n, label: n }))]}
+		/>
 
 		<label class="field reminder-match">
 			<span class="label">Match (optional)</span>
@@ -117,7 +114,7 @@
 	/* ── manager: send reminder ─────────────────────────────────── */
 	.reminder-form {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		gap: var(--space-2);
 		align-items: end;
 	}

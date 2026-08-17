@@ -401,7 +401,27 @@ the window empty. And the breakpoints in use are `28rem`, `40rem`,
 `47.9375rem` and `600px` — four scales, no system, which is why the layout does
 not meaningfully differ between a phone and a laptop.
 
-### v0.72 — names and routes tell the truth
+### v0.72 — the self-contained fixes ✅
+
+*Taken first because they depend on nothing else in the series — notes 6 and 2,
+plus the mobile overflow that turned up while verifying them. Doing these ahead
+of the IA work costs nothing: none of it gets redone when routes move.*
+
+- **Studio drops the app shell.** No global bar, no tab strip. The tab bar was a
+  trapdoor: one tap left Studio with nothing offering a way back. Studio now
+  carries its own chrome — the event it is operating on, and one exit that is a
+  real control and is never hidden on a phone.
+- **Every native `<select>` is gone** — nine of them across seven files, not the
+  one that was noticed. `Select.svelte` styles the real element rather than
+  rebuilding a listbox out of divs: the closed state is ours, the open list stays
+  the platform's, so keyboard navigation, type-ahead and the phone wheel picker
+  keep working.
+- **The app no longer scrolls sideways on a phone.** Eleven grid tracks used a
+  bare `1fr`, which refuses to shrink below its content's min-content width — two
+  text inputs held the Accounts form wider than a 375px viewport. Now
+  `minmax(0, 1fr)`, and that form collapses to one column.
+
+### v0.73 — names and routes tell the truth
 
 *Notes 4, 5, 9. Nothing else in the series is safe to build until this lands.*
 
@@ -417,7 +437,7 @@ not meaningfully differ between a phone and a laptop.
 - Redirects from the old paths. A scout with a bookmark or a cached PWA must not
   get a 404 the morning of an event.
 
-### v0.73 — the shell earns its space
+### v0.74 — the shell earns its space
 
 *Notes 3, 10, 11.*
 
@@ -434,7 +454,7 @@ not meaningfully differ between a phone and a laptop.
   no thumbs near the bottom.
 - Verified at 320 / 375 / 414 / 768 / 1280, not just "looks fine on my laptop".
 
-### v0.74 — Studio becomes its own application
+### v0.75 — Studio's remaining chrome
 
 *Note 6.*
 
@@ -445,7 +465,7 @@ not meaningfully differ between a phone and a laptop.
 - Studio's own chrome carries the event it is operating on, because "which event
   am I editing" is the one thing that must never be ambiguous there.
 
-### v0.75 — identity without typing
+### v0.76 — identity without typing
 
 *Note 7. The deepest change in the series; it touches the join key.*
 
@@ -460,7 +480,7 @@ not meaningfully differ between a phone and a laptop.
 - Requires a migration and an RLS suite pass; the fingerprint invariant in
   `CLAUDE.md` is the thing most at risk here and gets an assertion.
 
-### v0.76 — reminders rebuilt
+### v0.77 — reminders rebuilt
 
 *Note 8. Sequenced after v0.75 because reminders target people.*
 
@@ -470,7 +490,7 @@ not meaningfully differ between a phone and a laptop.
 - Expiry and delivery state are visible: a manager should be able to see that a
   reminder was seen, or that it aged out unread.
 
-### v0.77 — the component and visual pass
+### v0.78 — the component and visual pass
 
 *Notes 2 and 12. Last, deliberately: styling a layout that is about to move is
 wasted work.*

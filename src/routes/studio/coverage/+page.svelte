@@ -253,7 +253,7 @@
 	}
 	.gaps li {
 		display: grid;
-		grid-template-columns: 3.5rem 1fr 3rem;
+		grid-template-columns: 3.5rem minmax(0, 1fr) 3rem;
 		align-items: center;
 		gap: var(--space-2);
 		padding: var(--space-2);

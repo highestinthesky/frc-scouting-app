@@ -9,6 +9,7 @@
 	import { rowScout, sameScout, scoutRef } from '$lib/scout-identity.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
+	import Select from '$lib/components/Select.svelte';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -355,18 +356,23 @@
 				placeholder="Find team #"
 				bind:value={teamQuery}
 			/>
-			<select class="sort-select" bind:value={sortBy} aria-label="Sort teams by">
-				<option value="entries">Most entries</option>
-				<option value="recent">Most recent</option>
-				{#each METRIC_FIELDS as m (m.key)}
-					<option value="metric:{m.key}">
-						{m.higherIsBetter === false ? 'Fewest' : 'Best'} {m.label.toLowerCase()}
-					</option>
-				{/each}
-				<option value="auto-paths">Most auto paths</option>
-				<option value="breakdowns">Most breakdowns</option>
-				<option value="defense">Most defense notes</option>
-			</select>
+			<div class="sort-select">
+				<Select
+					label="Sort by"
+					bind:value={sortBy}
+					options={[
+						{ value: 'entries', label: 'Most entries' },
+						{ value: 'recent', label: 'Most recent' },
+						...METRIC_FIELDS.map((m) => ({
+							value: `metric:${m.key}`,
+							label: `${m.higherIsBetter === false ? 'Fewest' : 'Best'} ${m.label.toLowerCase()}`
+						})),
+						{ value: 'auto-paths', label: 'Most auto paths' },
+						{ value: 'breakdowns', label: 'Most breakdowns' },
+						{ value: 'defense', label: 'Most defense notes' }
+					]}
+				/>
+			</div>
 			<div class="toolbar-btns">
 				<a class="btn secondary" href="{base}/insights/compare/">Compare</a>
 				<a class="btn secondary" href="{base}/insights/picklist/">Picklist</a>
@@ -653,7 +659,7 @@
 	}
 
 	/* ── stats grid ───────────────────────────────────── */
-	.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+	.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
 	.stat {
 		background: var(--bg-subtle);
 		border: 1px solid var(--border);
@@ -1044,7 +1050,7 @@
 
 	/* ── responsive ───────────────────────────────────── */
 	@media (max-width: 600px) {
-		.stats { grid-template-columns: repeat(2, 1fr); }
+		.stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 		.search { max-width: 100%; flex-basis: 100%; }
 		.toolbar-btns { margin-left: 0; }
 	}

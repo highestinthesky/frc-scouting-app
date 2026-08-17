@@ -1,4 +1,5 @@
 <script>
+	import Select from '../Select.svelte';
 	// Manager taps "Edit" on a preview row or a coverage conflict to open this.
 	// Shows both alliances, who is effectively watching each team (override if
 	// there is one, otherwise the base assignment), and an override editor.
@@ -114,24 +115,20 @@
 
 				<!-- Add an override for this match. -->
 				<div class="mb-form">
-					<label class="mb-field">
-						<span class="mb-label">Scout</span>
-						<select bind:value={draft.scout}>
-							<option value="">…</option>
-							{#each reminderScouts as name}
-								<option value={name}>{name}</option>
-							{/each}
-						</select>
-					</label>
-					<label class="mb-field">
-						<span class="mb-label">Watches team</span>
-						<select bind:value={draft.team}>
-							<option value="">…</option>
-							{#each [...teamsRed, ...teamsBlue] as t}
-								<option value={String(t)}>{t}</option>
-							{/each}
-						</select>
-					</label>
+					<div class="mb-field">
+						<Select
+							label="Scout"
+							bind:value={draft.scout}
+							options={[{ value: '', label: 'Choose a scout' }, ...reminderScouts.map((n) => ({ value: n, label: n }))]}
+						/>
+					</div>
+					<div class="mb-field">
+						<Select
+							label="Watches team"
+							bind:value={draft.team}
+							options={[{ value: '', label: 'Choose a team' }, ...[...teamsRed, ...teamsBlue].map((t) => ({ value: String(t), label: String(t) }))]}
+						/>
+					</div>
 					<!-- Wrapped rather than styled through a class prop: a parent's
 					     scoped selector cannot reach a child component's element,
 					     and Svelte does not warn about it because it can see the
@@ -343,7 +340,7 @@
 	}
 	.mb-form {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		gap: var(--space-2);
 		align-items: end;
 		margin-top: var(--space-2);

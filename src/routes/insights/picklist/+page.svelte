@@ -756,7 +756,7 @@
 	.scored li {
 		counter-increment: rank;
 		display: grid;
-		grid-template-columns: auto 1fr auto auto auto;
+		grid-template-columns: auto minmax(0, 1fr) auto auto auto;
 		align-items: center;
 		gap: var(--space-2);
 		padding: var(--space-2);

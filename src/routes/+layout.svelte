@@ -75,6 +75,21 @@
 	const onRegisterRoute = $derived(isActive('/register'));
 	const onPublicRoute = $derived(PUBLIC_ROUTES.some((r) => isActive(r)));
 
+	/**
+	 * Studio runs without the app shell.
+	 *
+	 * It is a separate application that happens to share a deployment, and the
+	 * global tab bar was a trapdoor out of it: one tap dropped you into Home with
+	 * nothing offering a way back. A surface with its own navigation does not want
+	 * a second navigation arguing with it.
+	 *
+	 * The shell is hidden rather than the route being moved out, because a second
+	 * deployment would need its own auth — "signed into the scouting app but not
+	 * the studio" is not a problem to have at a competition. Studio's own sidebar
+	 * carries the way out.
+	 */
+	const inStudio = $derived(isActive('/studio'));
+
 	$effect(() => {
 		if (auth.loading || !session.loaded) return;
 		// A signed-in user never needs /login. A complete account never needs
@@ -215,6 +230,10 @@
 	</main>
 {:else if !session.isConfigured}
 	<SessionSetup />
+{:else if inStudio}
+	<!-- No app bar, no tab bar, no reminder banner. Studio owns its whole
+	     viewport and supplies its own chrome and its own exit. -->
+	{@render children()}
 {:else}
 	<header class="app-bar">
 		<div class="app-bar-inner">
