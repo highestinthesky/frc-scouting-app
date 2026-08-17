@@ -39,7 +39,7 @@ export async function listReminders(eventCode) {
 	const { data, error } = await client
 		.from('reminders')
 		.select('id, scout_name, profile_id, match_number, message, author, created_at, expires_at')
-		.eq('session_id', sid)
+		.eq('event_id', sid)
 		.order('created_at', { ascending: false });
 	if (error) throw mapErr(error, 'load reminders');
 	const nowIso = new Date().toISOString();
@@ -68,8 +68,6 @@ export async function createReminder(eventCode, opts) {
 	const client = createSupabaseClient(sid);
 	const target = reminderTarget(opts.scoutName, opts.roster);
 	const row = {
-		session_id: sid,
-		// Same uuid, both columns — see the expand note in sync.svelte.js.
 		event_id: sid,
 		event_code: code,
 		...target,

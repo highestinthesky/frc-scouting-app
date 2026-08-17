@@ -28,13 +28,13 @@ const ctx = { sessionId: 'sid-1', eventCode: 'evt', roster };
 {
 	const [row] = assignmentRows([{ scout_name: 'Ning', team_number: 3419 }], ctx);
 	ok('an assignment carries the account', row.profile_id === 'u1');
-	// Both columns, same value, for the length of 0019's expand window. Dropping
-	// either one silently halves which policy path can permit the write:
-	// session_id carries the pre-0019 policies, event_id the membership ones.
+	// One key since 0020. This asserted both columns during 0019's expand window;
+	// session_id is gone from the schema now, so asserting it would pin a column
+	// that no longer exists.
 	ok('an assignment carries the event id', row.event_id === 'sid-1', String(row.event_id));
-	ok('and still carries session_id beside it', row.session_id === 'sid-1');
+	ok('and carries no session_id', !('session_id' in row));
 	ok('an assignment still carries the name', row.scout_name === 'Ning');
-	ok('an assignment carries the event scope', row.session_id === 'sid-1' && row.event_code === 'evt');
+	ok('an assignment carries the event scope', row.event_id === 'sid-1' && row.event_code === 'evt');
 	ok('the team number is a number', row.team_number === 3419);
 
 	// The whole point: this is the column 0010 added and nothing filled.

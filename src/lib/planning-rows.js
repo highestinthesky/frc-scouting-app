@@ -38,8 +38,6 @@ export function refFor(name, roster) {
 export function assignmentRows(rows, ctx) {
 	return (rows ?? [])
 		.map((r) => ({
-			session_id: ctx.sessionId,
-			// Both columns during 0019's expand window; same value.
 			event_id: ctx.sessionId,
 			event_code: ctx.eventCode,
 			...identityFields(refFor(r.scout_name, ctx.roster)),
@@ -57,8 +55,6 @@ export function assignmentRows(rows, ctx) {
 export function overrideRows(rows, ctx) {
 	return (rows ?? [])
 		.map((r) => ({
-			session_id: ctx.sessionId,
-			// Both columns during 0019's expand window; same value.
 			event_id: ctx.sessionId,
 			event_code: ctx.eventCode,
 			match_number: Number(r.match_number),

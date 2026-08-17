@@ -170,7 +170,7 @@ export async function syncWeights(eventCode, opts = {}) {
 		const { data, error } = await client
 			.from('picklist_prefs')
 			.select('weights, updated_at')
-			.eq('session_id', sid)
+			.eq('event_id', sid)
 			.maybeSingle();
 		// A missing table means migration 0009 is not applied. Weights stay
 		// local rather than the page erroring; the list is the important part.
@@ -192,14 +192,12 @@ export async function syncWeights(eventCode, opts = {}) {
 			const client = createSupabaseClient(sid);
 			const { error } = await client.from('picklist_prefs').upsert(
 				{
-					session_id: sid,
-					// Same uuid, both columns — see the expand note in sync.svelte.js.
 					event_id: sid,
 					event_code: code,
 					weights: mine.weights,
 					updated_by: opts.updatedBy ?? null
 				},
-				{ onConflict: 'session_id' }
+				{ onConflict: 'event_id' }
 			);
 			if (!error) await db.settings.put({ key: weightsKey(code), value: { ...mine, pushed: true } });
 		} catch {
@@ -230,7 +228,7 @@ export async function pull(eventCode) {
 	const { data, error } = await client
 		.from('picklist')
 		.select('team_number, status, rank, note, updated_at')
-		.eq('session_id', sid);
+		.eq('event_id', sid);
 	if (error) throw error;
 
 	const remote = (data ?? []).map((r) => ({
@@ -296,7 +294,7 @@ export async function push(eventCode, { updatedBy } = {}) {
 		const { error } = await client
 			.from('picklist')
 			.delete()
-			.eq('session_id', sid)
+			.eq('event_id', sid)
 			.in('team_number', tombstones.map((r) => r.teamNumber));
 		if (error) throw error;
 		// Confirmed gone on the server, so the tombstone has done its job.
@@ -307,8 +305,6 @@ export async function push(eventCode, { updatedBy } = {}) {
 	if (live.length > 0) {
 		const { error } = await client.from('picklist').upsert(
 			live.map((r) => ({
-				session_id: sid,
-				// Same uuid, both columns — see the expand note in sync.svelte.js.
 				event_id: sid,
 				event_code: code,
 				team_number: r.teamNumber,
@@ -317,7 +313,7 @@ export async function push(eventCode, { updatedBy } = {}) {
 				note: r.note,
 				updated_by: updatedBy ?? null
 			})),
-			{ onConflict: 'session_id,team_number' }
+			{ onConflict: 'event_id,team_number' }
 		);
 		if (error) throw error;
 		await db.picklist.bulkPut(live.map((r) => ({ ...r, pushedAt: stamp })));

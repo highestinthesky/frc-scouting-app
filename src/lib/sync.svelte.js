@@ -8,7 +8,7 @@
 // UUID. Two devices typing the same event code share data; switching events
 // is just changing the event code field. Push and pull are both keyed off
 // the current event code, hashed deterministically into the UUID-shaped
-// session_id our Postgres schema expects.
+// event id our Postgres schema expects.
 //
 // IndexedDB stays the source of truth. This module just keeps two ledgers in
 // sync: the local Dexie `entries` table and the cloud `entries` row set
@@ -80,7 +80,7 @@ let cachedClientId = null;
 let ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
 
 /**
- * Cache of Supabase clients keyed by session_id. Each unique event we
+ * Cache of Supabase clients keyed by event id. Each unique event we
  * push to gets its own client (because the x-session-id header is set
  * at construction time). Cheap to keep around.
  */
@@ -285,12 +285,8 @@ async function pushOutbox() {
 		if (!sid) continue;
 		const client = clientFor(sid);
 		const row = {
-			// Both columns, same value, for as long as 0019's expand window lasts.
-			// session_id still carries the pre-0019 policies and event_id carries
-			// the membership ones, so writing both means either path can permit the
-			// row and neither deploy has to be simultaneous. The contract migration
-			// drops session_id and this becomes one line.
-			session_id: sid,
+			// One key. This was a dual write during 0019's expand window; 0020
+			// dropped session_id and the client dropped it in the same commit.
 			event_id: sid,
 			event_code: local.eventCode,
 			match_number: local.matchNumber,
@@ -390,7 +386,7 @@ async function pushUpdate(client, local, payloads) {
 			.single();
 		if (insErr) {
 			if (insErr.code === '23505') {
-				const twin = await findRemoteTwin(client, payloads.update.session_id, local);
+				const twin = await findRemoteTwin(client, payloads.update.event_id, local);
 				if (twin?.id) {
 					await markEntrySynced(local.id, twin.id, twin.submitted_by);
 					return { clean: false, submittedBy: twin.submitted_by };
@@ -409,7 +405,7 @@ async function findRemoteTwin(client, sid, local) {
 	const { data } = await client
 		.from('entries')
 		.select('id, submitted_by')
-		.eq('session_id', sid)
+		.eq('event_id', sid)
 		.eq('event_code', local.eventCode)
 		.eq('match_number', local.matchNumber)
 		.eq('team_number', local.teamNumber)
@@ -429,7 +425,7 @@ async function pullInbox() {
 	let q = client
 		.from('entries')
 		.select('*')
-		.eq('session_id', syncState.sessionId)
+		.eq('event_id', syncState.sessionId)
 		.order('updated_at', { ascending: true });
 	if (lastSeenAt) q = q.gt('updated_at', lastSeenAt);
 	const { data, error } = await q;

@@ -8,6 +8,7 @@
 	import { session } from '$lib/session.svelte.js';
 	import { rowScout, sameScout, scoutRef } from '$lib/scout-identity.js';
 	import { syncState } from '$lib/sync.svelte.js';
+	import { auth } from '$lib/auth.svelte.js';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -314,6 +315,18 @@
 		{/if}
 	</header>
 
+	{#if auth.isManager}
+		<!-- Studio opens in a new tab deliberately. It is the laptop-at-a-table
+		     surface and this page is read on a phone between matches; sending
+		     someone there in place of Insights takes away the thing they were
+		     using. target=_blank without rel=noopener would hand the new tab a
+		     window.opener reference to this one. -->
+		<a class="studio-link" href="{base}/studio/" target="_blank" rel="noopener noreferrer">
+			Open Studio
+			<span class="studio-hint">Staff the event, check coverage</span>
+		</a>
+	{/if}
+
 	{#if loading}
 		<p class="muted">Loading…</p>
 
@@ -583,6 +596,27 @@
 </main>
 
 <style>
+	.studio-link {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-height: var(--tap-min);
+		justify-content: center;
+		padding: var(--space-3);
+		margin-bottom: var(--space-4);
+		background: var(--accent-soft);
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-lg);
+		color: var(--text-primary);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.studio-hint {
+		font-weight: 400;
+		font-size: var(--fs-xs);
+		color: var(--text-muted);
+	}
+
 	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
 	 * design-system: design.md · designed-as-app
 	 *

@@ -186,7 +186,7 @@ export async function publishAlliances(eventCode, alliances, opts = {}) {
 		const { error } = await client
 			.from('schedules')
 			.update({ alliances, alliances_fetched_at: new Date().toISOString() })
-			.eq('session_id', sid);
+			.eq('event_id', sid);
 		return !error;
 	} catch (_e) {
 		return false;
@@ -215,7 +215,7 @@ export async function pullAlliances(eventCode) {
 		const { data, error } = await client
 			.from('schedules')
 			.select('alliances, alliances_fetched_at')
-			.eq('session_id', sid)
+			.eq('event_id', sid)
 			.maybeSingle();
 		if (error || !data || !Array.isArray(data.alliances)) return null;
 		if (data.alliances.length === 0 && !data.alliances_fetched_at) return null;
@@ -288,8 +288,6 @@ export async function publishSchedule(eventCode, matches, opts = {}) {
 	const fetchedAt = new Date().toISOString();
 	const tbaEventKey = (opts.tbaEventKey ?? '').trim().toLowerCase() || null;
 	const baseRow = {
-		session_id: sid,
-		// Same uuid, both columns — see the expand note in sync.svelte.js.
 		event_id: sid,
 		event_code: code,
 		matches,
@@ -302,9 +300,9 @@ export async function publishSchedule(eventCode, matches, opts = {}) {
 	// not-yet-migrated database.
 	let { error } = await client
 		.from('schedules')
-		.upsert({ ...baseRow, tba_event_key: tbaEventKey }, { onConflict: 'session_id' });
+		.upsert({ ...baseRow, tba_event_key: tbaEventKey }, { onConflict: 'event_id' });
 	if (error && isMissingColumn(error, 'tba_event_key')) {
-		({ error } = await client.from('schedules').upsert(baseRow, { onConflict: 'session_id' }));
+		({ error } = await client.from('schedules').upsert(baseRow, { onConflict: 'event_id' }));
 	}
 	if (error) throw mapSupabaseError(error, 'publish schedule');
 	// Refresh the local cache too — saves a round-trip on the next form load.
@@ -341,13 +339,13 @@ export async function pullSchedule(eventCode) {
 	({ data, error } = await client
 		.from('schedules')
 		.select('matches, fetched_at, fetched_by, tba_event_key')
-		.eq('session_id', sid)
+		.eq('event_id', sid)
 		.maybeSingle());
 	if (error && isMissingColumn(error, 'tba_event_key')) {
 		({ data, error } = await client
 			.from('schedules')
 			.select('matches, fetched_at, fetched_by')
-			.eq('session_id', sid)
+			.eq('event_id', sid)
 			.maybeSingle());
 	}
 	if (error) throw mapSupabaseError(error, 'pull schedule');
@@ -381,7 +379,7 @@ export async function getPublishedTbaEventKey(eventCode) {
 		const { data, error } = await client
 			.from('schedules')
 			.select('tba_event_key')
-			.eq('session_id', sid)
+			.eq('event_id', sid)
 			.maybeSingle();
 		if (error) return null;
 		return data?.tba_event_key ?? null;
@@ -409,7 +407,7 @@ export async function pullScheduleIfStale(eventCode) {
 	const { data: head, error: headErr } = await client
 		.from('schedules')
 		.select('fetched_at')
-		.eq('session_id', sid)
+		.eq('event_id', sid)
 		.maybeSingle();
 	if (headErr) throw mapSupabaseError(headErr, 'check schedule');
 	if (!head) return false;

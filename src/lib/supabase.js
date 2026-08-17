@@ -16,13 +16,30 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-export const SUPABASE_URL = 'https://hhvpkgwgkuiemxyarsuk.supabase.co';
+// Production by default, overridable at BUILD time for local work.
+//
+// The values are intentionally public — the anon key is a JWT scoped to the
+// `anon` role and, since 0020, that role can reach nothing at all.
+//
+// The override exists because signed-in surfaces could not be exercised
+// locally: the dev server pointed at production, so testing Studio or the event
+// picker meant having a production password. `import.meta.env` is inlined by
+// Vite at build time, so a missing variable falls back to production and a
+// deployed bundle is unchanged.
+//
+//   echo 'VITE_SUPABASE_URL=http://127.0.0.1:54321' >> .env.local
+//   echo 'VITE_SUPABASE_ANON_KEY=<supabase status ANON_KEY>' >> .env.local
+//
+// .env.local is gitignored by SvelteKit's default template.
+export const SUPABASE_URL =
+	import.meta.env?.VITE_SUPABASE_URL || 'https://hhvpkgwgkuiemxyarsuk.supabase.co';
 export const SUPABASE_ANON_KEY =
+	import.meta.env?.VITE_SUPABASE_ANON_KEY ||
 	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhodnBrZ3dna3VpZW14eWFyc3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NzM3NjAsImV4cCI6MjA5MzQ0OTc2MH0.rDd0ZX3KxJ5SXKjNr11rn1QXS1_9t2cLEOaOnbcClKs';
 
 /**
  * Derive a deterministic UUID-shaped session id from an event code so the
- * Postgres `session_id uuid` column doesn't have to change. The same event
+ * Postgres `event_id uuid` column doesn't have to change. The same event
  * code always produces the same UUID; different codes produce different
  * UUIDs.
  *

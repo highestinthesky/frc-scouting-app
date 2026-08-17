@@ -17,14 +17,12 @@
 // one. That is the model change working; a scout who is not on an event should
 // not be silently writing into it.
 //
-// ─── expand-window behaviour ───────────────────────────────────────────────
+// ─── one key ───────────────────────────────────────────────────────────────
 //
-// 0019 is an expand migration: session_id still exists and still carries its old
-// policies. So writes set BOTH columns to the same uuid, and the client keeps
-// sending x-session-id. Old policy path and new membership path then both permit
-// the same rows, which is what lets this ship without the database and the
-// bundle landing in the same instant. The contract migration drops session_id
-// and this becomes the only key.
+// Through 0019's expand window writes carried both event_id and session_id, so
+// the old policy path and the new membership path could each permit the same
+// row and neither deploy had to be simultaneous. 0020 closed that: session_id is
+// gone from all eight tables and this is the only key there is.
 
 import { getAuthClient } from './supabase.js';
 import { normalizeCode, sortEvents } from './event-rules.js';
@@ -162,7 +160,13 @@ export async function setEventArchived(eventId, archived = true) {
 export async function eventRoster(eventId) {
 	const { data, error } = await getAuthClient()
 		.from('event_scouts')
-		.select('profile_id, added_at, profiles(id, username, first_name, last_name, role)')
+		// The FK is named explicitly because event_scouts has TWO references to
+		// profiles — profile_id and added_by — and a bare `profiles(...)` embed is
+		// ambiguous. PostgREST refuses it outright: "more than one relationship was
+		// found", which surfaced as an empty roster with an error underneath it.
+		.select(
+			'profile_id, added_at, profiles!event_scouts_profile_id_fkey(id, username, first_name, last_name, role)'
+		)
 		.eq('event_id', eventId);
 	if (error) throw new Error(`Could not load the event roster: ${error.message}`);
 	return (data ?? []).map((r) => ({

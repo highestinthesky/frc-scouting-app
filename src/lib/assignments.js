@@ -25,7 +25,7 @@ import { assignmentRows, overrideRows } from './planning-rows.js';
 /**
  * Manager-only: replace the entire assignment list for an event with the
  * provided rows. Inside one transaction: delete everything for this
- * session_id, then insert the new rows.
+ * event, then insert the new rows.
  *
  * @param {string} eventCode
  * @param {{scout_name: string, team_number: number}[]} rows
@@ -47,7 +47,7 @@ export async function replaceAssignments(eventCode, rows, opts) {
 	const { error: delErr } = await client
 		.from('assignments')
 		.delete()
-		.eq('session_id', sid);
+		.eq('event_id', sid);
 	if (delErr) throw mapErr(delErr, 'clear assignments');
 
 	if (cleaned.length === 0) return 0;
@@ -72,7 +72,7 @@ export async function listAssignments(eventCode) {
 	const { data, error } = await client
 		.from('assignments')
 		.select('id, scout_name, profile_id, team_number')
-		.eq('session_id', sid)
+		.eq('event_id', sid)
 		.order('scout_name', { ascending: true })
 		.order('team_number', { ascending: true });
 	if (error) throw mapErr(error, 'load assignments');
@@ -154,7 +154,7 @@ export async function listOverrides(eventCode) {
 	const { data, error } = await client
 		.from('assignment_overrides')
 		.select('id, match_number, scout_name, profile_id, team_number')
-		.eq('session_id', sid)
+		.eq('event_id', sid)
 		.order('match_number', { ascending: true });
 	if (error) throw mapErr(error, 'load overrides');
 	return data ?? [];
@@ -215,7 +215,7 @@ export async function replaceOverrides(eventCode, rows, opts) {
 	const { error: delErr } = await client
 		.from('assignment_overrides')
 		.delete()
-		.eq('session_id', sid);
+		.eq('event_id', sid);
 	if (delErr) throw mapErr(delErr, 'clear overrides');
 
 	if (cleaned.length === 0) return 0;
