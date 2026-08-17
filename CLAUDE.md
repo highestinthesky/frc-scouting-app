@@ -63,10 +63,20 @@ passphrase and every write silently fails.
 turning it back off would be the dangerous move, because the database no longer
 has an anonymous path and the UI would offer writes that all fail.
 
-**`0020` is applied locally and NOT to production.** Every earlier migration was
-backwards-compatible with the deployed bundle; this one is not, so it has to
-land *after* a push, not before. Applying it to a project whose live site is
-still running the old client breaks that site immediately.
+**`0020` and `0021` are applied to production** (2026-08-17), and how `0020`
+got there is the lesson. It had to land *after* a push, so the client shipped
+first — and then the migration was forgotten. For three days production had a
+client that no longer sent `session_id` and eight tables where the column was
+still `NOT NULL`, so every write failed a not-null constraint.
+
+It surfaced as "syncing is broken" with one telling detail: dragging a scout
+onto an event still worked. `event_scouts` is a `0019` table with no
+`session_id` — the one write path that did not touch the broken column, and the
+control case that located the cause.
+
+**A client change that depends on a migration must not be pushed before the
+migration is on production.** That ordering was already written down here. It
+failed anyway, because nothing enforced it and the two halves were days apart.
 
 **The `entries` dedupe index is a content fingerprint** —
 `[eventCode+matchNumber+teamNumber+scoutName+createdAt]`. Sync relies on it

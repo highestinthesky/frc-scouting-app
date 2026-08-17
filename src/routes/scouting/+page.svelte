@@ -1,11 +1,12 @@
 <script>
+	import MyAssignments from '$lib/components/scouting/MyAssignments.svelte';
 	import { onMount } from 'svelte';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { base } from '$app/paths';
-	import { listEntries, deleteEntry } from '$lib/db.js';
+	import { listEntries } from '$lib/db.js';
 	import { session } from '$lib/session.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
-	import { syncState } from '$lib/sync.svelte.js';
+	import { syncState, withdrawEntry } from '$lib/sync.svelte.js';
 	import {
 		getCachedSchedule,
 		qualMatches,
@@ -113,15 +114,38 @@
 
 	// ── actions ────────────────────────────────────────────────────────────────
 
-	async function remove(id, summary) {
+	/**
+	 * Delete an entry.
+	 *
+	 * The old version called db.deleteEntry() and nothing else, and its own
+	 * confirmation said so: "A copy already synced to your team stays with them."
+	 * That was accurate and it was the bug — the row came back on the next pull,
+	 * or lived on every teammate's phone for the rest of the event.
+	 *
+	 * withdrawEntry() writes the tombstone first and removes the local row only if
+	 * that succeeds, so a refusal leaves the entry visibly present rather than
+	 * silently gone here and alive everywhere else.
+	 */
+	async function remove(entry, summary) {
+		const synced = Boolean(entry.remoteId);
 		const ok = await dialog.confirm({
 			title: 'Delete this entry?',
-			body: `${summary}\n\nIt is removed from this device. A copy already synced to your team stays with them.`,
+			body: synced
+				? `${summary}\n\nThis removes it for the whole team, not just this device. Only a manager of this event can do that.`
+				: `${summary}\n\nThis entry has not synced yet, so it only exists on this device.`,
 			confirmLabel: 'Delete',
 			danger: true
 		});
 		if (!ok) return;
-		await deleteEntry(id);
+		const res = await withdrawEntry(entry);
+		if (!res.ok) {
+			await dialog.confirm({
+				title: 'Not deleted',
+				body: res.message,
+				confirmLabel: 'OK'
+			});
+			return;
+		}
 		await refresh();
 	}
 </script>
@@ -171,6 +195,10 @@
 	<div class="top">
 		<div class="titles">
 			<h1>Scouting</h1>
+
+	<!-- Assignments first: what a scout is meant to record comes before the record
+	     of what they already did. -->
+	<MyAssignments />
 			{#if !loading && entries.length > 0}
 				<p class="pace">
 					{eventEntries.length}
@@ -207,7 +235,7 @@
 						<button
 							class="delete"
 							aria-label="Delete entry Q{e.matchNumber} · Team {e.teamNumber}"
-							onclick={() => remove(e.id, `Q${e.matchNumber} · Team ${e.teamNumber}`)}
+							onclick={() => remove(e, `Q${e.matchNumber} · Team ${e.teamNumber}`)}
 						>
 							×
 						</button>

@@ -415,6 +415,50 @@ async function findRemoteTwin(client, sid, local) {
 	return data;
 }
 
+/**
+ * Withdraw an entry for everyone, not just this phone.
+ *
+ * The delete button used to call db.deleteEntry() alone, which removed the row
+ * from IndexedDB and nowhere else — so it reappeared on the next pull, or
+ * survived on every other device for the rest of the event. There was no server
+ * path at all: `entries` has never had a DELETE policy, deliberately.
+ *
+ * Soft-deletes remotely first, then locally. That order matters: if the write
+ * fails the row is still here and the manager can see that nothing happened,
+ * where the reverse silently loses it locally while every teammate keeps it.
+ *
+ * A row that was never pushed has no remote half — deleting it locally IS the
+ * whole operation.
+ *
+ * @param {{id: number, remoteId?: string|null, eventCode: string}} entry
+ * @returns {Promise<{ok: true} | {ok: false, message: string}>}
+ */
+export async function withdrawEntry(entry) {
+	if (entry?.remoteId) {
+		const sid = await eventIdForCode(entry.eventCode);
+		if (!sid) {
+			return {
+				ok: false,
+				message: 'Not connected to this event, so it can only be removed from this device.'
+			};
+		}
+		const { error } = await clientFor(sid)
+			.from('entries')
+			.update({ deleted_at: new Date().toISOString() })
+			.eq('id', entry.remoteId);
+		if (error) {
+			// 42501 is the policy refusing it — a scout, or a manager who is not on
+			// this event. Say which rather than showing a Postgres code.
+			if (error.code === '42501' || /permission|policy/i.test(error.message)) {
+				return { ok: false, message: 'Only a manager of this event can delete an entry.' };
+			}
+			return { ok: false, message: error.message };
+		}
+	}
+	await deleteEntry(entry.id);
+	return { ok: true };
+}
+
 async function pullInbox() {
 	const client = clientFor(syncState.sessionId);
 	// Watermark on updated_at, not created_at. created_at never moves, so an
@@ -431,6 +475,21 @@ async function pullInbox() {
 	const { data, error } = await q;
 	if (error) throw error;
 	for (const remoteRow of data ?? []) {
+		// A withdrawn entry arrives as an ordinary changed row carrying a tombstone,
+		// which is the whole reason deletion is a stamp rather than a DELETE: a row
+		// that simply stopped being returned would be indistinguishable from one
+		// that had not changed, and every device holding it would keep it forever.
+		if (remoteRow.deleted_at) {
+			const local = await getEntryByRemoteId(remoteRow.id);
+			if (local) {
+				await deleteEntry(local.id);
+				syncState.inboundChanges += 1;
+			}
+			// The watermark still has to advance past it, or this row is re-fetched
+			// on every tick for the rest of the event.
+			lastSeenAt = remoteRow.updated_at ?? lastSeenAt;
+			continue;
+		}
 		const fields = {
 			eventCode: remoteRow.event_code,
 			matchNumber: remoteRow.match_number,

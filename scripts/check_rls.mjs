@@ -1073,6 +1073,86 @@ const scout2B = await clientFor(scout2, EVENT_B);
 	await sql('delete from public.events where id = any($1::uuid[])', [[eventId, otherEvent]]);
 }
 
+// ─── withdrawing an entry (0021) ────────────────────────────────────────────
+//
+// Deletion is a tombstone, not a DELETE, because the pull is a watermark on
+// updated_at: a row that stopped being returned is indistinguishable from one
+// that did not change. So the thing to assert is who may set `deleted_at` — and
+// the column grant is as load-bearing as the policy, because a column missing
+// from 0020's explicit UPDATE list is refused however permissive the policy is.
+{
+	const [{ n: before }] = await sql(
+		'select count(*)::int as n from public.entries where event_id = $1 and deleted_at is null',
+		[EVENT_A.id]
+	);
+	ok('there are live entries to withdraw', before > 0, `${before}`);
+
+	const target = (
+		await sql('select id from public.entries where event_id = $1 limit 1', [EVENT_A.id])
+	)[0].id;
+
+	// A scout may correct their own entry — that is the mistake they actually
+	// make — but withdrawing the record of a match is an event-operations call.
+	const { error: scoutKill } = await scoutA
+		.from('entries')
+		.update({ deleted_at: new Date().toISOString() })
+		.eq('id', target);
+	const [{ still }] = await sql(
+		'select (deleted_at is null) as still from public.entries where id = $1',
+		[target]
+	);
+	ok(
+		'a scout cannot withdraw an entry',
+		still === true,
+		scoutKill ? `denied (${scoutKill.code})` : 'UPDATE reported success'
+	);
+
+	const { error: mgrKill } = await managerA
+		.from('entries')
+		.update({ deleted_at: new Date().toISOString() })
+		.eq('id', target);
+	ok('a manager withdraws an entry', !mgrKill, mgrKill?.message);
+
+	const [{ gone }] = await sql(
+		'select (deleted_at is not null) as gone from public.entries where id = $1',
+		[target]
+	);
+	ok('and the tombstone is actually set', gone === true);
+
+	// The row survives, which is what lets the deletion propagate at all and what
+	// makes it undoable.
+	const [{ n: rows }] = await sql('select count(*)::int as n from public.entries where id = $1', [
+		target
+	]);
+	ok('the row is kept, not destroyed', rows === 1);
+
+	// A withdrawn row must free its fingerprint, or re-recording the same
+	// observation collides with the tombstone and sync adopts a dead row's id.
+	const dupe = await sql(
+		`select event_id, event_code, match_number, team_number, scout_name, created_at
+		   from public.entries where id = $1`,
+		[target]
+	);
+	const d = dupe[0];
+	let reinserted = null;
+	try {
+		await sql(
+			`insert into public.entries
+			   (event_id, event_code, match_number, team_number, alliance_color,
+			    scout_name, schema_version, created_at)
+			 values ($1, $2, $3, $4, 'red', $5, 3, $6)`,
+			[d.event_id, d.event_code, d.match_number, d.team_number, d.scout_name, d.created_at]
+		);
+	} catch (e) {
+		reinserted = e;
+	}
+	ok(
+		'the same observation can be recorded again after a withdrawal',
+		reinserted === null,
+		reinserted?.code
+	);
+}
+
 await reset();
 await db.end();
 

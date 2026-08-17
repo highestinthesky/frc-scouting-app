@@ -477,6 +477,28 @@ a peer of Scout and Schedule, it is a different application.
    Reduced-motion collapses the fly-by to a fade, and neither may steal focus
    from a form a scout is mid-way through filling in.
 
+7b. **Syncing, fixed at the root.** Reported as three symptoms — assignments not
+   reaching scouts, entries not deletable, dragging a scout onto an event working
+   fine. The last one was the control case that found the cause: `event_scouts`
+   is a table `0019` created, with no `session_id`; every OTHER table still had
+   `session_id NOT NULL` while the deployed client had stopped sending it. Every
+   write to the other eight was failing a not-null constraint.
+
+   `0020` was written to drop that column and was never applied, because it had
+   to land *after* a push and the push happened without it. Applied 2026-08-17;
+   every row preserved. **Do not push a client change that depends on a migration
+   before the migration is on production** — the ordering rule already in
+   `CLAUDE.md` failed here because nothing enforced it.
+
+   `0021` adds entry deletion as a tombstone rather than a DELETE, because the
+   pull is a watermark on `updated_at` and a vanished row is indistinguishable
+   from an unchanged one. Managers withdraw; the stamp propagates; the row is
+   kept so it can be undone and so the fingerprint stays honest.
+
+   Scouts can see their assignments again: `MyTeams` moved to Studio with the
+   rest of the manager page in v0.73 and Studio is manager-gated, so there was
+   nowhere for a scout to look. `MyAssignments` puts it back on `/scouting`.
+
 8. **The shell earns its space.** One breakpoint system replaces the four ad-hoc
    values (`28rem`, `40rem`, `47.9375rem`, `600px`). Desktop stops being a phone
    in the middle of a screen: content width becomes a per-surface decision — a
