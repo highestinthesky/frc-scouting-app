@@ -14,7 +14,7 @@
 	import { reminders } from '$lib/reminders.svelte.js';
 	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
 	import SessionSetup from '$lib/components/SessionSetup.svelte';
-	import ReminderBanner from '$lib/components/ReminderBanner.svelte';
+	import ReminderFlyby from '$lib/components/ReminderFlyby.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import Button from '$lib/components/Button.svelte';
 
@@ -292,7 +292,7 @@
 		</div>
 	{/if}
 
-	<ReminderBanner />
+	<ReminderFlyby />
 
 	{@render children()}
 {/if}
@@ -387,6 +387,11 @@
 		--dur-short: 240ms;
 		/* Height the bottom nav occupies on phones, so pages can reserve it. */
 		--nav-bottom-h: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+		/* The app bar's height, exposed the same way the bottom bar's is, so
+		   anything positioned against the top of the viewport can clear it instead
+		   of guessing. The reminder popup landed 12px under the bar because it
+		   guessed. Tracks the bar's own padding + line-height, plus the notch. */
+		--app-bar-h: calc(2.75rem + var(--space-2) * 2 + env(safe-area-inset-top, 0px));
 
 		/* App-bar palette. Deliberately NOT redefined in the dark block: the bar
 		   is identity, not a surface, and stays team purple in both themes. The

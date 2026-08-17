@@ -466,7 +466,7 @@ a peer of Scout and Schedule, it is a different application.
 6. **Nav labels equal the `<h1>` they open**, enforced by a check, because this
    drifted once and will drift again.
 
-7. **Reminders stop being a shelf.** Today they are a static stack under the nav
+7. **Reminders stop being a shelf. ✅** Today they are a static stack under the nav
    — up to three at once, pushing every page down, persisting until dismissed.
    That is not a notification, it is furniture. They become:
    - a **fly-by** that slides in, reads, and leaves on its own, for anything
