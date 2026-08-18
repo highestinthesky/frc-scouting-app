@@ -31,6 +31,7 @@
 	// the page beneath it.
 
 	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { reminders } from '$lib/reminders.svelte.js';
 	import { SvelteSet } from 'svelte/reactivity';
 
@@ -49,7 +50,27 @@
 	 */
 	const isActionable = (r) => Number.isFinite(r?.match_number) && r.match_number > 0;
 
-	const popups = $derived(list.filter(isActionable));
+	/**
+	 * The auto "you're up" popup is suppressed on Home, because Home IS that
+	 * popup: its first section is the next unrecorded match with a Record button,
+	 * which is the same fact and the same action. Interrupting a page to tell it
+	 * what it already says is the kind of duplication that teaches people to
+	 * dismiss popups without reading them — and the one that matters is the
+	 * MANAGER's, which Home does not put up front.
+	 *
+	 * Manager reminders still pop everywhere, including here.
+	 */
+	const onHome = $derived(
+		(() => {
+			const full = page.url.pathname;
+			const p = base && full.startsWith(base) ? full.slice(base.length) || '/' : full;
+			return p === '/home' || p.startsWith('/home/');
+		})()
+	);
+
+	const popups = $derived(
+		list.filter((r) => isActionable(r) && !(onHome && r.kind === 'auto'))
+	);
 
 	// New informational reminders fly by once each.
 	$effect(() => {

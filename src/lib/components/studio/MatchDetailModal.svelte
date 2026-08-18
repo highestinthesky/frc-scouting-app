@@ -94,7 +94,7 @@
 				</h3>
 				{#if matchOverrides.length === 0}
 					<p class="muted small">
-						No overrides for this match. Base assignments apply.
+						No overrides.
 					</p>
 				{:else}
 					<ul class="mb-overrides">

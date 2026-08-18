@@ -104,20 +104,15 @@
 	{#if !auth.signedIn}
 		<p class="note">
 			{#if session.eventCode}
-				Recording to <strong>{session.eventCode}</strong>. Entries are saved on this
-				phone and will sync once you sign in.
+				Recording to <strong>{session.eventCode}</strong>. Not signed in.
 			{:else}
-				Sign in to choose an event. You can still record — entries wait on this
-				phone until you do.
+				Sign in to choose an event.
 			{/if}
 		</p>
 	{:else if loading}
 		<p class="note">Loading your events…</p>
 	{:else if events.length === 0}
-		<p class="note">
-			You are not on any event yet. A manager adds you to one — until then there
-			is nothing to sync to.
-		</p>
+		Not on any event yet.
 	{:else}
 		<ul class="events">
 			{#each events as ev (ev.id)}

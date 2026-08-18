@@ -235,10 +235,7 @@
 	}
 </script>
 
-<PageHead
-	title="Event"
-	sub="Who can see and sync this event. Access is this list — knowing the event code grants nothing."
->
+<PageHead title="Event">
 	{#snippet actions()}
 		{#if events.length > 1}
 			<Select
@@ -367,10 +364,6 @@
 					{selected.archived_at ? 'Restore this event' : 'Archive this event'}
 				</Button>
 			{/snippet}
-			<p class="hint">
-				Archiving hides the event from pickers. Nothing recorded against it is
-				deleted, and restoring puts it back exactly as it was.
-			</p>
 		</Panel>
 	</div>
 {/if}

@@ -34,7 +34,6 @@
 
 <main>
 	<h1>FRC Scout</h1>
-	<p class="lede">Sign in to record matches for your team.</p>
 
 	<form onsubmit={submit}>
 		<label class="field">
@@ -72,12 +71,6 @@
 			</button>
 		</p>
 	{/if}
-
-	<p class="hint">
-		Sign in before you leave for an event. Once you have, the app keeps working
-		without signal — matches you record are saved on the phone and sent when
-		you are back in range.
-	</p>
 </main>
 
 <style>
@@ -108,11 +101,6 @@
 		margin: 0;
 		font-size: var(--fs-xl);
 		letter-spacing: -0.02em;
-	}
-	.lede {
-		margin: var(--space-1) 0 var(--space-6);
-		color: var(--text-muted);
-		font-size: var(--fs-md);
 	}
 	.field {
 		display: flex;
@@ -149,10 +137,4 @@
 		color: var(--text-muted);
 	}
 	.alt a { color: var(--accent); }
-	.hint {
-		margin-top: var(--space-6);
-		font-size: var(--fs-sm);
-		color: var(--text-faint);
-		line-height: 1.5;
-	}
 </style>

@@ -115,10 +115,7 @@
 	}
 </script>
 
-<Panel
-	title="Collect from a file"
-	hint="When the venue has no usable wifi, a scout saves a file from their sync panel and hands it over. Importing the same file twice is safe."
->
+<Panel title="Collect from a file">
 	<div class="row">
 		<label class="pickbtn">
 			<input

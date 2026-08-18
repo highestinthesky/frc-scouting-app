@@ -71,10 +71,7 @@
 	}
 </script>
 
-<Panel
-	title="Second opinion"
-	hint="Statbotics rates every team from match results, for free. What your scouts add is what it cannot see — so this shows where the two disagree, not what it says."
->
+<Panel title="Second opinion">
 	{#snippet actions()}
 		<Button variant="secondary" disabled={state === 'loading' || rows.length === 0} onclick={check}>
 			{state === 'loading' ? 'Checking…' : 'Check against Statbotics'}
@@ -82,10 +79,7 @@
 	{/snippet}
 
 	{#if state === 'idle'}
-		<p class="muted">
-			Compares your <strong>{metricLabel}</strong> ranking against theirs. Nothing is fetched until
-			you ask.
-		</p>
+		<p class="muted">Against your <strong>{metricLabel}</strong> ranking.</p>
 	{:else if state === 'loading'}
 		<p class="muted">Asking about {rows.length} {rows.length === 1 ? 'team' : 'teams'}…</p>
 	{:else}
@@ -110,7 +104,7 @@
 
 		{#if compared.length === 0}
 			<p class="muted">
-				Nothing to compare yet — a team needs both a rating and enough of your own data.
+				Nothing to compare.
 			</p>
 		{:else}
 			<Table dense>

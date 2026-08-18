@@ -165,10 +165,6 @@
 						<Button type="button" disabled={saving} onclick={adoptAccountName}>
 							Use my account name
 						</Button>
-					{:else}
-						<small class="help">
-							From your account. Your manager set it, so assignments reach you.
-						</small>
 					{/if}
 				</div>
 			{:else}
@@ -184,14 +180,6 @@
 			</Button>
 			{#if savedMsg}<small class="muted ok">{savedMsg}</small>{/if}
 		</form>
-	</section>
-
-	<section>
-		<h2>Schedule</h2>
-		<p class="muted">
-			Assignments and match schedule live on the
-			<a href="{base}/scouting/">Schedule</a> tab.
-		</p>
 	</section>
 
 	<section>

@@ -28,11 +28,11 @@
 	// picklist are all decisions a manager makes at a table — and keeping them in
 	// separate applications is what made the two clash.
 	const TABS = [
-		{ href: 'event', label: 'Event', hint: 'Who is on this event' },
-		{ href: 'schedule', label: 'Schedule', hint: 'Matches and assignments' },
-		{ href: 'coverage', label: 'Coverage', hint: 'What is being watched' },
-		{ href: 'insights', label: 'Insights', hint: 'Teams, compare, picklist' },
-		{ href: 'accounts', label: 'Accounts', hint: 'Who is on the team' }
+		{ href: 'event', label: 'Event' },
+		{ href: 'schedule', label: 'Schedule' },
+		{ href: 'coverage', label: 'Coverage' },
+		{ href: 'insights', label: 'Insights' },
+		{ href: 'accounts', label: 'Accounts' }
 	];
 
 	// The SECOND segment after /studio, not the last one — /studio/insights/team/254
@@ -85,7 +85,6 @@
 							class:on={current === tab.href}
 						>
 							<span class="label">{tab.label}</span>
-							<span class="hint">{tab.hint}</span>
 						</a>
 					</li>
 				{/each}
@@ -199,10 +198,8 @@
 	}
 	nav a {
 		display: flex;
-		flex-direction: column;
-		gap: 1px;
+		align-items: center;
 		min-height: var(--tap-min);
-		justify-content: center;
 		padding: var(--space-2) var(--space-3);
 		border-radius: var(--radius-md);
 		border-left: 3px solid transparent;
@@ -226,10 +223,6 @@
 	.label {
 		font-weight: 600;
 		font-size: var(--fs-md);
-	}
-	.hint {
-		font-size: var(--fs-xs);
-		color: var(--text-faint);
 	}
 	.out {
 		display: inline-flex;
@@ -285,9 +278,6 @@
 		}
 		nav li {
 			flex: 1 0 auto;
-		}
-		.hint {
-			display: none;
 		}
 		/* The exit stays visible on phones. It is the only way out of Studio, and
 		   hiding it was the bug: on a phone there was no route back at all. */

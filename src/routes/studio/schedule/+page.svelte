@@ -867,7 +867,6 @@
 <main>
 	<PageHead
 		title="Schedule"
-		sub="Fetch the schedule, assign who watches what, and tell them."
 	/>
 
 	{#if !session.eventCode}

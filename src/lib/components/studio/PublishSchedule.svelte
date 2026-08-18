@@ -21,15 +21,10 @@
 </script>
 
 <Panel title="Publish schedule">
-	<p class="muted">
-		Fetch from The Blue Alliance, then publish so scouts can pull it.
-	</p>
 
 	<label class="field">
 		<span class="label">TBA event key</span>
-		<small class="help">
-			e.g. <strong>2027nyny</strong>. Blank uses <code>{session.eventCode}</code>.
-		</small>
+		<small class="help">Blank uses <code>{session.eventCode}</code>.</small>
 		<input
 			type="text"
 			bind:value={tbaEventKey}
@@ -48,9 +43,6 @@
 
 	<label class="field">
 		<span class="label">TBA API key</span>
-		<small class="help">
-			Free at <strong>thebluealliance.com/account</strong> → Read API Keys.
-		</small>
 		<input
 			type="password"
 			bind:value={tbaApiKey}

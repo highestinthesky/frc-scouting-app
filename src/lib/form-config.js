@@ -82,7 +82,6 @@ export const METRIC_FIELDS = [
 		label: 'Auto scored',
 		type: 'counter',
 		max: 20,
-		help: 'Scoring actions completed during autonomous.'
 	},
 	{
 		key: 'teleopScored',
@@ -95,7 +94,6 @@ export const METRIC_FIELDS = [
 		label: 'Cycles',
 		type: 'counter',
 		max: 40,
-		help: 'Full pickup-to-score trips.'
 	},
 	{
 		key: 'missed',
@@ -116,7 +114,6 @@ export const NOTE_FIELDS = [
 		required: false,
 		suggestKey: 'autoPathing',
 		placeholder: 'e.g. Center start → left scoring',
-		help: 'Pick a path you used before, or type a new one.'
 	},
 	{
 		key: 'strengths',

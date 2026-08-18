@@ -207,18 +207,12 @@
 <svelte:head><title>Accounts · FRC Scout</title></svelte:head>
 
 <main>
-	<PageHead
-		title="Accounts"
-		sub="Create an account and hand over a password, or mint an invite and read out a code."
-	/>
+	<PageHead title="Accounts" />
 
 	{#if !auth.isManager}
 		<p class="muted">Only managers can see this page.</p>
 	{:else}
-		<Panel
-			title="Add someone"
-			hint="Type their name and email. You get a username and a one-time password to give them; they choose their own the first time they sign in."
-		>
+		<Panel title="Add someone">
 
 			<div class="new-grid">
 				<label class="field">
@@ -404,11 +398,7 @@
 			{/if}
 		</Panel>
 
-		<Panel
-			title="People"
-			hint="You can't change your own role — that stops a manager promoting themselves. Another manager or a super can."
-			flush={profiles.length > 0}
-		>
+		<Panel title="People" flush={profiles.length > 0}>
 			{#if profiles.length === 0}
 				<p class="muted">Nobody has registered yet.</p>
 			{:else}

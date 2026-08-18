@@ -54,7 +54,6 @@
 </script>
 
 <Panel title="Assign scouts">
-	<p class="muted">One row per scout. Saving replaces the whole list.</p>
 
 	{#if draftRestored}
 		<p class="draft-note">
@@ -99,18 +98,10 @@
 		</div>
 	{/each}
 	{#if rosterNames.length > 0}
-		<p class="muted small">
-			<strong>{linked}</strong> of {named} linked to an account. Pick from the
-			suggestions to link the rest — a linked name survives someone spelling it
-			differently on their phone.
-		</p>
+		<p class="muted small"><strong>{linked}</strong> of {named} linked to an account.</p>
 	{/if}
 
-	<p class="muted small">
-		Tap <strong>Auto-assign</strong> after assigning members to evenly distribute 
-		scouting taks across the team. There should be no schedule conflicts. 
-		You can edit the result before saving. Remember to publish. 
-	</p>
+	
 
 	{#if pendingOverrideCount > 0}
 		<p class="muted small pending-note">

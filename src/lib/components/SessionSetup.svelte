@@ -46,10 +46,7 @@
 		{:else}
 			<label class="field">
 				<span class="label">Event code</span>
-				<small class="help">
-					Whatever your team agreed on. Entries are saved on this phone; sign in
-					to send them to your team.
-				</small>
+				
 				<input bind:value={eventCode} required autocomplete="off" autocapitalize="none" placeholder="2026xxxx" />
 			</label>
 		{/if}
@@ -59,10 +56,7 @@
 		{:else}
 			<label class="field">
 				<span class="label">Your name</span>
-				<small class="help">
-					Match what the manager typed when assigning you teams — or
-					<a href="{base}/">sign in</a> and it fills itself.
-				</small>
+				
 				<input bind:value={scoutName} required autocomplete="name" placeholder="Your name" />
 			</label>
 		{/if}
@@ -95,7 +89,6 @@
 		margin-bottom: var(--space-5);
 	}
 	.label { font-weight: 600; }
-	.help { color: var(--text-faint); font-size: var(--fs-sm); }
 	input {
 		font: inherit;
 		padding: var(--space-3);

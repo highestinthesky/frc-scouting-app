@@ -145,10 +145,7 @@
 
 		<label class="field">
 			<span class="label">Username</span>
-			<small class="help">
-				How you sign in. Lowercase letters, numbers, dot, dash, underscore.
-				You can't change it later.
-			</small>
+			<small class="help">Cannot be changed later.</small>
 			<input
 				bind:value={username}
 				autocomplete="username"
@@ -172,11 +169,7 @@
 		{:else}
 			<label class="field">
 				<span class="label">Email</span>
-				<small class="help">
-					Where a password reset gets sent. Nothing else is ever sent here, and
-					you do not have to confirm it — but if it is wrong, nobody can get you
-					back into your account.
-				</small>
+				<small class="help">If this is wrong, nobody can get you back into your account.</small>
 				<input type="email" bind:value={email} autocomplete="email" required />
 			</label>
 

@@ -18,7 +18,6 @@
 </script>
 
 <Panel title="Send reminder">
-	<p class="muted">Banner shows until dismissed, or 2 hours.</p>
 
 	<div class="reminder-form">
 		<Select
@@ -83,7 +82,6 @@
 </Panel>
 
 <style>
-	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.field {
 		display: flex;
 		flex-direction: column;

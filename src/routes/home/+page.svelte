@@ -199,19 +199,13 @@
 					</Button>
 				</div>
 			{:else if !session.eventCode}
-				<p class="muted">
-					No event chosen yet. Pick one in <a href="{base}/settings/">Settings</a> and your
-					assignments appear here.
-				</p>
+				<p class="muted">No event chosen. <a href="{base}/settings/">Settings</a></p>
 			{:else if !myTeams.length}
-				<p class="muted">
-					Nothing assigned to you yet. A manager publishes assignments from Studio — nothing is
-					wrong on your end.
-				</p>
+				<p class="muted">Nothing assigned yet.</p>
 			{:else if !qmList.length}
 				<p class="muted">No schedule published for this event yet.</p>
 			{:else}
-				<p class="muted">You are caught up. Every match with one of your teams is recorded.</p>
+				<p class="muted">All caught up.</p>
 			{/if}
 		</section>
 

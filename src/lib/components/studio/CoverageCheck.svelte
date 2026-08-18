@@ -7,9 +7,6 @@
 </script>
 
 <Panel title="Coverage check">
-	<p class="muted">
-		Scouts assigned two or more teams in one match. Tap a match to override.
-	</p>
 	{#if coverageConflicts.length === 0}
 		<p class="muted small ok-inline">✓ No conflicts.</p>
 	{:else}

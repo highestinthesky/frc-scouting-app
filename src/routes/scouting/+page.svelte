@@ -218,7 +218,6 @@
 	{:else if entries.length === 0}
 		<div class="empty">
 			<p class="empty-title">No entries yet</p>
-			<p class="muted">Tap <strong>+ New</strong> to scout your first robot.</p>
 		</div>
 
 	{:else}
@@ -262,7 +261,6 @@
 					{/if}
 					<small class="muted timestamp">
 						{e.scoutName} · {new Date(e.createdAt).toLocaleString()}
-						<span class="edit-hint">Tap to edit</span>
 					</small>
 				</li>
 			{/each}
@@ -408,7 +406,6 @@
 		border-radius: var(--radius-lg);
 	}
 	.empty-title { margin: 0 0 var(--space-2); font-weight: 600; font-size: var(--fs-lg); }
-	.empty .muted { margin: 0; font-size: var(--fs-md); }
 
 	.entries {
 		list-style: none;
@@ -493,5 +490,4 @@
 		margin-top: var(--space-2);
 		font-size: var(--fs-xs);
 	}
-	.edit-hint { margin-left: var(--space-2); color: var(--text-faint); font-style: italic; }
 </style>

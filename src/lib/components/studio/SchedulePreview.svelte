@@ -10,7 +10,7 @@
 
 <Panel title="Schedule preview">
 	<p class="muted small">
-		{qmList.length} qual matches. Use this to spot-check the fetch before publishing.
+		{qmList.length} qual matches. 
 	</p>
 	{#if rollup.teamMatchesTotal > 0}
 		<div class="cov-rollup" aria-label="Scouting coverage so far">
