@@ -593,10 +593,10 @@ Build it or delete them; see the v0.74 section of `ROADMAP.md`.
 
 | | |
 |---|---|
-| `ROADMAP.md` | the single dependency-ordered plan; v0.75 is the current series |
+| `ROADMAP.md` | the single dependency-ordered plan; v0.75 current, v0.80 is team comparison |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/adr-002-spatial-observations.md` | interactive auto scouting, designed for v0.90 |
-| `docs/adr-003-boards.md` | the interactive graph builder, designed for v0.80 |
+| `docs/adr-003-boards.md` | the graph builder — designed, then REJECTED; kept for its decisions |
 | `supabase/README.md` | migration runbook, and repo state vs live state |
 | `design.md` | the locked design system |
 | `APP_OVERVIEW.md` | routes and modules |

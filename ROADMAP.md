@@ -821,18 +821,62 @@ each a small query over the entry set, in a grid that is rearranged by hand. Fou
 things must exist that do not — a chart renderer, a language for saying what to
 chart, a builder that speaks it, and a layout that survives being dragged.
 
-It is now **v0.80**, designed in full in `docs/adr-003-boards.md`.
+It was scheduled as v0.80 and then **cut entirely** — see below.
 
 #### Deliberately not in v0.75
 
-- **The graph builder**, now v0.80 — see above and `docs/adr-003-boards.md`.
+- **The graph builder** — cut, not deferred. `docs/adr-003-boards.md` is marked
+  REJECTED and kept for its decisions.
 - **Interactive auto scouting.** Designed in full in
-  `docs/adr-002-spatial-observations.md` and held for **v0.90**, not v0.80, and
-  the reason is a hard dependency rather than a preference: it needs a real field
-  image, which needs a real game, so it cannot be finished or honestly tested
-  before kickoff. Boards work on data the team already has, out of season. It
-  needs no native work — that was checked before deferring it, so it is not
-  waiting on the Apple waiver.
+  `docs/adr-002-spatial-observations.md` and held for **v0.90**: it needs a real
+  field image, which needs a real game, so it cannot be finished or honestly
+  tested before kickoff. It needs no native work — that was checked before
+  deferring it, so it is not waiting on the Apple waiver.
+
+## v0.80 — team against team
+
+Replaces the graph builder, at the request of the person who would have used it:
+
+> "I think that the board is unnecessary. Instead, better UI for team to team
+> comparisons are needed."
+
+That is the right call, and the reason is visible on the page that already exists.
+
+**The problem, on `/studio/insights/compare` today.** It renders each team as a
+CARD, side by side, with the metrics stacked inside. So comparing "auto scored"
+across four teams means reading three separate card bodies at three different
+vertical positions and holding the numbers in your head. The one job the page has
+— compare — is the thing its layout makes hardest.
+
+It is the same diagnosis v0.74 made about Insights, in the one place it was not
+fixed: cards are what you build when the data is one subject, and a comparison is
+never one subject.
+
+**The fix is a transpose.** Metrics become ROWS and teams become COLUMNS, so a
+row reads as one measure across every team, aligned, in tabular-nums. `Table`
+already exists and already scrolls in its own wrapper.
+
+Enumerated before any of it ships, per the working agreement:
+
+1. **Transpose the grid.** Metrics down, teams across. Best-in-row keeps the
+   existing leader mark; the mark moves from decorating a card to meaning "this
+   is the largest number in this row", which is a fact rather than a highlight.
+2. **A delta, not just a value.** The question is rarely "what is 254's cycle
+   count" — it is "how much better is 254 than 1114". Show the gap against the
+   row leader, or against a chosen baseline team.
+3. **Sample size stays visible per cell.** The existing page already shows
+   `avg of 4 · max 15 · ±1.1` and must keep doing it. A comparison that hides n
+   invites comparing a four-match mean with a one-match one.
+4. **Blank stays blank, per row.** A team with no reading for a metric leaves the
+   cell empty and is excluded from that row's leader calculation — not ranked
+   last. The `disagreements()` helper added in v0.75 already establishes this
+   shape at the ranking layer.
+5. **Reachable from where the question is asked.** Selecting rows in the Insights
+   table and pressing Compare, rather than typing team numbers into a box.
+
+**Deliberately not in v0.80:** charts of any kind. If the transposed table is
+still not enough, that is the evidence a chart is needed — and ADR-003 is where
+the thinking already is.
 - **Pit scouting**, deferred by choice: it wants a camera and is hard to judge
   before there is a real app to judge it in.
 - **Scout reliability**, considered and rejected as superficial.

@@ -1,9 +1,26 @@
 # ADR 003 — Boards: the interactive graph builder
 
-Status: **accepted, not implemented** — scheduled for v0.80
+Status: **REJECTED** — not built, and not scheduled
 Date: 2026-08-18
-Supersedes: "the visualization builder", deferred out of v0.74 and under-scoped
-as one item of v0.75
+Rejected: 2026-08-18, the same day, by the person who asked for it
+Superseded by: v0.80 — team-to-team comparison (see `ROADMAP.md`)
+
+> "I think that the board is unnecessary. Instead, better UI for team to team
+> comparisons are needed."
+
+Kept rather than deleted, because the decisions in it are the ones any future
+charting work would have to make again — no charting library, a chart as a
+persisted spec, a field picker generated from `OBSERVATION_FIELDS`, types offered
+only where they mean something, blank-is-not-zero at the series level, viewBox
+autosizing, FLIP with a keyboard path. If boards ever come back, start here.
+
+**Why the rejection is right.** A board is a tool for building the view you did
+not know you needed. Studio's fixed views already answer the questions this team
+actually asks — coverage, insights, the picklist — and the one question they
+answer badly is the one a board would have been used for ninety percent of the
+time: *how do these four teams compare*. Building a general builder to reach a
+specific answer is the expensive route to it, and it would have shipped a chart
+editor to a team that needed a better table.
 
 Design record for the interactive interface that was Studio's original purpose.
 A decision record, not a second plan document — `ROADMAP.md` stays the single

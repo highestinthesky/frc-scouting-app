@@ -16,7 +16,7 @@ across several files rather than gathered into one. Read what the topic touches:
 | `ROADMAP.md` | the single dependency-ordered plan, and the live database state |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/adr-002-spatial-observations.md` | interactive auto scouting (v0.90, not built) |
-| `docs/adr-003-boards.md` | the graph builder / dashboard design (v0.80, not built) |
+| `docs/adr-003-boards.md` | the graph builder — REJECTED, kept for its decisions |
 | `supabase/README.md` | migration runbook, and repo state vs live state |
 | `design.md` | the locked design system |
 | `APP_OVERVIEW.md` | routes and modules |
