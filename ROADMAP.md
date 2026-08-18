@@ -712,132 +712,139 @@ grows a new feature; a chart builder built on five inconsistent pages inherits
 all five inconsistencies. The series tokens (`--studio-series-1..4`) are defined
 and contrast-checked, so the palette half of that work is already done.
 
-### v0.75 — the differentiating series
+### v0.75 — the season-usable series
 
-Named after v0.74 closed the interface work, and enumerated here before it ships
-per the working agreement. It spans several commits; the series is the unit of
-planning, not the commit.
+Enumerated before it ships, per the working agreement. It spans several commits;
+the series is the unit of planning, not the commit.
 
-The goal driving it is explicit: this should be worth turning into a Mac/iOS app,
-which means beating the free alternatives — Scoutradioz, Scouting PASS/QRScout,
-1678's open system, and the Google Sheets homebrew most teams actually run.
+**The constraint that sets the shape: there is no native app coming soon.** An
+Apple developer account needs a waiver first, so everything in this series has to
+work on the web, this season, on the phones the team already owns. Nothing here
+may be parked behind a store review.
 
-**The strategic read.** Those alternatives do not lose on features. They lose on
-whether the data arrives: gym wifi is unusable, which is the entire reason
-QR-code transfer exists as a category. And Statbotics gives every team decent
-predictive analytics for free, so raw analytics is no longer a differentiator.
-What is left, and what this series is about:
+**The goal.** This should eventually be worth turning into a Mac/iOS app, which
+means beating what is already free — Scoutradioz, Scouting PASS / QRScout, 1678's
+open system, and the Google Sheets homebrew most teams actually run. Those do not
+lose on features. They lose on whether the data arrives: gym wifi is unusable,
+which is the entire reason QR transfer exists as a category. And Statbotics gives
+every team decent predictive analytics for nothing, so raw analytics stopped
+being a differentiator some time ago.
+
+What is left is the charter for this series:
 
 1. the data arrives, with no infrastructure;
-2. the data is trustworthy;
-3. the data says something public sources structurally cannot see.
+2. the data says something public sources structurally cannot see.
+
+Point 2 is **v0.80's** job — see `docs/adr-002-spatial-observations.md`, written
+and deliberately unscheduled here. Point 1 is this series.
 
 #### 1. One box model ✅
 
 `<a class="btn">` measured 62px and `<button class="btn">` measured 44px, in one
-toolbar, from the same rule — the UA stylesheet gives form controls border-box
-and everything else content-box. Shipped in v0.74, because that is the release
-that gave Button an `href`. Fixed with a zero-specificity global reset, and the
-sweep also found `.toggle` at 35px on `/scouting/new`.
+toolbar, from the same rule: the UA stylesheet gives form controls border-box and
+everything else content-box. It shipped in v0.74, because that is the release
+that gave `Button` an `href` and first put the two elements side by side. Fixed
+with a zero-specificity global reset. The sweep also found `.toggle` at 35px on
+`/scouting/new` — the smallest target on the most-used screen in the app, and
+predating the change.
 
-#### 2. Statbotics as a prior, not a dependency
+#### 2. Offline handoff — a file, not a QR code
 
-**Statbotics needs no API key** — confirmed from its OpenAPI spec, which declares
-`securitySchemes: NONE`. So half the key problem does not exist. Only TBA needs
+**The problem.** Sync needs the internet. A competition gym does not have it.
+Everything else this app does well is undone by six phones holding data nobody
+can collect.
+
+**The decision: export and import a JSON bundle, transferred by any means the
+devices already have** — AirDrop, Nearby Share, a cable, a memory stick, an email
+when there is signal. Not QR codes, and the reasoning is worth keeping:
+
+| | QR | file |
+|---|---|---|
+| capacity | ~2–3 KB per code, so ~5–10 entries; needs chunking | whole event in one file |
+| scanner | camera + a decoding library in an offline bundle | none |
+| failure mode | a mis-scanned chunk in a set of forty | the file arrived or it did not |
+
+QR is what Scouting PASS and QRScout do, and it is the right answer *when you
+have no file system*. Two phones and a laptop have file systems and already have
+AirDrop, so QR would be solving a problem this situation does not have. It can
+layer on later — it feeds the same import path.
+
+**Most of this already exists**, which is why it is second and not last:
+`insertRemoteEntry()` in `db.js` takes a row, matches it against the dedupe
+fingerprint `[eventCode+matchNumber+teamNumber+scoutName+createdAt]`, and returns
+`{inserted: false}` if it is already here. Its own comment anticipates this —
+"via realtime echo, **or two import paths**". So import is idempotent by
+construction: the same bundle imported twice cannot duplicate a row, and a bundle
+that overlaps another is merged rather than doubled.
+
+What is actually to build: a serializer, a file picker, a summary of what an
+import would do before it does it, and the manager-side screen to run it. Plus
+the honest edge: a bundle carries `schemaVersion` per row and an import from a
+future version must refuse rather than guess.
+
+#### 3. Statbotics as a prior, never a dependency
+
+**Statbotics needs no API key** — its own OpenAPI spec declares
+`securitySchemes: NONE`. So half the key problem does not exist; only TBA needs
 one.
 
-**Do not publish a shared TBA key in the bundle.** This is a static site in a
-public repo; anything in it is public, permanently, including in git history. A
-TBA read key is tied to an account and rate-limited, so a published one is a key
-anyone can exhaust. The key is stored per-manager in `session.tbaApiKey` today
-and that already works.
+**A shared TBA key must not go in the bundle.** This is a static site in a public
+repo: anything in it is public permanently, including in git history, on an
+account with a rate limit anyone could then exhaust. The key is per-manager in
+`session.tbaApiKey` today and that works. If one shared key is genuinely wanted,
+it belongs in a row readable only by managers under RLS — the same shape as every
+other manager-only fact in this database. The Edge Function proxy already named
+under Conditional work is the answer only if this app ever goes public.
 
-If one shared key is genuinely wanted, put it in a row readable only by managers
-under RLS — the same shape as every other manager-only fact in this database.
-That gives "one key the managers share" without giving it to the world. The Edge
-Function proxy already named under Conditional work is the answer only if the app
-ever goes public.
+**Treat the data as enrichment that can be absent.** While planning this, every
+Statbotics `/v3/` data endpoint returned 500 while its root returned 200. An
+analytics source that can be down must never be something the picklist depends
+on: fetch, cache, degrade to your own numbers, and say which you are showing.
 
-**Treat Statbotics as enrichment that can be absent.** While planning this, every
-`/v3/` data endpoint returned 500 while the API root returned 200. An analytics
-source that can be down must never be something the picklist depends on: fetch,
-cache, and degrade to your own numbers.
-
-The feature is not "rebuild EPA". It is showing where EPA and your scouts
-disagree, because that is where a pick is won or lost.
-
-#### 3. Scout reliability — dropped
-
-Considered and rejected as superficial.
+The feature is not rebuilding EPA. It is showing **where EPA and your scouts
+disagree**, because agreement tells a manager nothing they did not already have
+for free, and disagreement is where a pick is won or lost.
 
 #### 4. The graph builder, desktop-gated
 
-Gating it does **not** simplify the programming much — it is the same web code
-either way. What it removes is the design and testing surface: making a
-drag-and-drop chart builder work at 375px is where most of the effort would go,
-and Studio is already a laptop surface with a 15rem rail and wide tables.
+Gating it does **not** simplify the programming — it is the same web code either
+way. What it removes is the design and testing surface: making a drag-and-drop
+chart builder usable at 375px is where most of the effort would go, and Studio is
+already a laptop surface with a 15rem rail and wide tables.
 
-Gate on **viewport and pointer**, never on OS. "Mac/PC only" in a web app is a
-`min-width` plus `pointer: fine` media query; browsers cannot reliably report an
-operating system and should not be asked to. On a phone, say so and link back.
+Gate on **viewport and pointer**, never on operating system. "Mac/PC only" in a
+web app is a `min-width` plus `pointer: fine` media query; browsers cannot
+reliably report an OS and should not be asked to. On a phone, say so plainly and
+link back to the fixed views.
 
 `--studio-series-1..4` already exist and are contrast-checked against both panel
-grounds, so the palette half of this is done.
-
-#### 5. Getting data off the phones — scope correction needed
-
-**True peer-to-peer local sync cannot be built in a browser today.** iOS Safari
-has no Web Bluetooth and no local peer discovery, and WebRTC needs a signalling
-server, which needs the internet the whole feature exists to avoid. This is a
-platform limit, not an effort question.
-
-What is shippable in a browser, in order of practicality:
-
-- **QR-code transfer.** The scout's phone renders queued entries as QR codes; a
-  laptop scans them with its camera. Entirely offline, works on every device,
-  needs no infrastructure. This is what Scouting PASS and QRScout do, so it is
-  proven at events — and it is a chunked-encoding problem, which is real work.
-- **LAN sync to a manager-run endpoint.** Only if venue wifi allows
-  client-to-client, which many block. Fragile; not a foundation.
-
-So: QR transfer in v0.75, and true peer-to-peer moves to the native release,
-where MultipeerConnectivity (iOS/macOS) and Nearby Connections (Android) make it
-straightforward. **This is the one item in the series that needs a decision
-before it is built.**
-
-#### 6. Interactive auto scouting
-
-A field map the scout taps to record where the robot went, what it scored, and
-where it failed — the interaction Lovat popularised.
-
-**This works in a browser today.** Pointer events on an SVG field map are well
-supported in mobile Safari; no native integration is needed first. It is probably
-the most differentiating item in the series, because it captures exactly what
-Statbotics structurally cannot see.
-
-What it actually needs:
-
-- **Normalised coordinates**, 0..1, never pixels — so a recording survives a
-  different screen and a new field image.
-- **A sequence, not a scalar.** `observations` gains a key holding
-  `{x, y, action, t}[]`, which `schema_version` already handles for older rows.
-  Blank stays blank: no path recorded is not the same as a robot that did not
-  move, and `readMetric()`'s rule extends to this unchanged.
-- **A field image per season**, which makes this part of the January retune
-  rather than a one-off.
-- **Speed.** Auto is 15 seconds and the scout is watching the field, not the
-  phone. The realistic interaction is marking immediately after auto ends, with
-  targets big enough to hit without looking.
+grounds, so the palette half is done. It is last in the series because it is
+worth more once there is more to chart — which is items 2 and 3.
 
 #### Deliberately not in v0.75
 
-**Pit scouting**, deferred by choice: it wants a camera and is hard to judge
-before there is a real app to judge it in.
+- **Interactive auto scouting.** Designed in full in
+  `docs/adr-002-spatial-observations.md` and held for **v0.80**, because a `x0`
+  release should be the one that changes what this app is for. It needs no native
+  work — that was checked before deferring it, so it is not waiting on the Apple
+  waiver.
+- **Pit scouting**, deferred by choice: it wants a camera and is hard to judge
+  before there is a real app to judge it in.
+- **Scout reliability**, considered and rejected as superficial.
+- **True peer-to-peer sync.** Not possible in a browser: iOS Safari has no Web
+  Bluetooth and no local peer discovery, and WebRTC needs a signalling server —
+  which needs the internet the feature exists to avoid. It belongs to the native
+  release, where MultipeerConnectivity and Nearby Connections make it
+  straightforward. Item 2 is the version that ships without waiting.
 
-### Out of scope for v0.7
+### Out of scope for the interface series (v0.72–v0.74)
 
-Named so the series can actually close: no new analysis features, no graph
-builder, no season retune. Those are v0.8.
+Named so that series could actually close: no new analysis features, no graph
+builder, no season retune.
+
+It closed with v0.74. v0.75 opens a new charter — getting the data off the phones
+and making it say something public data cannot — so the graph builder is in scope
+again there, and the season retune moves to the January ritual it belongs to.
 
 ## Target model
 
