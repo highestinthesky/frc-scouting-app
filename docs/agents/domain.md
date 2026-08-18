@@ -15,7 +15,8 @@ across several files rather than gathered into one. Read what the topic touches:
 | `CLAUDE.md` | the invariants. Start here — it is what must not break |
 | `ROADMAP.md` | the single dependency-ordered plan, and the live database state |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
-| `docs/adr-002-spatial-observations.md` | the design for interactive auto scouting (v0.80, not built) |
+| `docs/adr-002-spatial-observations.md` | interactive auto scouting (v0.90, not built) |
+| `docs/adr-003-boards.md` | the graph builder / dashboard design (v0.80, not built) |
 | `supabase/README.md` | migration runbook, and repo state vs live state |
 | `design.md` | the locked design system |
 | `APP_OVERVIEW.md` | routes and modules |
@@ -28,9 +29,9 @@ term actually needs resolving; until then, proceed silently.
 
 ## ADRs live in `docs/`, not `docs/adr/`
 
-Named `adr-NNN-<topic>.md`. There are two, and `docs/` holds nothing else
+Named `adr-NNN-<topic>.md`. There are three, and `docs/` holds nothing else
 besides `agents/`, so the directory already is the ADR directory. Number the next
-one `adr-003-`.
+one `adr-004-`.
 
 The skills' default layout is `docs/adr/`. This repo keeps the flatter form
 deliberately: moving the existing file would mean updating eight references,

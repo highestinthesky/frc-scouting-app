@@ -1,6 +1,6 @@
 # ADR 002 — Spatial observations
 
-Status: **accepted, not implemented** — scheduled for v0.80
+Status: **accepted, not implemented** — scheduled for v0.90
 Date: 2026-08-18
 Depends on: nothing. Deliberately buildable without a native app.
 
@@ -174,6 +174,13 @@ same call the coverage page already made and for the same reason.
   mobile Safari; this needs no app shell, no plugin, and no store review. It was
   checked before scheduling, because "we need the native app first" would have
   parked the most differentiating feature behind an Apple developer waiver.
+
+## Why this is v0.90 and not v0.80
+
+Not a ranking of ambition. Decision 5 needs a real field image, and a real field
+image needs a real game — so this cannot be finished, or honestly tested, before
+kickoff. `docs/adr-003-boards.md` works on data the team already has, out of
+season, so it goes first and this arrives with the field it needs.
 
 ## Open questions
 

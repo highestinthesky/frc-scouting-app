@@ -805,29 +805,34 @@ The feature is not rebuilding EPA. It is showing **where EPA and your scouts
 disagree**, because agreement tells a manager nothing they did not already have
 for free, and disagreement is where a pick is won or lost.
 
-#### 4. The graph builder, desktop-gated
+#### 4. The graph builder — moved out, and correctly sized
 
-Gating it does **not** simplify the programming — it is the same web code either
-way. What it removes is the design and testing surface: making a drag-and-drop
-chart builder usable at 375px is where most of the effort would go, and Studio is
-already a laptop surface with a 15rem rail and wide tables.
+**Cut from v0.75.** It was listed here as one bullet about a media query, and
+that was a misreading of what it is. The original brief:
 
-Gate on **viewport and pointer**, never on operating system. "Mac/PC only" in a
-web app is a `min-width` plus `pointer: fine` media query; browsers cannot
-reliably report an OS and should not be asked to. On a phone, say so plainly and
-link back to the fixed views.
+> Managers should be able to click **+ graph** to choose the type of graph they
+> want. Pie charts, bar graphs, etc. Can also choose data points to compare, from
+> all the data that the scouts submit. Will require being able to drag and drop
+> different graphs of data — potential worries are autosizing and smooth
+> reorganization.
 
-`--studio-series-1..4` already exist and are contrast-checked against both panel
-grounds, so the palette half is done. It is last in the series because it is
-worth more once there is more to chart — which is items 2 and 3.
+That is a user-configurable dashboard: a persisted set of chart specifications,
+each a small query over the entry set, in a grid that is rearranged by hand. Four
+things must exist that do not — a chart renderer, a language for saying what to
+chart, a builder that speaks it, and a layout that survives being dragged.
+
+It is now **v0.80**, designed in full in `docs/adr-003-boards.md`.
 
 #### Deliberately not in v0.75
 
+- **The graph builder**, now v0.80 — see above and `docs/adr-003-boards.md`.
 - **Interactive auto scouting.** Designed in full in
-  `docs/adr-002-spatial-observations.md` and held for **v0.80**, because a `x0`
-  release should be the one that changes what this app is for. It needs no native
-  work — that was checked before deferring it, so it is not waiting on the Apple
-  waiver.
+  `docs/adr-002-spatial-observations.md` and held for **v0.90**, not v0.80, and
+  the reason is a hard dependency rather than a preference: it needs a real field
+  image, which needs a real game, so it cannot be finished or honestly tested
+  before kickoff. Boards work on data the team already has, out of season. It
+  needs no native work — that was checked before deferring it, so it is not
+  waiting on the Apple waiver.
 - **Pit scouting**, deferred by choice: it wants a camera and is hard to judge
   before there is a real app to judge it in.
 - **Scout reliability**, considered and rejected as superficial.
