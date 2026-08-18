@@ -104,8 +104,34 @@
 		}
 	}
 
+	/**
+	 * A manager must not be able to take THEMSELVES off an event.
+	 *
+	 * manages_event() is `is_super() OR (member AND role = manager)`, so the
+	 * moment a manager stops being a member they stop being able to manage it —
+	 * including the ability to add themselves back. The roster query returns
+	 * nothing, the page shows an empty event, and the only way out is another
+	 * manager, a super, or SQL.
+	 *
+	 * Found by doing it: removing the seeded manager emptied the whole roster on
+	 * screen, because RLS had stopped returning it. The remove itself was correct;
+	 * being allowed to ask for it was not.
+	 *
+	 * Same shape as the role picker on Accounts, which already refuses to let a
+	 * manager change their own role. A super is exempt — is_super() does not
+	 * depend on membership, so they can leave and return.
+	 */
+	const isSelf = (profileId) => profileId === auth.profile?.id;
+	const canRemove = (profileId) => !isSelf(profileId) || auth.role === 'super';
+
 	async function remove(profileId) {
 		if (!selectedId) return;
+		if (!canRemove(profileId)) {
+			err =
+				'You cannot take yourself off an event you manage — you would lose access to it, ' +
+				'including the ability to add yourself back. Ask another manager or a super.';
+			return;
+		}
 		// Removing someone mid-event cuts off their sync, and their phone will say
 		// so rather than failing silently — but they will not know why unless
 		// somebody tells them. Worth a confirm.
@@ -256,10 +282,11 @@
 			<ul>
 				{#each roster as r (r.profileId)}
 					<li
-						draggable="true"
+						draggable={canRemove(r.profileId)}
 						ondragstart={(e) => startDrag(e, r.profileId)}
 						ondragend={() => (dragging = null)}
 						class:drag={dragging === r.profileId}
+						class:pinned={!canRemove(r.profileId)}
 					>
 						<span class="who">
 							<span class="name">{personName(r)}</span>
@@ -268,7 +295,10 @@
 						<button
 							type="button"
 							class="act"
-							disabled={busy}
+							disabled={busy || !canRemove(r.profileId)}
+							title={canRemove(r.profileId)
+								? undefined
+								: 'You cannot take yourself off an event you manage'}
 							onclick={() => remove(r.profileId)}
 							aria-label="Remove {personName(r)} from this event"
 						>−</button>
@@ -438,6 +468,10 @@
 	}
 	li.drag {
 		opacity: 0.5;
+	}
+	/* Not draggable, so it must not offer the grab cursor. */
+	li.pinned {
+		cursor: default;
 	}
 	.who {
 		display: flex;
