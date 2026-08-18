@@ -157,6 +157,9 @@ const PAIRS = [
 	// The app bar is fixed purple in both themes, so these do not vary.
 	['--bar-ink', '--bar-bg', 4.5, 'app bar text'],
 	['--bar-badge-ink', '--bar-badge-bg', 4.5, 'manager badge'],
+	// The Studio button: outlined at rest, filled with the bar's ink on hover.
+	['--bar-edge', '--bar-bg', 3.0, 'the Studio button outline'],
+	['--bar-bg', '--bar-ink', 4.5, 'the Studio button label when hovered'],
 	['--pending-ink', '--dot-pending', 4.5, 'unsynced count bubble'],
 
 	// Non-text: a boundary only has to be distinguishable, not readable.

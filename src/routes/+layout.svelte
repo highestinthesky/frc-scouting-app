@@ -490,6 +490,9 @@
 		--bar-bg: #5f24a2;
 		--bar-ink: #ffffff;
 		--bar-chip-bg: rgba(255, 255, 255, 0.18);
+		/* The outline on the bar's one action. Non-text, so it is held to the 3:1
+		   boundary floor rather than the text floor. */
+		--bar-edge: rgba(255, 255, 255, 0.55);
 		--bar-badge-bg: #ffb000;
 		--bar-badge-ink: #5f24a2;
 		--dot-ok: #4ade80;
@@ -931,26 +934,42 @@
 		border: 0;
 	}
 
+	/* The one ACTION in the bar, and it has to look like one.
+	   It was a translucent pill in --bar-chip-bg that turned YELLOW on hover —
+	   the exact colour of the MANAGER badge sitting beside it. So the bar carried
+	   two lozenges of similar weight, one a label and one a link, and hovering
+	   the link made it look like the label. Outlined instead: a button reads as a
+	   button, the badge stays the only filled thing, and hover fills with the
+	   bar's own ink rather than borrowing another element's colour. */
 	.studio-btn {
 		flex: none;
 		display: inline-flex;
 		align-items: center;
-		gap: var(--space-1);
+		gap: var(--space-2);
 		min-height: var(--tap-min);
-		padding: var(--space-1) var(--space-2);
-		margin-left: var(--space-2);
-		border-radius: var(--radius-pill);
-		background: var(--bar-chip-bg);
+		padding: var(--space-1) var(--space-3);
+		margin-left: var(--space-3);
+		border-radius: var(--radius-md);
+		border: 1px solid var(--bar-edge);
+		background: transparent;
 		color: var(--bar-ink);
-		font-size: var(--fs-xs);
-		font-weight: 700;
-		letter-spacing: 0.02em;
+		font-size: var(--fs-sm);
+		font-weight: 600;
 		text-decoration: none;
 		white-space: nowrap;
+		transition:
+			background-color var(--dur-short) var(--ease-out),
+			color var(--dur-short) var(--ease-out);
 	}
 	.studio-btn:hover {
-		background: var(--bar-badge-bg);
-		color: var(--bar-badge-ink);
+		background: var(--bar-ink);
+		color: var(--bar-bg);
+		border-color: var(--bar-ink);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.studio-btn {
+			transition-duration: 0.01ms;
+		}
 	}
 	.studio-btn:focus-visible {
 		outline: 2px solid var(--bar-ink);

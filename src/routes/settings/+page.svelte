@@ -243,10 +243,19 @@
 	 * delegated to Button.svelte.
 	 */
 
+	/* The PAGE is as wide as its sibling tab; the COLUMN inside it is not.
+	   Settings sat at --w-form (34rem) while /scouting sat at --w-list (60rem),
+	   so switching between two tabs in the same bar jumped the content by 26rem
+	   and read as a mistake. Both widths were individually right and the pairing
+	   was wrong: width is a decision about the content, and the content here is
+	   a narrow column of fields inside a full-width page — not a narrow page.
+	   Same fix Accounts got in v0.74. */
+	section {
+		/* The column of fields, at the width a field should be read at. */
+		max-width: var(--w-form);
+	}
 	main {
-		/* Narrower than the data pages: this is forms and prose, and a long
-		   measure is harder to scan than a short one. */
-		max-width: var(--w-form); /* A column of fields. Wider inputs are not easier to use. */
+		max-width: var(--w-list);
 		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 	}
