@@ -44,15 +44,15 @@
 	import { reminders as reminderStore } from '$lib/reminders.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
 	import { dialog } from '$lib/dialog.svelte.js';
-	import PublishSchedule from '$lib/components/scouting/PublishSchedule.svelte';
-	import AssignScouts from '$lib/components/scouting/AssignScouts.svelte';
-	import ScoutRoster from '$lib/components/scouting/ScoutRoster.svelte';
-	import CoverageCheck from '$lib/components/scouting/CoverageCheck.svelte';
-	import ReminderPanel from '$lib/components/scouting/ReminderPanel.svelte';
-	import SchedulePreview from '$lib/components/scouting/SchedulePreview.svelte';
-	import MyTeams from '$lib/components/scouting/MyTeams.svelte';
-	import UpcomingMatches from '$lib/components/scouting/UpcomingMatches.svelte';
-	import MatchDetailModal from '$lib/components/scouting/MatchDetailModal.svelte';
+	import PublishSchedule from '$lib/components/studio/PublishSchedule.svelte';
+	import AssignScouts from '$lib/components/studio/AssignScouts.svelte';
+	import ScoutRoster from '$lib/components/studio/ScoutRoster.svelte';
+	import CoverageCheck from '$lib/components/studio/CoverageCheck.svelte';
+	import ReminderPanel from '$lib/components/studio/ReminderPanel.svelte';
+	import SchedulePreview from '$lib/components/studio/SchedulePreview.svelte';
+	import MatchDetailModal from '$lib/components/studio/MatchDetailModal.svelte';
+	import PageHead from '$lib/components/studio/PageHead.svelte';
+	import Panel from '$lib/components/studio/Panel.svelte';
 
 	// ─── shared state ──────────────────────────────────────────────────────
 
@@ -83,42 +83,6 @@
 	// this device's. Recomputes whenever entries change (sync tick bumps them).
 	const entryIndex = $derived(buildEntryIndex(entries, session.eventCode));
 	const rollup = $derived(scheduleRollup(qmList, entryIndex));
-
-	// The teams this scout is watching. Manager-assigned only — scouts can no
-	// longer add their own, because those additions never reached the manager.
-	const assignedTeams = $derived(session.assignedTeams);
-
-	// Upcoming matches for the scout's assigned teams (already-recorded ones
-	// are kept in the list but shown muted, so the scout has a sense of pace).
-	const myUpcoming = $derived.by(() => {
-		if (!qmList.length || !assignedTeams.length) return [];
-		const teamSet = new Set(assignedTeams);
-		const out = [];
-		for (const m of qmList) {
-			const { red, blue } = teamsInMatch(m);
-			const all = [...red, ...blue].filter(Number.isFinite);
-			for (const t of all) {
-				if (!teamSet.has(t)) continue;
-				const isRed = red.includes(t);
-				out.push({
-					match: m.match_number,
-					team: t,
-					color: isRed ? 'red' : 'blue',
-					done: entryIndex.has(`${m.match_number}:${t}`),
-					// TBA fills predicted_time as Unix seconds; actual_time once played.
-					predictedTime: m.predicted_time ?? m.time ?? null,
-					actualTime: m.actual_time ?? null
-				});
-			}
-		}
-		return out;
-	});
-
-	// Progress for the scout: how many of their team-matches have an entry.
-	const myProgress = $derived.by(() => ({
-		total: myUpcoming.length,
-		done: myUpcoming.filter((r) => r.done).length
-	}));
 
 	// Re-tick once a minute so the "in 8 min" labels stay accurate without a
 	// manual refresh. $state assignment is what triggers the derived rerun.
@@ -602,24 +566,6 @@
 		}
 	}
 
-	// ─── scout actions ─────────────────────────────────────────────────────
-
-	async function refreshFromServer() {
-		busy = true;
-		err = '';
-		msg = '';
-		try {
-			const pulled = await pullSchedule(session.eventCode);
-			cached = session.eventCode ? await getCachedSchedule(session.eventCode) : null;
-			msg = pulled
-				? `Pulled ${qualMatches(pulled.matches).length} qual matches.`
-				: 'No schedule has been published for this event yet.';
-		} catch (e) {
-			err = e?.message ?? String(e);
-		} finally {
-			busy = false;
-		}
-	}
 
 	// ─── manager actions ───────────────────────────────────────────────────
 
@@ -919,100 +865,83 @@
 </svelte:head>
 
 <main>
-	<header class="page-head">
-		<a class="back" href="{base}/scouting/" aria-label="Back">←</a>
-		<h1>Schedule</h1>
-	</header>
+	<PageHead
+		title="Schedule"
+		sub="Fetch the schedule, assign who watches what, and tell them."
+	/>
 
 	{#if !session.eventCode}
-		<p class="muted">
-			Set an event code in <a href="{base}/settings/">Settings</a> first.
-		</p>
+		<Panel tone="quiet">
+			<p class="muted">
+				Set an event code in <a href="{base}/settings/">Settings</a> first.
+			</p>
+		</Panel>
 	{:else}
-		<!-- ── Manager view ────────────────────────────────────────────── -->
-		{#if isManager}
-			<PublishSchedule
-				bind:tbaEventKey
-				bind:tbaApiKey
-				{busy}
-				{cached}
-				{qmList}
-				{now}
-				onFetch={fetchFromTba}
-				onPublish={publishToTeammates}
-				onClearCache={clearLocalCache}
-			/>
+		<!-- Two columns, because these are six independent panels and stacking them
+		     put "Send reminder" four scrolls below "Publish schedule" — on a page
+		     whose whole job is doing those in sequence.
 
-			<AssignScouts
-				{assignRows}
-				{roster}
-				{busy}
-				{qmList}
-				{now}
-				{draftRestored}
-				{draftSavedAt}
-				pendingOverrideCount={pendingOverrides?.length ?? 0}
-				onAddRow={addAssignRow}
-				onRemoveRow={removeAssignRow}
-				onAutoAssign={autoAssign}
-				onSave={saveAssignments}
-				onDiscardDraft={discardDraft}
-			/>
-
-			<ScoutRoster {scoutsInEvent} {now} />
-
-			<CoverageCheck {coverageConflicts} onOpenMatch={openMatch} />
-
-			<ReminderPanel
-				bind:reminderTarget
-				bind:reminderMatch
-				bind:reminderText
-				{reminderScouts}
-				{recentReminders}
-				{busy}
-				onSend={sendReminder}
-				onRemove={removeReminder}
-			/>
-
-			{#if cached && qmList.length}
-				<SchedulePreview
+		     Publishing and assigning lead, so they hold the left column in the
+		     order the work happens; the three that are checks rather than actions
+		     sit beside them. -->
+		<div class="board">
+			<div class="col">
+				<PublishSchedule
+					bind:tbaEventKey
+					bind:tbaApiKey
+					{busy}
+					{cached}
 					{qmList}
-					{rollup}
-					{entryIndex}
-					{overridesByMatch}
-					onOpenMatch={openMatch}
+					{now}
+					onFetch={fetchFromTba}
+					onPublish={publishToTeammates}
+					onClearCache={clearLocalCache}
 				/>
-			{/if}
-		{:else}
-			<!-- ── Scout view ───────────────────────────────────────────── -->
-			<MyTeams
-				{assignedTeams}
-				{cached}
-				{qmList}
-				{busy}
-				{now}
-				onRefresh={refreshFromServer}
-			/>
-		{/if}
 
-		<!-- ── Upcoming matches: scout-only ─────────────────────────────
-			Managers already see every match in the Schedule preview block
-			above; this section is filtered to the device's assigned teams,
-			which is empty for a manager device and just adds confusion.
-		-->
-		{#if !isManager}
-			<UpcomingMatches
-				{isManager}
-				{cached}
-				{assignedTeams}
-				{myUpcoming}
-				{myProgress}
-				{qmList}
-				{entryIndex}
-				{now}
-				hrefFor={newEntryHref}
-			/>
-		{/if}
+				<AssignScouts
+					{assignRows}
+					{roster}
+					{busy}
+					{qmList}
+					{now}
+					{draftRestored}
+					{draftSavedAt}
+					pendingOverrideCount={pendingOverrides?.length ?? 0}
+					onAddRow={addAssignRow}
+					onRemoveRow={removeAssignRow}
+					onAutoAssign={autoAssign}
+					onSave={saveAssignments}
+					onDiscardDraft={discardDraft}
+				/>
+
+				{#if cached && qmList.length}
+					<SchedulePreview
+						{qmList}
+						{rollup}
+						{entryIndex}
+						{overridesByMatch}
+						onOpenMatch={openMatch}
+					/>
+				{/if}
+			</div>
+
+			<div class="col">
+				<ScoutRoster {scoutsInEvent} {now} />
+
+				<CoverageCheck {coverageConflicts} onOpenMatch={openMatch} />
+
+				<ReminderPanel
+					bind:reminderTarget
+					bind:reminderMatch
+					bind:reminderText
+					{reminderScouts}
+					{recentReminders}
+					{busy}
+					onSend={sendReminder}
+					onRemove={removeReminder}
+				/>
+			</div>
+		</div>
 	{/if}
 
 	{#if msg}<p class="banner ok">{msg}</p>{/if}
@@ -1043,44 +972,53 @@
 
 <style>
 	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
+	 * design-system: design.md · palette: Studio ([data-studio])
 	 *
-	 * Thin on purpose — this page is a shell around ten components in
-	 * lib/components/scouting/, each of which carries its own styles.
+	 * Thin on purpose — this page is a shell around six components in
+	 * lib/components/studio/, each of which carries its own styles.
 	 */
 
-	main {
-		max-width: 36rem;
-		margin: var(--space-4) auto;
-		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
+	/* `main { max-width: 36rem }` used to live here, which is the roadmap's
+	   diagnosis of this page in one declaration: a 576px column inside a 992px
+	   area, capped for a phone it no longer runs on. Studio's layout owns width
+	   now, and it owns the bottom padding too — the reservation that used to be
+	   here subtracted the height of a tab bar Studio does not render. */
+
+	.board {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+		gap: var(--space-4);
+		align-items: start;
 	}
-	.page-head {
+	.col {
 		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		margin: var(--space-4) 0;
+		flex-direction: column;
+		gap: var(--space-4);
+		min-width: 0;
 	}
-	.back {
-		font-size: var(--fs-xl);
-		text-decoration: none;
+
+	.muted {
+		color: var(--text-muted);
+		font-size: var(--fs-md);
+		margin: 0;
+	}
+	.muted a {
 		color: var(--accent);
-		min-width: var(--tap-min);
-		min-height: var(--tap-min);
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
 	}
-	.back:hover { background: var(--bg-subtle); }
-	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
-	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-2); }
 	.banner {
 		padding: var(--space-3);
 		border-radius: var(--radius-md);
 		margin-top: var(--space-4);
 		font-size: var(--fs-md);
 	}
-	.banner.ok { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
-	.banner.err { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+	.banner.ok {
+		background: var(--success-bg);
+		color: var(--success);
+		border: 1px solid var(--success-border);
+	}
+	.banner.err {
+		background: var(--danger-bg);
+		color: var(--danger);
+		border: 1px solid var(--danger);
+	}
 </style>

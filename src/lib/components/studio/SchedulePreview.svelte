@@ -3,12 +3,12 @@
 	// spot-check a TBA fetch before publishing it to everyone.
 	import { matchCoverage, coverageLevel } from '$lib/coverage.js';
 	import { timeOfDay } from '$lib/format.js';
+	import Panel from './Panel.svelte';
 
 	let { qmList, rollup, entryIndex, overridesByMatch, onOpenMatch } = $props();
 </script>
 
-<section>
-	<h2>Schedule preview</h2>
+<Panel title="Schedule preview">
 	<p class="muted small">
 		{qmList.length} qual matches. Use this to spot-check the fetch before publishing.
 	</p>
@@ -62,16 +62,9 @@
 			</li>
 		{/each}
 	</ol>
-</section>
+</Panel>
 
 <style>
-	h2 {
-		margin: var(--space-5) 0 var(--space-2);
-		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.muted.small { font-size: var(--fs-sm); }
 	.key-sep { opacity: 0.5; margin: 0 var(--space-2); }

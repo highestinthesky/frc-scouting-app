@@ -5,6 +5,7 @@
 	import { session } from '$lib/session.svelte.js';
 	import Button from '$lib/components/Button.svelte';
 	import { relativeTime } from '$lib/format.js';
+	import Panel from './Panel.svelte';
 
 	let {
 		tbaEventKey = $bindable(),
@@ -19,8 +20,7 @@
 	} = $props();
 </script>
 
-<section>
-	<h2>Publish schedule</h2>
+<Panel title="Publish schedule">
 	<p class="muted">
 		Fetch from The Blue Alliance, then publish so scouts can pull it.
 	</p>
@@ -80,16 +80,9 @@
 	{:else}
 		<p class="muted small">No schedule fetched yet.</p>
 	{/if}
-</section>
+</Panel>
 
 <style>
-	h2 {
-		margin: var(--space-5) 0 var(--space-2);
-		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.muted.small { font-size: var(--fs-sm); }
 	code {

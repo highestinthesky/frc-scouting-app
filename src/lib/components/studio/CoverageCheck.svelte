@@ -1,12 +1,12 @@
 <script>
+	import Panel from './Panel.svelte';
 	// Scouts assigned two or more teams in the same match. Display-only — the
 	// fix is a per-match override, which is why each row opens the match modal.
 
 	let { coverageConflicts, onOpenMatch } = $props();
 </script>
 
-<section>
-	<h2>Coverage check</h2>
+<Panel title="Coverage check">
 	<p class="muted">
 		Scouts assigned two or more teams in one match. Tap a match to override.
 	</p>
@@ -26,16 +26,9 @@
 			{/each}
 		</ul>
 	{/if}
-</section>
+</Panel>
 
 <style>
-	h2 {
-		margin: var(--space-5) 0 var(--space-2);
-		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.muted.small { font-size: var(--fs-sm); }
 	.ok-inline { color: var(--success); }

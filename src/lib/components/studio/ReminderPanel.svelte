@@ -1,6 +1,7 @@
 <script>
 	import Select from '../Select.svelte';
 	import Button from '$lib/components/Button.svelte';
+	import Panel from './Panel.svelte';
 	// Manager: compose a reminder (broadcast or to one scout) and manage the
 	// ones already out there. The banner itself lives in the layout.
 
@@ -16,8 +17,7 @@
 	} = $props();
 </script>
 
-<section>
-	<h2>Send reminder</h2>
+<Panel title="Send reminder">
 	<p class="muted">Banner shows until dismissed, or 2 hours.</p>
 
 	<div class="reminder-form">
@@ -80,16 +80,9 @@
 			{/each}
 		</ul>
 	{/if}
-</section>
+</Panel>
 
 <style>
-	h2 {
-		margin: var(--space-5) 0 var(--space-2);
-		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.field {
 		display: flex;

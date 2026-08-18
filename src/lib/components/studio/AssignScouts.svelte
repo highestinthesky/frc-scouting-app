@@ -7,6 +7,7 @@
 	import { relativeTime } from '$lib/format.js';
 	import { resolveScout } from '$lib/scout-identity.js';
 	import Button from '$lib/components/Button.svelte';
+	import Panel from './Panel.svelte';
 
 	let {
 		assignRows,
@@ -52,8 +53,7 @@
 	const named = $derived(assignRows.filter((r) => r.scout_name?.trim()).length);
 </script>
 
-<section>
-	<h2>Assign scouts</h2>
+<Panel title="Assign scouts">
 	<p class="muted">One row per scout. Saving replaces the whole list.</p>
 
 	{#if draftRestored}
@@ -130,7 +130,7 @@
 			{busy ? 'Saving…' : 'Save assignments'}
 		</Button>
 	</div>
-</section>
+</Panel>
 
 <style>
 	.draft-note {
@@ -157,13 +157,6 @@
 		cursor: pointer;
 	}
 	.pending-note { color: var(--accent); }
-	h2 {
-		margin: var(--space-5) 0 var(--space-2);
-		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.muted.small { font-size: var(--fs-sm); }
 	input {

@@ -2,12 +2,12 @@
 	// Roster of everyone the manager has assigned or who has recorded an entry.
 	// Read-only: derived entirely in the route from assignments + local entries.
 	import { relativeTime } from '$lib/format.js';
+	import Panel from './Panel.svelte';
 
 	let { scoutsInEvent, now } = $props();
 </script>
 
-<section>
-	<h2>Scouts in this event</h2>
+<Panel title="Scouts in this event">
 	{#if scoutsInEvent.length === 0}
 		<p class="muted small">Nobody yet.</p>
 	{:else}
@@ -27,16 +27,9 @@
 			{/each}
 		</ul>
 	{/if}
-</section>
+</Panel>
 
 <style>
-	h2 {
-		margin: var(--space-5) 0 var(--space-2);
-		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.muted.small { font-size: var(--fs-sm); }
 	/* ── scouts roster ──────────────────────────────────────────── */
