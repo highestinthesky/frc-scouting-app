@@ -783,7 +783,9 @@
 	.block {
 		margin-top: var(--space-4);
 	}
-	.count { font-size: var(--fs-xs); color: var(--text-faint); margin-left: var(--space-1); }
+	.count {
+		/* tabular-nums per design.md: the pick counts, which change as teams are ranked. */
+		font-variant-numeric: tabular-nums; font-size: var(--fs-xs); color: var(--text-faint); margin-left: var(--space-1); }
 	.link-btn {
 		background: none;
 		border: none;

@@ -249,6 +249,8 @@
 	.idle .dot { background: var(--dot-idle); }
 
 	.count {
+		/* tabular-nums per design.md: the unsynced-entry count, which ticks up and down while a scout watches it. */
+		font-variant-numeric: tabular-nums;
 		font-size: var(--fs-xs);
 		font-weight: 700;
 		color: var(--bar-badge-ink);

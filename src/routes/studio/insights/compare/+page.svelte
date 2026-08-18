@@ -344,7 +344,7 @@
 		margin-top: var(--space-3);
 		font-size: var(--fs-xs);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.06em;
 		color: var(--text-faint);
 		font-weight: 600;
 	}
@@ -368,7 +368,7 @@
 		content: 'best';
 		font-size: var(--fs-xs);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.06em;
 		font-weight: 700;
 		color: var(--accent);
 	}

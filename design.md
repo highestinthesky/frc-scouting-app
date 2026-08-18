@@ -220,7 +220,22 @@ because a changing number is easier to read when it moves.
 - The type scale, weights and tracking.
 - The CTA voice — button shape, radius, padding rhythm.
 - Section heading rhythm: uppercase tracked label, then content.
-- Card surface: `--bg-card`, 1px `--border`, `--radius-md`.
+- Card surface: `--bg-card`, 1px `--border`, `--radius-lg`.
+
+  The radius ladder, which this file previously collapsed into one value:
+
+  | | |
+  |---|---|
+  | `--radius-sm` 0.3 | dense rows inside a surface — schedule rows, match rows |
+  | `--radius-md` 0.4 | **controls** — buttons, inputs, selects, chips with square ends |
+  | `--radius-lg` 0.6 | **surfaces** — cards, panels, dialogs |
+  | `--radius-pill` | badges and filter chips |
+
+  Corrected in v0.75 rather than enforced: the line said `--radius-md` for
+  cards, and eighteen places used `--radius-lg` — including `Dialog`, which
+  predates every one of them. The code was coherent (controls at md, surfaces at
+  lg) and the document was the part that had drifted. Changing eighteen files to
+  match a sentence that never described them would have been enforcing a typo.
 - The nav: bottom bar under `40rem`, top strip above.
 
 ## What pages MAY differ on
@@ -381,10 +396,32 @@ and its placement rule, the CTA voice, the card surface, motion stance.
 - **Touch targets** — the 44px floor relaxes to 32px for pointer-only controls
   inside Studio. It still applies to anything that can be reached on a tablet.
 
-**Does not differ on:** the accent, the fonts, the CTA voice, or the enrichment
-ban. "Futuristic" is delivered through density, layout and data, not through a
-second palette or a glow. Two unrelated systems in one product means two to
-maintain and an app that feels like two apps.
+**Does not differ on:** the fonts, the CTA voice, or the enrichment ban.
+
+**Amended v0.74–v0.75 — Studio does have its own palette.** This section used to
+read "not through a second palette or a glow", and that was overtaken by a
+decision taken with its eyes open, so it is recorded here rather than left as a
+rule the code quietly breaks.
+
+What changed, and why the original worry does not apply:
+
+- The block **remaps the base tokens** rather than adding a parallel set. Every
+  shared component — `Button`, `Select`, `Dialog`, `Field` — reads `--bg-card`
+  and `--accent` and is dressed correctly with no Studio-specific branch. There
+  is one system with a second set of values, not two systems.
+- The type scale, spacing, radii, motion stance and CTA geometry are untouched.
+- `check_contrast.mjs` runs the **same PAIRS table** over all four palettes —
+  light, dark, Studio light, Studio dark — at 170 assertions. The second palette
+  costs a table row, not a second system to maintain.
+- Studio follows the app theme as of v0.75. It was dark in both themes on the
+  reasoning that the four brand colours only work on a dark ground; that was
+  reasoning about the palette rather than about the reader, and the reader could
+  not read it.
+
+The roles invert between the two Studio palettes, and that inversion is the
+design: on dark, cyan and aqua are ink and purple is a fill; on light, purple is
+the only one of the four that reads and the others are decorative. See
+`CLAUDE.md` § Design system for the numbers.
 
 Schedule stays in the main app. A manager may need to publish or reassign from a
 phone on the venue floor.

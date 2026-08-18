@@ -403,7 +403,7 @@
 	.tag {
 		font-size: var(--fs-xs);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.06em;
 		font-weight: 700;
 		padding: var(--space-1) var(--space-2);
 		border-radius: var(--radius-pill);

@@ -750,6 +750,54 @@ for (const [label, file] of [
 	);
 }
 
+// ─── the system's voice does not drift ─────────────────────────────────────
+//
+// Two rules from design.md § Typography, both of which had already drifted by
+// v0.75 and neither of which is visible in review — they are wrong by 0.01em and
+// by a font-style keyword.
+//
+// Found by auditing every page against design.md rather than by looking. That is
+// the only way this class of drift surfaces: each instance is defensible alone,
+// and the damage is cumulative.
+{
+	const italics = [];
+	const tracking = [];
+	for (const abs of readdirRecursive(path.join(root, 'src')).filter((f) => f.endsWith('.svelte'))) {
+		const rel = path.relative(root, abs);
+		for (const x of rules(rel)) {
+			const sel = unscoped(x.selector);
+
+			// "Headings are always roman. No italic display type anywhere."
+			// An italicised heading is also the single most reliable AI tell there
+			// is, which is why the design system bans it outright rather than
+			// leaving it to taste.
+			if (
+				valueOf(x.body, 'font-style') === 'italic' &&
+				/(^|[\s,>+~])(h[1-6]|\.title|\.head|\.heading)(?![\w-])/.test(sel)
+			) {
+				italics.push(`${rel}  ${sel}`);
+			}
+
+			// "Section labels: uppercase, 0.06em tracking, --text-muted."
+			// Seven places had drifted to 0.05em. Individually invisible; together
+			// they are how a design system stops being one.
+			const ls = valueOf(x.body, 'letter-spacing');
+			if (valueOf(x.body, 'text-transform') === 'uppercase' && ls && /em$/.test(ls)) {
+				const em = parseFloat(ls);
+				// 0.04em is the app-bar/event-code voice and predates the rule;
+				// anything between it and 0.06 is drift toward one of them.
+				if (em > 0.04 && em < 0.06) tracking.push(`${rel}  ${sel} { letter-spacing: ${ls} }`);
+			}
+		}
+	}
+	ok('no heading is italic', italics.length === 0, italics.join('\n        '));
+	ok(
+		'uppercase section labels all track at the system value',
+		tracking.length === 0,
+		tracking.join('\n        ') + '\n        design.md § Typography: 0.06em'
+	);
+}
+
 // ─── a moved route still answers ───────────────────────────────────────────
 //
 // v0.73 moved five surfaces into Studio and its own plan said "Every old path

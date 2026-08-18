@@ -126,7 +126,7 @@
 		margin: var(--space-4) 0 var(--space-2);
 		font-size: var(--fs-sm);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.06em;
 		color: var(--text-muted);
 	}
 	.reminder-list {

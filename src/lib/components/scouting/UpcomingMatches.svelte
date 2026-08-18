@@ -373,7 +373,7 @@
 		text-transform: uppercase;
 		font-size: var(--fs-xs);
 		font-weight: 700;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.06em;
 		padding: var(--space-1) var(--space-2);
 		border-radius: var(--radius-sm);
 	}

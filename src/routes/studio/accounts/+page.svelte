@@ -566,6 +566,8 @@
 		resize: vertical;
 	}
 	.tally {
+		/* tabular-nums per design.md: the roster parse tally, which changes as a manager pastes. */
+		font-variant-numeric: tabular-nums;
 		margin: var(--space-2) 0 0;
 		font-size: var(--fs-sm);
 		color: var(--text-primary);
@@ -638,7 +640,7 @@
 	.tag {
 		font-size: var(--fs-xs);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.06em;
 		font-weight: 700;
 		padding: var(--space-1) var(--space-2);
 		border-radius: var(--radius-pill);
