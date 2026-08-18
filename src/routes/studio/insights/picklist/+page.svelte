@@ -19,6 +19,7 @@
 	import { standingsByTeam, selectionStarted, nextAvailable, describe } from '$lib/alliances.js';
 	import { relativeTime } from '$lib/format.js';
 	import PageHead from '$lib/components/studio/PageHead.svelte';
+	import Panel from '$lib/components/studio/Panel.svelte';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -406,18 +407,16 @@
 		</div>
 	{:else}
 		<!-- ── Alliance selection ───────────────────────────────────── -->
-		<section class="block sel" class:live={selectionLive}>
-			<div class="block-head">
-				<h2>{selectionLive ? 'Selection in progress' : 'Alliance selection'}</h2>
-				<div class="block-actions">
-					{#if alliancesAt}
-						<small class="muted">checked {relativeTime(alliancesAt, clock)}</small>
-					{/if}
-					<button class="link-btn" onclick={refreshAlliances} disabled={alliancesBusy}>
-						{alliancesBusy ? 'Checking…' : 'Check now'}
-					</button>
-				</div>
-			</div>
+		<div class="block sel" class:live={selectionLive}>
+		<Panel title={selectionLive ? 'Selection in progress' : 'Alliance selection'}>
+			{#snippet actions()}
+				{#if alliancesAt}
+					<small class="muted">checked {relativeTime(alliancesAt, clock)}</small>
+				{/if}
+				<button class="link-btn" onclick={refreshAlliances} disabled={alliancesBusy}>
+					{alliancesBusy ? 'Checking…' : 'Check now'}
+				</button>
+			{/snippet}
 
 			{#if alliancesError}
 				<p class="sel-err">
@@ -453,25 +452,25 @@
 					Teams that declined an invitation are gone too.
 				</p>
 			{/if}
-		</section>
+		</Panel>
+		</div>
 
 		<!-- ── Primary picklist ─────────────────────────────────────── -->
-		<section class="block">
-			<div class="block-head">
-				<h2>Primary picks <small class="count">({primary.length})</small></h2>
-				<div class="block-actions">
-					<button class="link-btn" onclick={copyText} disabled={primary.length === 0 && doNotPick.length === 0}>
-						Copy as text
-					</button>
-					<button
-						class="link-btn danger-link"
-						onclick={clearAll}
-						disabled={!isManager || (primary.length === 0 && doNotPick.length === 0)}
-					>
-						Clear
-					</button>
-				</div>
-			</div>
+		<div class="block">
+		<Panel title="Primary picks">
+			{#snippet actions()}
+				<small class="count">({primary.length})</small>
+				<button class="link-btn" onclick={copyText} disabled={primary.length === 0 && doNotPick.length === 0}>
+					Copy as text
+				</button>
+				<button
+					class="link-btn danger-link"
+					onclick={clearAll}
+					disabled={!isManager || (primary.length === 0 && doNotPick.length === 0)}
+				>
+					Clear
+				</button>
+			{/snippet}
 			{#if copyFlash}<small class="muted">{copyFlash}</small>{/if}
 			{#if primary.length === 0}
 				<p class="hint muted">Pick teams from the available list below to start ranking.</p>
@@ -515,12 +514,14 @@
 					{/each}
 				</ol>
 			{/if}
-		</section>
+		</Panel>
+		</div>
 
 		<!-- ── Do not pick ──────────────────────────────────────────── -->
 		{#if doNotPick.length > 0}
-			<section class="block">
-				<h2 class="warn">Do not pick <small class="count">({doNotPick.length})</small></h2>
+			<div class="block">
+			<Panel title="Do not pick">
+				{#snippet actions()}<small class="count">({doNotPick.length})</small>{/snippet}
 				<ul class="avoided">
 					{#each doNotPick as r (r.teamNumber)}
 						{@const t = teamFor(r.teamNumber)}
@@ -535,17 +536,18 @@
 						</li>
 					{/each}
 				</ul>
-			</section>
+			</Panel>
+		</div>
 		{/if}
 
 		<!-- ── Scored suggestions ───────────────────────────────────── -->
-		<section class="block">
-			<div class="block-head">
-				<h2>Suggested order</h2>
+		<div class="block">
+		<Panel title="Suggested order">
+			{#snippet actions()}
 				<button class="link-btn" onclick={() => (showScored = !showScored)}>
 					{showScored ? 'Hide' : 'Show'}
 				</button>
-			</div>
+			{/snippet}
 
 			{#if showScored}
 				<div class="weights">
@@ -593,12 +595,14 @@
 					</p>
 				{/if}
 			{/if}
-		</section>
+		</Panel>
+		</div>
 
 		<!-- ── Available teams ──────────────────────────────────────── -->
-		<section class="block">
-			<div class="block-head">
-				<h2>Available teams <small class="count">({availableTeams.length})</small></h2>
+		<div class="block">
+		<Panel title="Available teams">
+			{#snippet actions()}
+				<small class="count">({availableTeams.length})</small>
 				<input
 					class="search"
 					type="text"
@@ -606,7 +610,7 @@
 					placeholder="Find team #"
 					bind:value={teamSearch}
 				/>
-			</div>
+			{/snippet}
 			{#if filteredAvailable.length === 0}
 				<p class="muted">No teams match.</p>
 			{:else}
@@ -641,7 +645,8 @@
 					{/each}
 				</ul>
 			{/if}
-		</section>
+		</Panel>
+		</div>
 	{/if}
 </main>
 
@@ -667,7 +672,6 @@
 
 	/* ── alliance selection ───────────────────────────── */
 	.sel.live { border-color: var(--accent); background: var(--accent-soft); }
-	.sel .block-actions { align-items: baseline; gap: var(--space-3); }
 	.sel-err { margin: 0 0 var(--space-2); font-size: var(--fs-sm); color: var(--danger); }
 
 	.up-next {
@@ -773,31 +777,13 @@
 		padding: var(--space-4);
 	}
 
+	/* Panel draws the box now. This is only the gap between them — the wrapper
+	   exists because a parent cannot style a child component through a class,
+	   so the margin has to live on an element this page owns. */
 	.block {
 		margin-top: var(--space-4);
-		background: var(--bg-card);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-		padding: var(--space-3);
 	}
-	.block-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2);
-		flex-wrap: wrap;
-		margin-bottom: var(--space-2);
-	}
-	h2 {
-		margin: 0;
-		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-	}
-	h2.warn { color: var(--warning); }
 	.count { font-size: var(--fs-xs); color: var(--text-faint); margin-left: var(--space-1); }
-	.block-actions { display: flex; gap: var(--space-2); }
 	.link-btn {
 		background: none;
 		border: none;
