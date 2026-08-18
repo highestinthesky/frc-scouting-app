@@ -90,18 +90,64 @@ Content width is a decision about the content, not the device:
     --w-list   60rem   cards and entry lists
     --w-board  78rem   tables and dense grids
 
-**Studio gets its own palette in v0.74** (see `ROADMAP.md`), and one fact governs
-its use:
+**Studio has its own palette as of v0.74**, in `:global(:root[data-studio])` in
+the root layout, and one fact governs it:
 
     #662DB4  purple   8.08x on white   ← the only one that can carry white text
     #0087F8  blue     3.61x on white   dark text only
     #00C7FA  cyan     1.99x on white   dark text only
     #49FCE2  aqua     1.29x on white   dark text only
 
-Three of the four cannot have white text on them. They are surfaces, fills,
-borders and chart series — never a button background with white text.
-`#662DB4` is a hair from the existing accent `#5F24A2`, so the palette extends
-the brand rather than breaking it.
+Three of the four cannot have white text on them. On a **dark** ground every
+number inverts, and that is the whole design: the light three become ink — links,
+active states, series — and purple, the one that can carry white text, is the
+fill. Cyan is 1.99 on white and 9.29 as ink on a Studio card.
+
+**Studio is dark in both themes**, the way the app bar is purple in both.
+
+**The block remaps the base tokens, it does not merely add `--studio-*` ones.**
+That is what dresses `Button`, `Select`, `Dialog` and `Field` — they read
+`--bg-card` and `--accent`, so a component that consumes tokens correctly is
+already a Studio component. It is also why `check_contrast.mjs` runs the same
+PAIRS table over a third palette. `--studio-*` names only the things with no
+scout-app equivalent: the raw four, `--studio-fill` (purple, the white-text
+surface), `--studio-violet` (purple lifted until it reads as ink) and
+`--studio-series-1..4`.
+
+**`--accent` is cyan, not the purple.** It has to be ink *and* fill — `Button`
+paints it as a background, pages paint it as text — and purple is 2.29 as ink on
+a card. Reaching for `#662DB4` as "the Studio accent" makes every link
+unreadable.
+
+Two ordering traps, both enforced by checks because neither is visible:
+
+- **The Studio block must come after the dark block.** `:root[data-theme='dark']`
+  and `:root[data-studio]` are both `(0,2,0)`, so source order is the entire
+  mechanism. Grouping the two palettes "logically" leaves a manager on the dark
+  theme seeing scout colours in Studio, with every token still resolving.
+- **`data-studio` goes on the document root**, set pre-paint in `app.html` and
+  maintained by an `$effect` for client-side navigation. Scoped to Studio's own
+  wrapper instead, `body`'s background resolves outside it and the page carries a
+  dark panel on a light overscroll edge.
+
+### The Studio component set
+
+`src/lib/components/studio/` — `PageHead`, `Panel`, `Stat`, `Stats`, `Toolbar`,
+`Table`, plus the seven surfaces `schedule` composes. Reach for these before
+writing a box: `insights` had the same shape under four names.
+
+`Table` takes the page's own `<tr>`s and styles them through `:global()` scoped
+under its wrapper. A column API was the alternative and every table in Studio has
+a cell that is a button, a bar or three chips, so it would have grown a snippet
+per column. Wide tables scroll in **their own** wrapper; the document must never
+scroll sideways.
+
+`PageHead` renders the page's `<h1>` from a `title` prop, and
+`check_components.mjs` reads that prop for the nav-label assertion.
+
+**`components/scouting/` is now only `MyAssignments`, `MyTeams` and
+`UpcomingMatches`.** The last two are unreferenced — see the v0.74 section of
+`ROADMAP.md` before deleting or reviving them.
 
 ### The checks, and why each exists
 
@@ -110,8 +156,20 @@ the brand rather than breaking it.
 - **`check_components.mjs`** reads *emitted* CSS, not source, because Svelte's
   scoping changes specificity and that shipped a bug once. It pins the tap-target
   floor, the focus ring, token usage, that nav labels match their page's `<h1>`,
-  and that no grid track is a bare `fr`.
-- **`check_contrast.mjs`** pins every token pairing against WCAG.
+  that no grid track is a bare `fr` or a nested `minmax()`, that the body font is
+  declared once, and that every `Button` variant asked for is one Button defines.
+- **`check_contrast.mjs`** pins every token pairing against WCAG, in all three
+  palettes — light, dark and Studio.
+
+**A false failure is worse than a missing one**, and two of these checks had one.
+`\b` is the wrong boundary for a CSS class name — class names contain hyphens, so
+`/\.back\b/` matched `.back-link` — and `minmax\([^)]*\)` cannot strip a nested
+`min()`. Both would have been "fixed" by renaming a class or avoiding valid CSS,
+which is how a checker starts costing more than it catches.
+
+Both scripts strip comments before searching. Three times now a checker here has
+matched its own prose; the third was a comment explaining a token by naming
+another one, which is the most natural sentence to write about a palette.
 
 `npm run test:rls` needs Docker (`supabase start`) and makes **real HTTP requests**
 as anon, an orphan, a scout, a manager and a super. 127 assertions. It skips and
@@ -475,6 +533,26 @@ Single-context. No `CONTEXT.md`, deliberately — this file already carries the
 vocabulary one would hold. ADRs are `docs/adr-NNN-*.md`, flat, not `docs/adr/`.
 See `docs/agents/domain.md`.
 
+**A grid track may not nest `minmax()` inside `minmax()`.** `minmax(8.5rem,
+minmax(0, 1fr))` is invalid, so the browser drops the *whole* declaration and the
+grid silently collapses to one column. Two were live. It is the shape of a
+careful mistake: every other track here is `minmax(0, 1fr)` so it can shrink,
+which makes writing that inside an auto-fit `minmax` the obvious next step, and
+it is the one place it is illegal.
+
+**A media query adds no specificity.** Studio's layout had its phone block above
+the rules it overrode, so every override lost on source order and the 15rem rail
+stayed a sticky column at 375px. Responsive blocks go last.
+
+**A sticky element cannot escape its containing block**, which for a grid item is
+its grid area — `align-self: start` shrinks that area to the item's own height
+and the element pins for exactly one viewport. And a sticky element *taller* than
+the viewport travels with the page once its bottom edge arrives, which is how a
+missing `box-sizing` turns 2rem of padding into a rail that looks unpinned.
+
+**The app has no `box-sizing` reset.** Everything is `content-box`. Studio's rail
+sets `border-box` locally; changing it globally is its own release.
+
 ## Live state, as of 2026-08-17
 
 Checked, not remembered. A new session should re-verify before trusting it.
@@ -489,8 +567,14 @@ Checked, not remembered. A new session should re-verify before trusting it.
 - The Supabase MCP connection is available and is how migrations have been
   applied; `mcp__plugin_supabase_supabase__*`, project ref `hhvpkgwgkuiemxyarsuk`.
 
-**Everything up to and including v0.74's roster paste is committed but the user
-pushes.** A push deploys to GitHub Pages.
+**v0.74 is complete and committed; the user pushes.** A push deploys to GitHub
+Pages. Nothing in v0.74 depends on a migration, so the ordering rule that bit
+`0020` does not apply to this release.
+
+**A scout has no schedule view.** `/scouting` shows `MyAssignments` and nothing
+else — v0.73 step 2's read-only `/schedule` was never built, and `MyTeams` and
+`UpcomingMatches` sat inside Studio behind a condition that can never be true.
+Build it or delete them; see the v0.74 section of `ROADMAP.md`.
 
 ## Where the reasoning lives
 

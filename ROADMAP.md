@@ -582,10 +582,10 @@ a peer of Scout and Schedule, it is a different application.
     real Tab press, and by seeing a component's own 1px offset win over the
     baseline's 2px.
 
-### v0.74 — Studio becomes its own application, visually
+### v0.74 — Studio becomes its own application, visually ✅
 
-Two halves. The roster paste is done; the rest is Studio's appearance and
-layout, and it is the larger half.
+Two halves, both shipped. The roster paste landed first; the rest was Studio's
+appearance and layout, and it was the larger half.
 
 **The problem.** Studio's five pages were moved wholesale out of the scout app
 in v0.73 and never redressed. `schedule` is 1087 lines with 8 local style rules
@@ -632,11 +632,85 @@ the same people open on a laptop ten minutes later.
    gets checked, because a palette that passes in isolation still fails in the
    combination someone actually writes.
 
+#### How it went
+
+All five steps shipped. Two things about the plan turned out differently and
+both are worth keeping.
+
+**The token block remaps the base names, it does not only add `--studio-*`.**
+Step 1 as written would have dressed the pages and left every shared component
+behind: `Button`, `Select`, `Dialog` and `Field` all read `--bg-card`,
+`--accent` and `--text-primary`, so a white button would have sat on a dark
+panel until each grew a Studio variant. Remapping inside the scope dresses all
+of them at once, and it is why the contrast suite could run the *same* pairs
+table over a third palette rather than needing a second one. `--studio-*` keeps
+the names with no scout-app equivalent: the raw four, the white-text fill, the
+series.
+
+**Cyan is the accent, not the purple.** `--accent` has to be both ink and fill —
+`Button` paints it as a background, every page paints it as text. Purple can
+carry the fill but is 2.29 as ink on a Studio card, so it would have made every
+link unreadable. Cyan is 9.29 as ink and 9.95 as a fill under `--on-accent`.
+Purple keeps the one job only it can do: `--studio-fill`, the surface that takes
+white text, spent on the brand mark and the event code.
+
+The measuring found two colours that would have shipped wrong, and both failed
+only on `--bg-elev` — the raised panel, the one surface nobody checks by eye.
+`--border-strong` at the obvious value was 2.27 against WCAG 1.4.11's 3:1, and
+the raw blue was 4.36 as series text. Contrast assertions went 67 → 116.
+
+#### What the redress found that was already broken
+
+Each of these was live, and none is a styling bug — they are the kind of thing a
+redress surfaces because it makes you look at every page at a real size.
+
+- **Three Studio pages rendered in Times.** The font stack was declared eighteen
+  times, always on a page's own `main`, and `event`, `coverage` and `insights`
+  never grew a `main` rule. Declared once on `body` now.
+- **Coverage credited every scout with every entry.** `sameScout()` was passed a
+  raw entry and a raw roster row instead of two `ScoutRef`s, so it compared
+  `undefined` to `undefined` and returned true for every pair. The one number
+  the panel exists to surface — the scout at zero — could never appear.
+- **Two grids were invalid CSS.** `minmax(8.5rem, minmax(0, 1fr))` is not legal,
+  so the browser dropped the declaration and the grid collapsed to one column.
+- **`variant="ghost"` never existed**, at four call sites, rendering unstyled.
+- **Event's `+`/`−` buttons were 32px**, on the page whose own header argues
+  those buttons are the control that must always work.
+- **Studio's sidebar was not actually sticky**, twice over: `align-self: start`
+  shrank its containing block, and with no `box-sizing` reset in the app the
+  rail measured 32px taller than the viewport.
+- **Every phone override in Studio's layout silently lost**, because the media
+  block sat above the rules it overrode and a media query adds no specificity.
+
+Six new checks came out of it, each mutation-tested: the Studio palette's
+ordering, per-surface Studio contrast, the single font declaration, Button
+variants that exist, nested `minmax()`, and PageHead owning the `<h1>` and the
+back control. Two existing checks were fixed for false positives — `\b` is the
+wrong boundary for a CSS class name, and the bare-`fr` stripper could not handle
+a nested `min()`.
+
+#### Left open, deliberately
+
+**The scout-side `/schedule` route from v0.73 step 2 was never built.**
+`MyTeams` and `UpcomingMatches` were left inside Studio behind `{#if
+!isManager}` — a condition that can never be true, because Studio's layout gates
+every child on `auth.isManager`. The unreachable branches are gone; the two
+components stay on disk, unreferenced, under `components/scouting/`.
+
+So a scout currently has no schedule view: `/scouting` shows `MyAssignments` and
+nothing else. Either build `/schedule` or delete the two components — it is a
+planning decision, not a visual one, and it belongs to whoever plans v0.75.
+
+**The app has no `box-sizing: border-box` reset.** Everything is `content-box`.
+Studio's rail sets it locally; flipping the box model under every page in the
+app is a change with its own blast radius and wants its own release.
+
 #### Deliberately not in v0.74
 
 The visualization builder. Studio needs to *look* like one application before it
 grows a new feature; a chart builder built on five inconsistent pages inherits
-all five inconsistencies.
+all five inconsistencies. The series tokens (`--studio-series-1..4`) are defined
+and contrast-checked, so the palette half of that work is already done.
 
 ### Out of scope for v0.7
 
