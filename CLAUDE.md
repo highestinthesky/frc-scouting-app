@@ -103,7 +103,20 @@ number inverts, and that is the whole design: the light three become ink — lin
 active states, series — and purple, the one that can carry white text, is the
 fill. Cyan is 1.99 on white and 9.29 as ink on a Studio card.
 
-**Studio is dark in both themes**, the way the app bar is purple in both.
+**Studio follows the app theme as of v0.75.** It was dark in both before that,
+on the reasoning above — and the reasoning was about the palette rather than
+about the person reading it, who could not read it. Legibility settles that.
+
+There are now **two** Studio palettes and `check_contrast.mjs` measures both, at
+162 assertions. The roles invert between them and that inversion is the design:
+on light, purple is the only one of the four that reads, so it is the accent and
+does both jobs; cyan and aqua are 1.64 and 1.06 on a raised panel and are
+decorative only. The `--studio-series-*` are darkened on light and lifted on
+dark — same names, opposite directions, because the ground moved.
+
+`:root[data-studio]` is the light palette and must still come after the dark
+theme block (both `(0,2,0)`).
+`:root[data-studio][data-theme='dark']` is `(0,3,0)` and outranks both.
 
 **The block remaps the base tokens, it does not merely add `--studio-*` ones.**
 That is what dresses `Button`, `Select`, `Dialog` and `Field` — they read

@@ -586,7 +586,102 @@
 	 * The `--studio-*` names are the ones with no scout-app equivalent: the raw
 	 * four, the white-text fill, and the chart series.
 	 */
+	/* ─── Studio, light ────────────────────────────────────────────────────────
+	 *
+	 * Studio followed the app theme from v0.75. It was dark in both themes before
+	 * that, and the reasoning was sound — the four brand colours only sing on a
+	 * dark ground — but it was reasoning about the palette rather than about the
+	 * person reading it, and the reader could not read it. Legibility settles
+	 * that argument; a manager who has to squint is the whole answer.
+	 *
+	 * ── the roles invert, exactly as they did going the other way ──
+	 *
+	 * On white, three of the four brand colours are unusable as ink:
+	 *
+	 *     #662DB4  purple  8.08 on white   ← the only one that reads
+	 *     #0087F8  blue    3.61            large text and marks only
+	 *     #00C7FA  cyan    1.99            decorative
+	 *     #49FCE2  aqua    1.29            decorative
+	 *
+	 * So on light, PURPLE is the accent and does both jobs — 8.08 as ink on a
+	 * card, 8.08 under white as a fill. That is the same double duty cyan performs
+	 * on the dark palette, handed to the only member that can perform it here.
+	 * Reaching for cyan as "the Studio accent" on light makes every link a
+	 * 1.99 smudge, which is the mirror image of the dark palette's trap.
+	 *
+	 * ── the series are darkened, and that is not a betrayal of the brand ──
+	 *
+	 * A series doubles as its own legend label, so it is held to 4.5 against the
+	 * RAISED panel — the hardest ground for dark ink, and the one nobody checks.
+	 * Raw cyan is 1.59 there. The darkened set keeps the hue and earns the
+	 * contrast: the family is recognisable, the text is readable.
+	 */
 	:global(:root[data-studio]) {
+		--studio-purple: #662db4;
+		--studio-blue: #0087f8;
+		--studio-cyan: #00c7fa;
+		--studio-aqua: #49fce2;
+		/* On light this is the purple DARKENED rather than lifted — the same
+		   token name, the same job (a fourth series that can be drawn with), the
+		   opposite direction, because the ground moved. */
+		--studio-violet: #5a27a0;
+
+		--bg-page: #f7f6fc;
+		--bg-card: #ffffff;
+		--bg-subtle: #f2f0fa;
+		/* Deliberately close to the others. Elevation on light is the DARKEST of
+		   the four grounds, so it is where every dark ink is weakest; pulling it up
+		   buys headroom for the whole series set at once. */
+		--bg-elev: #eae7f6;
+
+		--text-primary: #16141f;
+		--text-muted: #57516e;
+		--text-faint: #655e7e;
+
+		--border: #e2def0;
+		/* 3.25 on --bg-elev. The obvious #8b83a6 measures 2.93 there — under
+		   WCAG 1.4.11, on the one boundary that has to be visible because it is
+		   the only thing saying "input". Same failure the dark palette had, from
+		   the opposite side. */
+		--border-strong: #837ba0;
+
+		--accent: #662db4;
+		--accent-hover: #55249a;
+		--accent-soft: #ece5f9;
+		--on-accent: #ffffff;
+
+		--alliance-red: #b3261e;
+		--alliance-blue: #1f4f9c;
+		--on-alliance: #ffffff;
+
+		--danger: #b3261e;
+		--danger-bg: #fdecea;
+		--success: #0f6d4f;
+		--success-bg: #e6f5ef;
+		--success-border: #9ad3ba;
+		--warning: #8a5a00;
+		--warning-bg: #fdf4e3;
+		--warning-border: #e6c489;
+		--banner-info-bg: #ece5f9;
+		--banner-info-border: #cbb8ec;
+		--banner-red-bg: #fdecea;
+		--banner-red-border: #f0b3ae;
+		--banner-blue-bg: #e8f0fc;
+		--banner-blue-border: #a8c4e8;
+
+		--studio-fill: #662db4;
+		--on-studio-fill: #ffffff;
+
+		--studio-series-1: #662db4;
+		--studio-series-2: #0064bd;
+		--studio-series-3: #026b88;
+		--studio-series-4: #016b5c;
+
+		--shadow-sm: 0 1px 2px rgba(22, 20, 31, 0.06);
+		--shadow-md: 0 6px 20px rgba(22, 20, 31, 0.12);
+	}
+
+	:global(:root[data-studio][data-theme='dark']) {
 		/* The four, verbatim. Named so a page can reach for the colour itself
 		   where a semantic token would be a lie — a legend swatch is not an
 		   "accent", it is series 2. */

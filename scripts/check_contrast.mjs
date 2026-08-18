@@ -73,7 +73,15 @@ const dark = { ...light, ...block(/:global\(:root\[data-theme='dark'\]\)\s*\{/) 
 // whole PAIRS table below applies to it unchanged. That is the point of the
 // remap and the reason this is three lines instead of a second table: a surface
 // Studio renders is a surface the scout app renders, in different colours.
-const studio = { ...light, ...block(/:global\(:root\[data-studio\]\)\s*\{/) };
+//
+// Two of them since v0.75. Studio follows the app theme now, so BOTH have to be
+// measured: the light one is a fresh palette where every role inverted, and an
+// unmeasured palette is how --border-strong shipped at 2.27 the first time.
+const studioLight = { ...light, ...block(/:global\(:root\[data-studio\]\)\s*\{/) };
+const studioDark = {
+	...dark,
+	...block(/:global\(:root\[data-studio\]\[data-theme='dark'\]\)\s*\{/)
+};
 
 // ─── colour maths ──────────────────────────────────────────────────────────
 
@@ -176,39 +184,58 @@ const ok = (name, cond, detail = '') => {
 // cannot carry white text", so what needs asserting is the assignment: the fill
 // is the one that can, the series are the ones that are drawn with, and nothing
 // has quietly swapped places.
-const STUDIO_PAIRS = [
-	['--on-studio-fill', '--studio-fill', 4.5, 'white text on the one fill that takes it'],
-	['--text-primary', '--studio-fill', 4.5, 'Studio ink on the purple fill'],
-	// Every series has to be legible against the two grounds a chart sits on.
-	// Non-text at 3:1 — a series is a mark, not a sentence — except that these
-	// double as legend text, so they are held to the text floor instead.
+// Studio-only pairings, split by palette because the ROLES INVERT between them.
+//
+// That inversion is the whole design and it is exactly what a shared table would
+// hide. On dark, cyan and aqua are ink and purple is a fill nobody may write on.
+// On light it is the reverse: purple is the only one of the four that reads, and
+// cyan and aqua are decorative — 1.64 and 1.06 on a raised panel. Asserting them
+// as ink in both directions demanded something the light palette must never do.
+const STUDIO_PAIRS_SHARED = [
+	['--on-studio-fill', '--studio-fill', 4.5, 'the ink the one white-text fill is designed for'],
+	// Every series doubles as its own legend label, so each is held to the text
+	// floor against both grounds a chart sits on — including the raised panel,
+	// which is the hardest case in the light palette and the one nobody checks.
 	...[1, 2, 3, 4].flatMap((n) => [
 		[`--studio-series-${n}`, '--bg-card', 4.5, `series ${n} on a panel`],
 		[`--studio-series-${n}`, '--bg-elev', 4.5, `series ${n} on a raised panel`]
 	]),
-	// The raw four, named for the cases a page reaches for the colour itself.
-	//
-	// Held to different floors on purpose, and the floor IS the documentation of
-	// what each may be used for. Cyan and aqua are text anywhere. The raw blue is
-	// 4.36 on --bg-elev, so it is a mark, a border or a fill and never a sentence
-	// — --studio-series-2 is the lifted one that may be read. Purple is absent
-	// entirely: at 2.29 on a card it fails even the non-text floor as ink, which
-	// is why --studio-violet exists.
-	['--studio-blue', '--bg-elev', 3.0, 'the blue as a mark, not as text'],
+	// The drawable purple, whichever direction it had to move to become drawable:
+	// lifted on dark, darkened on light.
+	['--studio-violet', '--bg-card', 4.5, 'the drawable purple as ink'],
+	['--studio-violet', '--bg-elev', 4.5, 'the drawable purple on a raised panel']
+];
+
+// On DARK the light three become the readable ones — that is what the dark
+// ground buys, and it is the reason Studio was dark in the first place.
+const STUDIO_PAIRS_DARK = [
 	['--studio-cyan', '--bg-elev', 4.5, 'the cyan as ink'],
 	['--studio-aqua', '--bg-elev', 4.5, 'the aqua as ink'],
-	['--studio-violet', '--bg-card', 4.5, 'the lifted purple as ink'],
-	['--studio-violet', '--bg-elev', 4.5, 'the lifted purple on a raised panel']
+	// Blue is a mark, a border or a fill, never a sentence: it is 4.36 on the
+	// raised panel and passes everywhere else, so it would have shipped failing
+	// on the one surface nobody checks.
+	['--studio-blue', '--bg-elev', 3.0, 'the blue as a mark, not as text']
 ];
+
+// On LIGHT only the purple reads. Nothing asserts cyan, aqua or the raw blue as
+// ink here, because they must not be used as ink here — the darkened
+// --studio-series-* are what carry anything that has to be read.
+const STUDIO_PAIRS_LIGHT = [
+	['--studio-purple', '--bg-card', 4.5, 'the purple as ink'],
+	['--studio-purple', '--bg-elev', 4.5, 'the purple on a raised panel']
+];
+
 
 for (const [theme, tokens] of [
 	['light', light],
 	['dark', dark],
-	['studio', studio]
+	['studio-light', studioLight],
+	['studio-dark', studioDark]
 ]) {
-	for (const [ink, surface, floor, what] of theme === 'studio'
-		? [...PAIRS, ...STUDIO_PAIRS]
-		: PAIRS) {
+	const extra = theme.startsWith('studio')
+		? [...STUDIO_PAIRS_SHARED, ...(theme === 'studio-dark' ? STUDIO_PAIRS_DARK : STUDIO_PAIRS_LIGHT)]
+		: [];
+	for (const [ink, surface, floor, what] of [...PAIRS, ...extra]) {
 		const a = tokens[ink];
 		const b = tokens[surface];
 		if (!a || !b) {
@@ -254,12 +281,23 @@ for (const [theme, tokens] of [
 // manager on the dark theme seeing scout colours in Studio, and nothing else in
 // the suite would notice: every token still resolves, every pair still passes.
 {
-	const darkAt = code.search(/:global\(:root\[data-theme='dark'\]\)/);
-	const studioAt = code.search(/:global\(:root\[data-studio\]\)/);
+	const darkAt = code.search(/:global\(:root\[data-theme='dark'\]\)\s*\{/);
+	const studioAt = code.search(/:global\(:root\[data-studio\]\)\s*\{/);
 	ok(
-		'the Studio palette is declared after the dark palette',
+		'the light Studio palette is declared after the dark theme palette',
 		darkAt !== -1 && studioAt > darkAt,
-		'equal specificity (0,2,0) — source order is the only thing deciding which wins'
+		'both are (0,2,0) — source order is the only thing deciding which wins, so a ' +
+			'manager on the dark theme would otherwise open Studio and get scout colours'
+	);
+
+	// The dark Studio block is (0,3,0) and outranks both regardless of order, but
+	// it must still exist — without it, a manager on the dark theme gets the LIGHT
+	// Studio palette, which is a different bug with the same cause.
+	const studioDarkAt = code.search(/:global\(:root\[data-studio\]\[data-theme='dark'\]\)\s*\{/);
+	ok(
+		'Studio has a dark variant keyed on both attributes',
+		studioDarkAt > -1,
+		'Studio follows the app theme; the dark variant is what makes that true'
 	);
 }
 
