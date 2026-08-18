@@ -30,8 +30,55 @@
 	import { syncState, resync } from '$lib/sync.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { relativeTime } from '$lib/format.js';
+	import { listEntries, getOrCreateClientId } from '$lib/db.js';
+	import { buildBundle, bundleFilename } from '$lib/transfer.js';
 
 	let open = $state(false);
+	let exporting = $state(false);
+	let exportNote = $state('');
+
+	// Export lives HERE, and that is the whole point of putting it here.
+	//
+	// Every state this panel reports — offline, signed out, not on this event,
+	// error — is a different way of saying "your work is on this phone and
+	// nowhere else". This is the one screen where a scout is already looking at
+	// that fact, so it is where the answer belongs. On Settings it would be two
+	// taps from the problem and found by nobody.
+	async function exportEntries() {
+		exporting = true;
+		exportNote = '';
+		try {
+			const all = await listEntries();
+			// This event only. A scout's phone accumulates several events over a
+			// season and a manager collecting at one of them does not want the
+			// others — planImport() would file them under otherEvent anyway, but
+			// shipping them is a privacy and a size question, not just a tidiness one.
+			const mine = session.eventCode
+				? all.filter((e) => e.eventCode === session.eventCode)
+				: all;
+			const meta = {
+				eventCode: session.eventCode,
+				scoutName: session.scoutName,
+				deviceId: await getOrCreateClientId()
+			};
+			const bundle = buildBundle(mine, meta);
+			const blob = new Blob([JSON.stringify(bundle, null, 1)], { type: 'application/json' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = bundleFilename(meta);
+			a.click();
+			// Revoked on the next frame, not immediately: Safari has not finished
+			// reading the blob when click() returns, and revoking too early gives
+			// an empty file with no error anywhere.
+			setTimeout(() => URL.revokeObjectURL(url), 0);
+			exportNote = `${mine.length} ${mine.length === 1 ? 'entry' : 'entries'} saved. Send it to a manager.`;
+		} catch (err) {
+			exportNote = err?.message ?? String(err);
+		} finally {
+			exporting = false;
+		}
+	}
 
 	const view = $derived.by(() => {
 		if (!session.eventCode) {
@@ -113,21 +160,45 @@
 			</div>
 		</dl>
 
-		<button
-			type="button"
-			class="retry"
-			disabled={!session.eventCode || syncState.status === 'connecting'}
-			onclick={() => {
-				resync();
-				open = false;
-			}}
-		>
-			{syncState.status === 'connecting' ? 'Syncing…' : 'Sync now'}
-		</button>
+		<div class="acts">
+			<button
+				type="button"
+				class="retry"
+				disabled={!session.eventCode || syncState.status === 'connecting'}
+				onclick={() => {
+					resync();
+					open = false;
+				}}
+			>
+				{syncState.status === 'connecting' ? 'Syncing…' : 'Sync now'}
+			</button>
+
+			<!-- The way out when syncing is not going to work. A gym has no usable
+			     wifi and this is the answer that needs no server: save a file, hand
+			     it over by AirDrop or a cable, a manager imports it in Studio. -->
+			<button type="button" class="retry" disabled={exporting} onclick={exportEntries}>
+				{exporting ? 'Saving…' : 'Save a file'}
+			</button>
+		</div>
+		{#if exportNote}<p class="note" role="status">{exportNote}</p>{/if}
 	</div>
 {/if}
 
 <style>
+	.acts {
+		display: flex;
+		gap: var(--space-2);
+	}
+	.acts .retry {
+		flex: 1 1 0;
+		min-width: 0;
+	}
+	.note {
+		margin: var(--space-2) 0 0;
+		font-size: var(--fs-xs);
+		color: var(--text-muted);
+	}
+
 	.sr-only {
 		position: absolute;
 		width: 1px;

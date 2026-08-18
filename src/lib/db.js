@@ -336,6 +336,38 @@ export async function insertRemoteEntry(remoteRow) {
 }
 
 /**
+ * Import rows that arrived in a file rather than over the network.
+ *
+ * Deliberately a thin loop over `insertRemoteEntry()` rather than its own
+ * insert path. That function already resolves a row against the content
+ * fingerprint and against `remoteId`, because sync needed exactly this
+ * guarantee for rows echoed back by realtime — its own comment says "via
+ * realtime echo, or two import paths", written before the second path existed.
+ *
+ * A second insert path would be a second place for the dedupe rule to live, and
+ * the two would disagree the first time either changed. That is the bug
+ * `scout-identity.js` exists because of, one layer down.
+ *
+ * @param {object[]} rows  rows from a bundle, already filtered by planImport()
+ * @returns {Promise<{inserted: number, skipped: number}>}
+ */
+export async function importEntries(rows) {
+	let inserted = 0;
+	let skipped = 0;
+	for (const row of rows ?? []) {
+		// remoteId is carried in a bundle but a row that never synced has none;
+		// normalise it so the lookup is not asked to match `undefined`.
+		const { inserted: didInsert } = await insertRemoteEntry({
+			...row,
+			remoteId: row.remoteId ?? null
+		});
+		if (didInsert) inserted += 1;
+		else skipped += 1;
+	}
+	return { inserted, skipped };
+}
+
+/**
  * Distinct, non-empty values for a given observations key across every entry.
  * Used by autocomplete fields to suggest previously-recorded values
  * (e.g. auto pathing names) so scouts converge on consistent labels instead

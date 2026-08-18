@@ -32,6 +32,7 @@
 	import EventPicker from '$lib/components/EventPicker.svelte';
 	import PageHead from '$lib/components/studio/PageHead.svelte';
 	import Panel from '$lib/components/studio/Panel.svelte';
+	import ImportEntries from '$lib/components/studio/ImportEntries.svelte';
 
 	let events = $state([]);
 	let selectedId = $state(null);
@@ -290,6 +291,8 @@
 	</div>
 
 	<div class="tail">
+		<ImportEntries />
+
 		<Panel
 			title="This event"
 			hint="{selected.code}{selected.starts_on ? ` · starts ${selected.starts_on}` : ''}"
@@ -332,6 +335,9 @@
 	}
 	.tail {
 		margin-top: var(--space-4);
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
 	}
 
 	.col {
