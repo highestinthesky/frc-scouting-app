@@ -17,6 +17,7 @@
 	import Stat from '$lib/components/studio/Stat.svelte';
 	import Toolbar from '$lib/components/studio/Toolbar.svelte';
 	import Table from '$lib/components/studio/Table.svelte';
+	import PublicRating from '$lib/components/studio/PublicRating.svelte';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -42,6 +43,35 @@
 	// is data — a season retune adds a column and a hardcoded colspan would tear
 	// the detail row out of alignment with nothing failing.
 	const COLS = 7 + METRIC_FIELDS.length;
+
+	// ─── the second-opinion comparison ────────────────────────────────────────
+	//
+	// Compares whichever metric the table is currently sorted by, so the ranking
+	// being checked is the one the manager is actually looking at. Falling back to
+	// a fixed metric would compare something they cannot see.
+	const compareMetric = $derived.by(() => {
+		const key = sortBy.startsWith('metric:') ? sortBy.slice(7) : METRIC_FIELDS[0]?.key;
+		return METRIC_FIELDS.find((m) => m.key === key) ?? METRIC_FIELDS[0] ?? null;
+	});
+
+	// Our own number per team: the mean, and null when there is no reading. Null
+	// rather than 0 — a team we have not measured has not been judged, and
+	// ranking it last would be an opinion we do not hold.
+	const compareRows = $derived.by(() =>
+		compareMetric
+			? filteredTeams.map((t) => {
+					const stat = t.metrics?.[compareMetric.key];
+					return { team: t.teamNumber, ours: stat && stat.n > 0 ? stat.mean : null };
+				})
+			: []
+	);
+
+	// The season, from the event code TBA already keys on: "2026onsum" -> 2026.
+	const seasonYear = $derived.by(() => {
+		const m = /^(\d{4})/.exec(String(session.eventCode ?? ''));
+		return m ? Number(m[1]) : null;
+	});
+
 
 	// ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -649,6 +679,14 @@
 					{/each}
 				</Table>
 			</Panel>
+
+			<div class="second-opinion">
+				<PublicRating
+					rows={compareRows}
+					metricLabel={compareMetric?.label ?? 'your numbers'}
+					year={seasonYear}
+				/>
+			</div>
 		{/if}
 	{/if}
 </main>
@@ -1012,6 +1050,10 @@
 	.full-view-link:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: -2px;
+	}
+
+	.second-opinion {
+		margin-top: var(--space-5);
 	}
 
 	.sr-only {
