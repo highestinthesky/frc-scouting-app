@@ -97,7 +97,10 @@
 		// /register either, but an orphaned auth user MUST be allowed to stay
 		// there and retry the invite redemption that failed after signUp().
 		if (auth.signedIn && (onLoginRoute || (onRegisterRoute && !auth.orphaned))) {
-			goto(`${base}/scouting/`, { replaceState: true });
+			// Home, not /scouting. Signing in and landing on a list of what you have
+			// already recorded answers a question nobody asked; Home answers "am I
+			// up, and has anyone told me anything".
+			goto(`${base}/home/`, { replaceState: true });
 			return;
 		}
 		// Signed out: the login screen is where you land. A device that has never
@@ -291,10 +294,16 @@
 
 	<!-- Bottom-docked on phones, top strip from 40rem up. See design.md
 	     § Three deviations — a scout holds this one-handed. -->
-	<!-- Two tabs, not four. This app records matches; running an event is Studio's
-	     job and Studio is not a peer of these — it is a different application, so
-	     it is a button in the bar above rather than a tab down here. -->
+	<!-- Three tabs, not five. This app records matches; running an event is
+	     Studio's job and Studio is not a peer of these — it is a different
+	     application, so it is a button in the bar above rather than a tab here.
+	     Home leads because it answers "what now", which is the question a scout
+	     opens the app holding. Scouting is the record of what they have already
+	     done, which is a different and later question. -->
 	<nav class="tabs" aria-label="Main">
+		<a href="{base}/home/" class:active={isActive('/home')} aria-current={isActive('/home') ? 'page' : undefined}>
+			Home
+		</a>
 		<a href="{base}/scouting/" class:active={isActive('/scouting')} aria-current={isActive('/scouting') ? 'page' : undefined}>
 			Scouting
 		</a>

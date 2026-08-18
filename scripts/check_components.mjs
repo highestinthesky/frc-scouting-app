@@ -591,6 +591,25 @@ for (const [label, file] of [
 			'the nav-label check reads a title prop and trusts it to become the heading'
 		);
 	}
+	// Home is the one deliberate exception, and it is asserted here rather than
+	// omitted so the exception is visible instead of being a gap.
+	//
+	// Its <h1> is a greeting — "Good afternoon, Ada" — because the page's job is
+	// to speak to the person, not to title itself. A tab reading "Home" opening a
+	// page headed "Good afternoon" is not the drift this check exists to catch:
+	// that was "Insights" opening a page headed "Manager", where the two names
+	// described different things. Here they describe the same place and one of
+	// them is a salutation. What IS asserted is that the greeting is really there
+	// — so the exception cannot quietly become an untitled page.
+	{
+		const src = readFileSync(path.join(root, 'src/routes/home/+page.svelte'), 'utf8');
+		ok(
+			'"Home" opens a page that greets the scout by name',
+			/Good morning|Good afternoon|Good evening/.test(src) && /<h1[^>]*>/.test(src),
+			'Home is exempt from label==heading only because its heading is a greeting'
+		);
+	}
+
 	for (const [label, file] of [
 		['Scouting', 'src/routes/scouting/+page.svelte'],
 		['Settings', 'src/routes/settings/+page.svelte'],
@@ -747,7 +766,11 @@ for (const [label, file] of [
 // what exists now is circular — it would agree with any deletion.
 {
 	const MOVED = [
-		['src/routes/home', '/scouting/'],
+		// /home is NOT here any more. It was a redirect to /scouting from v0.73
+		// until v0.75, when it became a real page again — the scout's landing
+		// surface. Installed PWAs that still point at /home now arrive somewhere
+		// better than they used to, which is the outcome the redirect existed to
+		// approximate.
 		['src/routes/insights', '/studio/insights/'],
 		['src/routes/insights/compare', '/studio/insights/compare/'],
 		['src/routes/insights/picklist', '/studio/insights/picklist/'],
