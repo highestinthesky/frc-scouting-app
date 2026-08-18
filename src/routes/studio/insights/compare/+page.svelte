@@ -7,6 +7,7 @@
 	import { fmt } from '$lib/metrics.js';
 	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { syncState } from '$lib/sync.svelte.js';
+	import PageHead from '$lib/components/studio/PageHead.svelte';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -106,10 +107,11 @@
 </svelte:head>
 
 <main>
-	<header class="page-head">
-		<a class="back" href="{base}/studio/insights/" aria-label="Back to Insights">←</a>
-		<h1>Compare teams</h1>
-	</header>
+	<PageHead
+		title="Compare teams"
+		back="{base}/studio/insights/"
+		backLabel="Back to Insights"
+	/>
 
 	<form class="add-row" onsubmit={(e) => { e.preventDefault(); addTeam(); }}>
 		<input
@@ -247,31 +249,6 @@
 	 * design-system: design.md · designed-as-app
 	 */
 
-	main {
-		max-width: 60rem;
-		margin: var(--space-4) auto;
-		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
-	}
-	.page-head {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		margin: var(--space-4) 0 var(--space-2);
-	}
-	.back {
-		font-size: var(--fs-xl);
-		text-decoration: none;
-		color: var(--accent);
-		min-width: var(--tap-min);
-		min-height: var(--tap-min);
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-	}
-	.back:hover { background: var(--bg-subtle); }
-	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
 	.muted { color: var(--text-faint); }
 
 	.add-row {
@@ -323,7 +300,7 @@
 
 	.grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(16rem, minmax(0, 1fr)));
+		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
 		gap: var(--space-3);
 	}
 	.col {

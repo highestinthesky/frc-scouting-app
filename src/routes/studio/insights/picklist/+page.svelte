@@ -18,6 +18,7 @@
 	} from '$lib/tba.js';
 	import { standingsByTeam, selectionStarted, nextAvailable, describe } from '$lib/alliances.js';
 	import { relativeTime } from '$lib/format.js';
+	import PageHead from '$lib/components/studio/PageHead.svelte';
 
 	let summary = $state(null);
 	let loading = $state(true);
@@ -372,11 +373,12 @@
 </svelte:head>
 
 <main>
-	<header class="page-head">
-		<a class="back" href="{base}/studio/insights/" aria-label="Back to Insights">←</a>
-		<h1>Picklist</h1>
-		{#if eventCode}<small class="event">· {eventCode}</small>{/if}
-	</header>
+	<PageHead
+		title="Picklist"
+		sub={eventCode ?? ''}
+		back="{base}/studio/insights/"
+		backLabel="Back to Insights"
+	/>
 
 	<!-- Who can change this list, and whether the change has landed. Both are
 	     things a manager needs to know before alliance selection, not during. -->
@@ -648,32 +650,6 @@
 	 * design-system: design.md · designed-as-app
 	 */
 
-	main {
-		max-width: 38rem;
-		margin: var(--space-4) auto;
-		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
-	}
-	.page-head {
-		display: flex;
-		align-items: baseline;
-		gap: var(--space-2);
-		margin: var(--space-4) 0 var(--space-2);
-	}
-	.back {
-		font-size: var(--fs-xl);
-		text-decoration: none;
-		color: var(--accent);
-		min-width: var(--tap-min);
-		min-height: var(--tap-min);
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-	}
-	.back:hover { background: var(--bg-subtle); }
-	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
-	.event { color: var(--text-faint); font-size: var(--fs-sm); }
 	.muted { color: var(--text-faint); }
 
 	.share {

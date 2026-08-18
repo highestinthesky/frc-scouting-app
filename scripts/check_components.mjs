@@ -64,13 +64,28 @@ function rules(rel) {
 /** Selector text with Svelte's injected hash class removed, so patterns read
  *  the way they were written in the component. */
 const unscoped = (sel) => sel.replace(/\.svelte-[a-z0-9]+/g, '');
+
+/**
+ * Does this selector use the class `name` — that class, not one starting with it?
+ *
+ * `\b` is the wrong boundary for a CSS identifier. Class names contain hyphens
+ * and `\b` treats a hyphen as a boundary, so `/\.back\b/` matches `.back-link`.
+ * That surfaced the moment the real `.back` rules were replaced by PageHead: the
+ * only thing left on the team page was `.back-link`, a labelled text link, and
+ * the back-link check demanded a 44px min-WIDTH of it — which a link reading
+ * "Back to Insights" does not need and should not have.
+ *
+ * A false failure on correct code is the worst outcome for a build-blocking
+ * check, because the cheapest way out is to rename the class.
+ */
+const usesClass = (sel, name) => new RegExp(`(^|[\\s,>+~(])\\.${name}(?![\\w-])`).test(sel);
 const declares = (body, prop) => new RegExp(`(^|[;{\\s])${prop}\\s*:`).test(body);
 const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)?.[1]?.trim();
 
 // ─── Dialog ────────────────────────────────────────────────────────────────
 {
 	const r = rules('src/lib/components/Dialog.svelte');
-	const dlg = r.filter((x) => /(^|[\s,])\.dlg\b/.test(unscoped(x.selector)));
+	const dlg = r.filter((x) => usesClass(unscoped(x.selector), "dlg"));
 
 	ok('Dialog: found .dlg rules to inspect', dlg.length > 0);
 
@@ -473,7 +488,7 @@ for (const [label, file] of [
 		.filter((f) => f.endsWith('+page.svelte'))
 		.map((f) => path.relative(root, f))) {
 		const r = rules(rel);
-		const back = r.filter((x) => /(^|[\s,])\.back\b/.test(unscoped(x.selector)));
+		const back = r.filter((x) => usesClass(unscoped(x.selector), "back"));
 		if (back.length === 0) continue; // page has no back link
 		const sized = back.some(
 			(x) =>
@@ -656,6 +671,36 @@ for (const [label, file] of [
 		offenders.length === 0,
 		offenders.slice(0, 3).join(' | ')
 	);
+
+	// ── and no track nests minmax() inside minmax() ────────────────────────
+	//
+	// `minmax(8.5rem, minmax(0, 1fr))` is not valid CSS — minmax()'s max may not
+	// be another minmax() — so the browser drops the WHOLE declaration. The grid
+	// silently falls back to one column.
+	//
+	// Two of these were live: the team page's metric cards and the compare page's
+	// columns, both rendering one item per row across a 977px area. It reads as a
+	// layout choice, which is why it survived: nothing errors, nothing warns,
+	// nothing looks broken — it just looks like somebody wanted a list.
+	//
+	// It is the shape of a careful mistake, too. Every OTHER track in the app is
+	// `minmax(0, 1fr)` to keep it shrinkable, so writing that inside an auto-fit
+	// minmax is the obvious next step, and it is the one place it is illegal.
+	{
+		const nested = [];
+		for (const abs of readdirRecursive(path.join(root, 'src')).filter((f) => f.endsWith('.svelte'))) {
+			const rel = path.relative(root, abs);
+			for (const m of readFileSync(abs, 'utf8').matchAll(/grid-template-columns:\s*([^;]+);/g)) {
+				if (/minmax\([^()]*,\s*minmax\(/.test(m[1])) nested.push(`${rel}: ${m[0].trim()}`);
+			}
+		}
+		ok(
+			'no grid track nests minmax() inside minmax()',
+			nested.length === 0,
+			nested.join('\n        ') +
+				"\n        invalid CSS — the browser drops the declaration and the grid collapses to one column"
+		);
+	}
 }
 
 
