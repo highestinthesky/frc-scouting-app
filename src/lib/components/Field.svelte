@@ -551,6 +551,16 @@
 		padding: var(--space-1);
 		cursor: pointer;
 		font: inherit;
+		/* 35 x 50 before this, because the switch is drawn by .track inside and
+		   nothing ever sized the button around it. It is the "did it break down"
+		   control on /scouting/new — the most-used screen in the app — and it was
+		   the smallest target on it. Found by sweeping every control after the
+		   box-sizing change; it predates that change and is not caused by it. */
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
 	}
 	.toggle:focus-visible .track {
 		outline: 2px solid var(--accent);

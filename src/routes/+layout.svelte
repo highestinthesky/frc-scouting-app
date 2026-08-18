@@ -359,6 +359,32 @@
 		border-radius: var(--radius-sm);
 	}
 
+	/* ─── the box model ────────────────────────────────────────────────────────
+	 *
+	 * The app ran on the default content-box until v0.75, and the cost was not
+	 * theoretical: a <button> and an <a> with the SAME class rendered at
+	 * different heights, because the UA stylesheet gives form controls
+	 * border-box and leaves everything else content-box.
+	 *
+	 * Measured on /studio/insights, in one toolbar, side by side:
+	 *
+	 *     Compare      <a class="btn">        62px
+	 *     Picklist     <a class="btn">        62px
+	 *     Export CSV   <button class="btn">   44px
+	 *
+	 * Same rule, same tokens — min-height: var(--tap-min) plus padding — and an
+	 * 18px difference nobody wrote. Button's href prop promises that the element
+	 * changes and the styling does not, and that promise was not keepable while
+	 * the two elements measured their own size differently.
+	 *
+	 * :where() so it has ZERO specificity and any component that genuinely needs
+	 * content-box can say so without fighting it. Applied to ::before/::after too,
+	 * because a pseudo-element inherits nothing here.
+	 */
+	:global(*, *::before, *::after) {
+		box-sizing: border-box;
+	}
+
 	:global(:root) {
 		--bg-page: #fafafa;
 		--bg-card: #ffffff;

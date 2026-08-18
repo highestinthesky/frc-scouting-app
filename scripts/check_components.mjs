@@ -704,6 +704,33 @@ for (const [label, file] of [
 }
 
 
+// ─── one box model, so an <a> and a <button> are the same size ──────────────
+//
+// The UA stylesheet gives form controls border-box and leaves everything else
+// content-box. So `min-height: var(--tap-min)` plus padding measured 44px on a
+// <button> and 62px on an <a> — same class, same tokens, 18px apart, in one
+// toolbar on /studio/insights:
+//
+//     Compare      <a class="btn">        62px
+//     Picklist     <a class="btn">        62px
+//     Export CSV   <button class="btn">   44px
+//
+// Button's href prop promises the element changes and the styling does not, and
+// that is not keepable while the two elements measure themselves differently.
+// Remove this reset and the promise silently breaks again — nothing else in the
+// suite would notice, because every rule still says var(--tap-min).
+{
+	const r = rules('src/routes/+layout.svelte');
+	const reset = r.find(
+		(x) => x.selector.includes('*') && valueOf(x.body, 'box-sizing') === 'border-box'
+	);
+	ok(
+		'one box model applies to everything',
+		Boolean(reset),
+		'without a global border-box reset, <a class="btn"> and <button class="btn"> render 18px apart'
+	);
+}
+
 // ─── a moved route still answers ───────────────────────────────────────────
 //
 // v0.73 moved five surfaces into Studio and its own plan said "Every old path
