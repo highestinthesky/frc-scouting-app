@@ -20,7 +20,22 @@ const config = {
 		adapter: adapter({
 			pages: 'build',
 			assets: 'build',
-			fallback: 'index.html', // SPA fallback so client-side routing works on any host
+			// 404.html, NOT index.html, and this is the difference between the team
+			// pages working and 404ing in production.
+			//
+			// GitHub Pages serves a fallback for an unresolved path only when it is
+			// named 404.html. Named index.html it is never reached — it just
+			// OVERWRITES the prerendered `/` page, which is what the build has been
+			// warning about ("Consider using a different name for the fallback")
+			// for as long as it has been set this way.
+			//
+			// /studio/insights/team/[teamNumber] sets prerender = false, because
+			// team numbers only exist in IndexedDB at runtime. So it has no built
+			// page and depends entirely on this fallback: a static host returned
+			// 404 for every team detail page. Measured against `build/`, not
+			// assumed. The bare-fallback routes are covered by the redirect check
+			// in check_components.mjs.
+			fallback: '404.html',
 			precompress: false,
 			strict: true
 		})

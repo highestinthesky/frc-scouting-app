@@ -704,6 +704,72 @@ for (const [label, file] of [
 }
 
 
+// ─── a moved route still answers ───────────────────────────────────────────
+//
+// v0.73 moved five surfaces into Studio and its own plan said "Every old path
+// redirects. A cached PWA or a bookmark must not 404 on the morning of an
+// event." Only /home ever got one. /insights, /insights/compare,
+// /insights/picklist, /insights/team/[n] and /accounts returned 404 on a static
+// host — measured against the build, not assumed.
+//
+// This is invisible in development, and that is the whole reason it survived:
+// `npm run dev` and `npm run preview` both serve an SPA fallback for any path,
+// so every one of these resolves locally and 404s only once deployed.
+//
+// The pairs are listed rather than derived. Deriving "what used to exist" from
+// what exists now is circular — it would agree with any deletion.
+{
+	const MOVED = [
+		['src/routes/home', '/scouting/'],
+		['src/routes/insights', '/studio/insights/'],
+		['src/routes/insights/compare', '/studio/insights/compare/'],
+		['src/routes/insights/picklist', '/studio/insights/picklist/'],
+		['src/routes/insights/team/[teamNumber]', '/studio/insights/team/'],
+		['src/routes/accounts', '/studio/accounts/']
+	];
+	const offenders = [];
+	for (const [dir, target] of MOVED) {
+		const file = path.join(root, dir, '+page.svelte');
+		let src = '';
+		try {
+			src = readFileSync(file, 'utf8');
+		} catch {
+			offenders.push(`${dir} — no +page.svelte, so this path 404s`);
+			continue;
+		}
+		if (!/\bgoto\(/.test(src)) offenders.push(`${dir} — exists but never calls goto()`);
+		else if (!src.includes(target)) offenders.push(`${dir} — redirects somewhere other than ${target}`);
+	}
+	ok(
+		'every route moved in v0.73 still redirects',
+		offenders.length === 0,
+		offenders.join('\n        ')
+	);
+}
+
+// ─── the SPA fallback is named what the host looks for ─────────────────────
+//
+// GitHub Pages serves a fallback for an unresolved path ONLY when it is called
+// 404.html. Named index.html it is never reached and merely overwrites the
+// prerendered `/` page — which the build has been printing a warning about all
+// along ("Consider using a different name for the fallback").
+//
+// /studio/insights/team/[teamNumber] sets prerender = false, so it has no built
+// page and depends entirely on this. Every team detail page 404d in production,
+// and the Insights table makes team numbers links, so it is the obvious thing to
+// click.
+{
+	const cfg = readFileSync(path.join(root, 'svelte.config.js'), 'utf8').replace(
+		/\/\/.*$|\/\*[\s\S]*?\*\//gm,
+		''
+	);
+	ok(
+		'the static fallback is 404.html, which is the name a static host looks for',
+		/fallback:\s*'404\.html'/.test(cfg),
+		`fallback is ${/fallback:\s*'([^']+)'/.exec(cfg)?.[1] ?? '(unset)'} — index.html is never served for an unresolved path`
+	);
+}
+
 // ─── a keyboard user can always see where they are ─────────────────────────
 //
 // Eight components shipped with interactive elements and no :focus-visible.
