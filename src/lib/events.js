@@ -38,7 +38,14 @@ import { normalizeCode, sortEvents } from './event-rules.js';
  */
 const idByCode = new Map();
 
-/** Drop the cache. Called on sign-in and sign-out — membership just changed. */
+/**
+ * Drop the cache. Membership just changed, so every answer in it may have.
+ *
+ * Called from auth.svelte.js on SIGNED_IN and SIGNED_OUT. It said that before it
+ * was true: nothing outside this file called it, auth.svelte.js did not import
+ * this module at all, and a second person signing in on a shared laptop
+ * inherited the first one's event ids.
+ */
 export function forgetEvents() {
 	idByCode.clear();
 }
@@ -91,7 +98,22 @@ export async function eventIdForCode(code) {
 	if (error) throw new Error(`Could not resolve event ${key}: ${error.message}`);
 
 	const id = data?.id ?? null;
-	idByCode.set(key, id);
+	// Only a RESOLVED id is cached. A null is not.
+	//
+	// This map lives for the tab, and `events` is behind RLS — so "no row" does
+	// not mean "no such event", it means "not visible to whoever is asking right
+	// now". At boot that is routinely nobody: session.load(), auth.init(),
+	// syncInit() and reminders.init() all race, and the sync layer resolves the
+	// event code before the session is necessarily ready.
+	//
+	// Cached, that transient null became permanent. Every later call returned it,
+	// and deleting an entry reported "Not connected to this event, so it can only
+	// be removed from this device" — on an event the manager was plainly a member
+	// of, for the rest of the tab's life, with a reload as the only cure.
+	//
+	// The cache exists to spare 31 call sites a round trip each. A negative
+	// answer buys none of that and costs exactly this.
+	if (id) idByCode.set(key, id);
 	return id;
 }
 

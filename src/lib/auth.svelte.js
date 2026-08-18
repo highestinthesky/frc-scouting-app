@@ -32,6 +32,7 @@
 // changing it silently detaches an account from everything addressed to it.
 
 import { getAuthClient } from './supabase.js';
+import { forgetEvents } from './events.js';
 // session.svelte.js imports only db.js, so this direction is acyclic.
 import { session } from './session.svelte.js';
 // Same direction: db.js never imports this module, which is the invariant that
@@ -258,11 +259,17 @@ export const auth = {
 			// Deliberately NOT handling TOKEN_REFRESH_FAILED by signing out.
 			// See rule 2 at the top of this file — that path is how a scout
 			// loses unsaved work in a dead spot.
+			// Both transitions drop the event-id cache: which events are visible is
+			// decided by membership, and membership just changed. Signing in also
+			// clears whatever was resolved while signed OUT, which under RLS is
+			// nothing — see eventIdForCode().
 			if (event === 'SIGNED_IN') {
+				forgetEvents();
 				state.signedIn = true;
 				rememberAuthIdentity(session);
 				loadProfile(authUserId(session));
 			} else if (event === 'SIGNED_OUT') {
+				forgetEvents();
 				clearCachedProfile();
 				state.signedIn = false;
 				state.userId = null;

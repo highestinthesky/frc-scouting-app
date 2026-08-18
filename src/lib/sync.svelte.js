@@ -22,7 +22,14 @@ import {
 	markEntrySynced,
 	insertRemoteEntry,
 	applyRemoteUpdate,
-	getEntryByRemoteId
+	getEntryByRemoteId,
+	// Used in two places and imported in none: withdrawEntry() and the tombstone
+	// branch of pullInbox() both called it, and both threw ReferenceError. Never
+	// seen, because the event-id cache returned "Not connected to this event"
+	// before withdrawEntry could reach it — and the tombstone branch only runs
+	// once a withdrawal has succeeded somewhere, which that same bug prevented.
+	// One bug hid two.
+	deleteEntry
 } from './db.js';
 import { SCHEMA_VERSION } from './form-config.js';
 import { pullScheduleIfStale } from './tba.js';

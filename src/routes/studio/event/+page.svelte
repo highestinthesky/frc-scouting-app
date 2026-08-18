@@ -42,6 +42,7 @@
 	let err = $state('');
 	let msg = $state('');
 	let dragging = $state(null);
+	let dropTarget = $state(null);
 
 	const selected = $derived(events.find((e) => e.id === selectedId) ?? null);
 	const onEvent = $derived(new Set(roster.map((r) => r.profileId)));
@@ -168,11 +169,39 @@
 		}
 	}
 
+	/**
+	 * Begin a drag.
+	 *
+	 * dataTransfer is set even though nothing reads it: Firefox will not START a
+	 * drag without it, so the whole gesture was a no-op there while working in
+	 * Chrome, which is lenient. The payload is the profile id so a future drop
+	 * target could read it instead of the module-level `dragging`.
+	 */
+	function startDrag(e, id) {
+		dragging = id;
+		try {
+			e.dataTransfer.setData('text/plain', String(id));
+			e.dataTransfer.effectAllowed = 'move';
+		} catch {
+			// Some browsers lock dataTransfer outside a real user gesture. The
+			// drag still works via `dragging`; do not let this abort it.
+		}
+	}
+
+	function overZone(e, target) {
+		// preventDefault on dragover is what MAKES an element a drop target. An
+		// element without it rejects every drop silently.
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		dropTarget = target;
+	}
+
 	function onDrop(target) {
 		return async (e) => {
 			e.preventDefault();
 			const id = dragging;
 			dragging = null;
+			dropTarget = null;
 			if (!id) return;
 			if (target === 'event' && !onEvent.has(id)) await add(id);
 			if (target === 'team' && onEvent.has(id)) await remove(id);
@@ -209,23 +238,26 @@
 {:else}
 	<div class="columns">
 		<Panel
-			title="On {eventLabel(selected)}"
-			hint={roster.length === 0 ? 'Nobody yet. Drag a name across, or press +.' : ''}
-		>
+			title="On {eventLabel(selected)}">
 			{#snippet actions()}
 				<span class="count">{roster.length}</span>
 			{/snippet}
 			<section
 				class="col"
-				ondragover={(e) => e.preventDefault()}
+				class:over={dropTarget === 'event'}
+				ondragover={(e) => overZone(e, 'event')}
+				ondragleave={() => (dropTarget = null)}
 				ondrop={onDrop('event')}
 				aria-label="Scouts on this event"
 			>
+				{#if roster.length === 0}
+					<p class="drop-hint">Drag a name here, or press +</p>
+				{/if}
 			<ul>
 				{#each roster as r (r.profileId)}
 					<li
 						draggable="true"
-						ondragstart={() => (dragging = r.profileId)}
+						ondragstart={(e) => startDrag(e, r.profileId)}
 						ondragend={() => (dragging = null)}
 						class:drag={dragging === r.profileId}
 					>
@@ -247,9 +279,7 @@
 		</Panel>
 
 		<Panel
-			title="Rest of the team"
-			hint={available.length === 0 ? 'Everyone is on this event.' : ''}
-		>
+			title="Rest of the team">
 			{#snippet actions()}
 				{#if available.length > 0}
 					<Button variant="ghost" type="button" disabled={busy} onclick={addEveryone}>
@@ -260,15 +290,20 @@
 			{/snippet}
 			<section
 				class="col"
-				ondragover={(e) => e.preventDefault()}
+				class:over={dropTarget === 'team'}
+				ondragover={(e) => overZone(e, 'team')}
+				ondragleave={() => (dropTarget = null)}
 				ondrop={onDrop('team')}
 				aria-label="Team members not on this event"
 			>
+				{#if available.length === 0}
+					<p class="drop-hint">Everyone is on this event. Drag a name here to take them off.</p>
+				{/if}
 			<ul>
 				{#each available as p (p.id)}
 					<li
 						draggable="true"
-						ondragstart={() => (dragging = p.id)}
+						ondragstart={(e) => startDrag(e, p.id)}
 						ondragend={() => (dragging = null)}
 						class:drag={dragging === p.id}
 					>
@@ -340,8 +375,37 @@
 		gap: var(--space-4);
 	}
 
+	/* A drop zone with no height is not a drop zone.
+	   "Rest of the team" is empty whenever everyone is on the event — the normal
+	   case — so this section collapsed to nothing and there was physically no
+	   target to drop a scout onto. Dragging IN worked, because that list had rows
+	   and therefore height; dragging back OUT could not, and looked like the
+	   handler was broken when the handler was never reached. */
 	.col {
 		min-width: 0;
+		min-height: var(--space-6);
+		border-radius: var(--radius-md);
+		border: 1px dashed transparent;
+		transition: background var(--dur-short) var(--ease-out);
+	}
+	/* Feedback while a drag is over it, because an invisible target that happens
+	   to work is only marginally better than one that does not. */
+	.col.over {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+	}
+	.drop-hint {
+		margin: 0;
+		padding: var(--space-3);
+		text-align: center;
+		font-size: var(--fs-sm);
+		color: var(--text-faint);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.col {
+			transition-duration: 0.01ms;
+		}
 	}
 	.count {
 		font-size: var(--fs-xs);
