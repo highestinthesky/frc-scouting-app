@@ -712,6 +712,128 @@ grows a new feature; a chart builder built on five inconsistent pages inherits
 all five inconsistencies. The series tokens (`--studio-series-1..4`) are defined
 and contrast-checked, so the palette half of that work is already done.
 
+### v0.75 — the differentiating series
+
+Named after v0.74 closed the interface work, and enumerated here before it ships
+per the working agreement. It spans several commits; the series is the unit of
+planning, not the commit.
+
+The goal driving it is explicit: this should be worth turning into a Mac/iOS app,
+which means beating the free alternatives — Scoutradioz, Scouting PASS/QRScout,
+1678's open system, and the Google Sheets homebrew most teams actually run.
+
+**The strategic read.** Those alternatives do not lose on features. They lose on
+whether the data arrives: gym wifi is unusable, which is the entire reason
+QR-code transfer exists as a category. And Statbotics gives every team decent
+predictive analytics for free, so raw analytics is no longer a differentiator.
+What is left, and what this series is about:
+
+1. the data arrives, with no infrastructure;
+2. the data is trustworthy;
+3. the data says something public sources structurally cannot see.
+
+#### 1. One box model ✅
+
+`<a class="btn">` measured 62px and `<button class="btn">` measured 44px, in one
+toolbar, from the same rule — the UA stylesheet gives form controls border-box
+and everything else content-box. Shipped in v0.74, because that is the release
+that gave Button an `href`. Fixed with a zero-specificity global reset, and the
+sweep also found `.toggle` at 35px on `/scouting/new`.
+
+#### 2. Statbotics as a prior, not a dependency
+
+**Statbotics needs no API key** — confirmed from its OpenAPI spec, which declares
+`securitySchemes: NONE`. So half the key problem does not exist. Only TBA needs
+one.
+
+**Do not publish a shared TBA key in the bundle.** This is a static site in a
+public repo; anything in it is public, permanently, including in git history. A
+TBA read key is tied to an account and rate-limited, so a published one is a key
+anyone can exhaust. The key is stored per-manager in `session.tbaApiKey` today
+and that already works.
+
+If one shared key is genuinely wanted, put it in a row readable only by managers
+under RLS — the same shape as every other manager-only fact in this database.
+That gives "one key the managers share" without giving it to the world. The Edge
+Function proxy already named under Conditional work is the answer only if the app
+ever goes public.
+
+**Treat Statbotics as enrichment that can be absent.** While planning this, every
+`/v3/` data endpoint returned 500 while the API root returned 200. An analytics
+source that can be down must never be something the picklist depends on: fetch,
+cache, and degrade to your own numbers.
+
+The feature is not "rebuild EPA". It is showing where EPA and your scouts
+disagree, because that is where a pick is won or lost.
+
+#### 3. Scout reliability — dropped
+
+Considered and rejected as superficial.
+
+#### 4. The graph builder, desktop-gated
+
+Gating it does **not** simplify the programming much — it is the same web code
+either way. What it removes is the design and testing surface: making a
+drag-and-drop chart builder work at 375px is where most of the effort would go,
+and Studio is already a laptop surface with a 15rem rail and wide tables.
+
+Gate on **viewport and pointer**, never on OS. "Mac/PC only" in a web app is a
+`min-width` plus `pointer: fine` media query; browsers cannot reliably report an
+operating system and should not be asked to. On a phone, say so and link back.
+
+`--studio-series-1..4` already exist and are contrast-checked against both panel
+grounds, so the palette half of this is done.
+
+#### 5. Getting data off the phones — scope correction needed
+
+**True peer-to-peer local sync cannot be built in a browser today.** iOS Safari
+has no Web Bluetooth and no local peer discovery, and WebRTC needs a signalling
+server, which needs the internet the whole feature exists to avoid. This is a
+platform limit, not an effort question.
+
+What is shippable in a browser, in order of practicality:
+
+- **QR-code transfer.** The scout's phone renders queued entries as QR codes; a
+  laptop scans them with its camera. Entirely offline, works on every device,
+  needs no infrastructure. This is what Scouting PASS and QRScout do, so it is
+  proven at events — and it is a chunked-encoding problem, which is real work.
+- **LAN sync to a manager-run endpoint.** Only if venue wifi allows
+  client-to-client, which many block. Fragile; not a foundation.
+
+So: QR transfer in v0.75, and true peer-to-peer moves to the native release,
+where MultipeerConnectivity (iOS/macOS) and Nearby Connections (Android) make it
+straightforward. **This is the one item in the series that needs a decision
+before it is built.**
+
+#### 6. Interactive auto scouting
+
+A field map the scout taps to record where the robot went, what it scored, and
+where it failed — the interaction Lovat popularised.
+
+**This works in a browser today.** Pointer events on an SVG field map are well
+supported in mobile Safari; no native integration is needed first. It is probably
+the most differentiating item in the series, because it captures exactly what
+Statbotics structurally cannot see.
+
+What it actually needs:
+
+- **Normalised coordinates**, 0..1, never pixels — so a recording survives a
+  different screen and a new field image.
+- **A sequence, not a scalar.** `observations` gains a key holding
+  `{x, y, action, t}[]`, which `schema_version` already handles for older rows.
+  Blank stays blank: no path recorded is not the same as a robot that did not
+  move, and `readMetric()`'s rule extends to this unchanged.
+- **A field image per season**, which makes this part of the January retune
+  rather than a one-off.
+- **Speed.** Auto is 15 seconds and the scout is watching the field, not the
+  phone. The realistic interaction is marking immediately after auto ends, with
+  targets big enough to hit without looking.
+
+#### Deliberately not in v0.75
+
+**Pit scouting**, deferred by choice: it wants a camera and is hard to judge
+before there is a real app to judge it in.
+
 ### Out of scope for v0.7
 
 Named so the series can actually close: no new analysis features, no graph
