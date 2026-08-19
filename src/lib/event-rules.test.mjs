@@ -16,6 +16,8 @@ import {
 	pickCurrentEvent,
 	claimableRows,
 	claimRow
+,
+	looksLikeTbaKey
 } from './event-rules.js';
 
 let pass = 0;
@@ -147,6 +149,39 @@ const ok = (name, cond, detail = '') => {
 	ok('a blank scout name is filled on claim', blank.scoutName === 'Haolun Ning');
 	const noName = claimRow({ clientId: 'device-A', submittedBy: null }, 'p1', '');
 	ok('with no name to give, the name stays empty', !noName.scoutName);
+}
+
+// ─── looksLikeTbaKey ────────────────────────────────────────────────────────
+//
+// events.code was always meant to BE the TBA key — 0019's table comment says so
+// — but nothing in the UI said it, so codes got invented and the schedule fetch
+// then needed a second, different string in a second box.
+//
+// Advisory, not a gate: an offseason scrimmage has no TBA entry and still has to
+// be scoutable. The tests below pin both halves of that.
+{
+	ok('a plain TBA key is recognised', looksLikeTbaKey('2026nyny'));
+	ok('a longer event code is fine', looksLikeTbaKey('2025onwat'));
+	ok('uppercase is normalised first', looksLikeTbaKey('2024CASJ'));
+	ok('surrounding space is trimmed first', looksLikeTbaKey('  2026nyny  '));
+
+	// This project's own production event. Divisions and reruns carry a suffix.
+	ok('a division suffix is allowed', looksLikeTbaKey('2026nyny-6'));
+
+	ok('no year is not a TBA key', !looksLikeTbaKey('onto'));
+	ok('a year alone is not a TBA key', !looksLikeTbaKey('2026'));
+	ok('a three-digit year is not a TBA key', !looksLikeTbaKey('202nyny'));
+	ok('the code part must start with a letter', !looksLikeTbaKey('20261234'));
+	ok('an offseason name is not a TBA key', !looksLikeTbaKey('summer-scrimmage'));
+	ok('empty is not a TBA key', !looksLikeTbaKey('') && !looksLikeTbaKey(null));
+	ok('a non-string is not a TBA key', !looksLikeTbaKey(2026));
+
+	// The whole string, not a substring. Found by mutation: removing the anchors
+	// left every assertion above green, and "notes-2026nyny-backup" would have
+	// been accepted as a TBA key and then failed the schedule fetch with a
+	// message about the key rather than about the extra words around it.
+	ok('a key buried in other text is not a match', !looksLikeTbaKey('notes-2026nyny-backup'));
+	ok('trailing junk is not a match', !looksLikeTbaKey('2026nyny!'));
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

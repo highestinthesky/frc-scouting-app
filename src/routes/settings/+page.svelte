@@ -217,12 +217,19 @@
 	   was wrong: width is a decision about the content, and the content here is
 	   a narrow column of fields inside a full-width page — not a narrow page.
 	   Same fix Accounts got in v0.74. */
-	section {
-		/* The column of fields, at the width a field should be read at. */
-		max-width: var(--w-form);
-	}
+	/* One centred column, and the width is on MAIN rather than on the sections
+	   inside it.
+	   The previous shape put --w-list (60rem) on main and --w-form (34rem) on
+	   each section, so the page box centred but the content did not: every
+	   heading and field sat in the left 34rem with 26rem of empty page beside it.
+	   Centring a container and then left-aligning a narrower column inside it
+	   reads as a mistake, because it is one.
+	   Settings is a column of fields, so --w-form is the honest width for the
+	   whole page. It is narrower than /scouting's --w-list — width is a decision
+	   about the content, and these two pages hold different content — but both
+	   are centred, so neither leans. */
 	main {
-		max-width: var(--w-list);
+		max-width: var(--w-form);
 		margin: var(--space-4) auto;
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 	}

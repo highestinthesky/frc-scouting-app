@@ -150,3 +150,30 @@ export function claimRow(row, profileId, displayName = '') {
 		scoutName: name || (typeof displayName === 'string' ? displayName.trim() : '') || ''
 	};
 }
+
+/**
+ * Does this look like a Blue Alliance event key?
+ *
+ * `events.code` has always been intended as the TBA key — migration 0019's own
+ * table comment says so, "kept because the schedule import needs it" — and
+ * PublishSchedule already defaults its TBA lookup to the event code. Nothing in
+ * the UI ever said that, so codes got invented, and then the schedule fetch
+ * needed a second, different string typed into a second box.
+ *
+ * A TBA key is a four-digit season followed by the event's short code:
+ * `2026nyny`, `2024casj`, `2025onwat`. A trailing `-N` is allowed because
+ * divisions and reruns use one, and this project's own production event is
+ * `2026nyny-6`.
+ *
+ * Advisory, not a gate. An offseason scrimmage has no TBA entry and still has to
+ * be scoutable, so the UI warns and lets the manager proceed. Blocking here
+ * would trade a real use case for a tidier field.
+ *
+ * @param {unknown} code
+ * @returns {boolean}
+ */
+export function looksLikeTbaKey(code) {
+	const c = normalizeCode(code);
+	if (!c) return false;
+	return /^\d{4}[a-z][a-z0-9]*(-\d+)?$/.test(c);
+}
