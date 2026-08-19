@@ -177,3 +177,101 @@ export function looksLikeTbaKey(code) {
 	if (!c) return false;
 	return /^\d{4}[a-z][a-z0-9]*(-\d+)?$/.test(c);
 }
+
+/**
+ * Settings that belong to an EVENT, not to a device.
+ *
+ * They were all stored device-global, and switching events carried them over.
+ * The sharp one is `tbaEventKey`: the schedule page seeds its field from it once,
+ * and `fetchAndCacheSchedule` uses `tbaEventKey || eventCode` — so a manager who
+ * set it to `2026nyny` while scouting `2026nyny-6`, then created `2027nyny`,
+ * pulled LAST SEASON'S schedule into the new event and got a plausible-looking
+ * match list for the wrong competition.
+ *
+ * `assignedTeams` and `overrides` are the same shape of mistake with a quieter
+ * failure: a scout keeps the previous event's teams until a sync happens to
+ * overwrite them, and in a gym that sync may be a while.
+ *
+ * `tbaApiKey` is deliberately NOT here. It is a credential belonging to the
+ * person, valid across every event, and clearing it would make a manager re-paste
+ * it every time they switched.
+ */
+export const PER_EVENT_SETTINGS = ['tbaEventKey', 'assignedTeams', 'overrides'];
+
+/**
+ * What a session must forget when the event changes.
+ *
+ * Returns the patch to apply, or null when nothing needs clearing — which is the
+ * common case, since most updates do not touch the event at all. Returning null
+ * rather than an empty object lets the caller skip the write entirely.
+ *
+ * @param {unknown} from  the event code currently stored
+ * @param {unknown} to    the event code being set
+ * @returns {{tbaEventKey: string, assignedTeams: never[], overrides: never[]}|null}
+ */
+export function resetForEventChange(from, to) {
+	const a = normalizeCode(from);
+	const b = normalizeCode(to);
+	// Setting the same event again is not a change. Nor is arriving at an event
+	// from nothing — a device with no event yet has no stale per-event state, and
+	// clearing on first selection would wipe assignments a sync had already
+	// delivered.
+	if (!b || !a || a === b) return null;
+	return { tbaEventKey: '', assignedTeams: [], overrides: [] };
+}
+
+/**
+ * The event a device should be on, when nobody has said.
+ *
+ * Choosing an event is ceremony: at a competition there is exactly one event
+ * that matters, the dates say which, and making a human pick it from a list is
+ * asking them to restate something the data already knows.
+ *
+ * Order of preference:
+ *
+ *   1. one whose dates contain today — you are AT it
+ *   2. the soonest upcoming one — you are preparing for it
+ *   3. the most recent past one — you are reviewing it
+ *   4. the only event there is, dated or not
+ *
+ * Archived events are never chosen: archiving is the explicit statement that an
+ * event is done with.
+ *
+ * Returns null when there is a genuine choice to make — several undated events,
+ * or none at all — because guessing there would be worse than asking.
+ *
+ * @param {any[]} events
+ * @param {Date} [now]
+ * @returns {object|null}
+ */
+export function currentEvent(events, now = new Date()) {
+	const live = (Array.isArray(events) ? events : []).filter((e) => e && !e.archived_at);
+	if (live.length === 0) return null;
+	if (live.length === 1) return live[0];
+
+	// Compared as YYYY-MM-DD strings, which is what the columns hold. Building
+	// Dates here would drag the device's timezone into a decision about which
+	// competition somebody is standing at.
+	const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+		now.getDate()
+	).padStart(2, '0')}`;
+
+	const dated = live.filter((e) => e.starts_on);
+
+	const happeningNow = dated.filter((e) => e.starts_on <= today && (e.ends_on ?? e.starts_on) >= today);
+	// Two events on the same day is a real ambiguity, not something to guess at.
+	if (happeningNow.length === 1) return happeningNow[0];
+	if (happeningNow.length > 1) return null;
+
+	const upcoming = dated
+		.filter((e) => e.starts_on > today)
+		.sort((a, b) => a.starts_on.localeCompare(b.starts_on));
+	if (upcoming.length > 0) return upcoming[0];
+
+	const past = dated
+		.filter((e) => (e.ends_on ?? e.starts_on) < today)
+		.sort((a, b) => (b.ends_on ?? b.starts_on).localeCompare(a.ends_on ?? a.starts_on));
+	if (past.length > 0) return past[0];
+
+	return null;
+}

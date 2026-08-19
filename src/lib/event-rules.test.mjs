@@ -18,6 +18,11 @@ import {
 	claimRow
 ,
 	looksLikeTbaKey
+,
+	resetForEventChange,
+	PER_EVENT_SETTINGS
+,
+	currentEvent
 } from './event-rules.js';
 
 let pass = 0;
@@ -182,6 +187,77 @@ const ok = (name, cond, detail = '') => {
 	// message about the key rather than about the extra words around it.
 	ok('a key buried in other text is not a match', !looksLikeTbaKey('notes-2026nyny-backup'));
 	ok('trailing junk is not a match', !looksLikeTbaKey('2026nyny!'));
+}
+
+// ─── resetForEventChange ────────────────────────────────────────────────────
+//
+// tbaEventKey, assignedTeams and overrides were all stored device-global, so
+// switching events carried them across. The sharp one: fetchAndCacheSchedule
+// uses `tbaEventKey || eventCode`, so a manager who set it to 2026nyny while on
+// 2026nyny-6 and then created 2027nyny pulled LAST SEASON'S schedule into the
+// new event — a full, plausible match list for the wrong competition.
+{
+	const r = resetForEventChange('2026nyny-6', '2027nyny');
+	ok('switching events clears the stale TBA key', r !== null && r.tbaEventKey === '');
+	ok('switching events clears assigned teams', r !== null && r.assignedTeams.length === 0);
+	ok('switching events clears overrides', r !== null && r.overrides.length === 0);
+
+	ok('re-selecting the same event changes nothing', resetForEventChange('2026nyny', '2026nyny') === null);
+	ok('case and space do not make it a different event',
+		resetForEventChange('2026nyny', '  2026NYNY ') === null);
+
+	// A device with no event yet has no stale per-event state, and clearing on
+	// first selection would wipe assignments a sync had already delivered.
+	ok('arriving from no event clears nothing', resetForEventChange('', '2027nyny') === null);
+	ok('arriving from null clears nothing', resetForEventChange(null, '2027nyny') === null);
+
+	ok('clearing the event clears nothing', resetForEventChange('2026nyny', '') === null);
+
+	// The credential belongs to the person, not the event. Clearing it would make
+	// a manager re-paste their TBA key on every switch.
+	ok('the API key is not per-event', !PER_EVENT_SETTINGS.includes('tbaApiKey'));
+	ok('the scout name is not per-event', !PER_EVENT_SETTINGS.includes('scoutName'));
+}
+
+// ─── currentEvent ───────────────────────────────────────────────────────────
+//
+// At a competition there is exactly one event that matters and the dates say
+// which. Making a human pick it from a list asks them to restate something the
+// data already knows.
+{
+	const NOW = new Date('2026-08-18T12:00:00');
+	const ev = (code, starts_on, ends_on, extra = {}) => ({ code, starts_on, ends_on, ...extra });
+
+	const atIt = ev('here', '2026-08-17', '2026-08-19');
+	const soon = ev('soon', '2026-09-01', '2026-09-03');
+	const past = ev('past', '2026-05-01', '2026-05-03');
+
+	ok('the event happening today wins',
+		currentEvent([soon, atIt, past], NOW)?.code === 'here');
+	ok('a single-day event counts as happening today',
+		currentEvent([ev('one', '2026-08-18', null), soon], NOW)?.code === 'one');
+	ok('with nothing today, the soonest upcoming wins',
+		currentEvent([soon, past, ev('later', '2026-10-01', '2026-10-03')], NOW)?.code === 'soon');
+	ok('with nothing upcoming, the most recent past wins',
+		currentEvent([past, ev('recent', '2026-07-01', '2026-07-03')], NOW)?.code === 'recent');
+
+	ok('the only event is chosen even with no dates',
+		currentEvent([ev('solo', null, null)], NOW)?.code === 'solo');
+
+	// Archiving is the explicit statement that an event is done with.
+	ok('an archived event is never chosen',
+		currentEvent([ev('old', '2026-08-17', '2026-08-19', { archived_at: 'x' }), soon], NOW)?.code === 'soon');
+	ok('all archived means no answer',
+		currentEvent([ev('old', '2026-08-17', '2026-08-19', { archived_at: 'x' })], NOW) === null);
+
+	// A genuine ambiguity must not be guessed at.
+	ok('two events on the same day is not guessed',
+		currentEvent([ev('a', '2026-08-18', '2026-08-18'), ev('b', '2026-08-18', '2026-08-18')], NOW) === null);
+	ok('several undated events is not guessed',
+		currentEvent([ev('a', null, null), ev('b', null, null)], NOW) === null);
+
+	ok('no events is null', currentEvent([], NOW) === null);
+	ok('junk input is null', currentEvent(null, NOW) === null);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

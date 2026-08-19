@@ -7,6 +7,7 @@
 // reloads and offline restarts.
 
 import { getSetting, setSetting } from './db.js';
+import { resetForEventChange } from './event-rules.js';
 
 /** Finite team numbers only, deduplicated, ascending. */
 function normaliseTeams(list) {
@@ -95,6 +96,18 @@ class Session {
 
 	async update(patch) {
 		if (patch.eventCode !== undefined) {
+			// Changing events forgets what belonged to the old one. See
+			// resetForEventChange() for which settings those are and why the TBA key
+			// is the dangerous one: it is device-global and
+			// fetchAndCacheSchedule() falls back to it before the event code, so a
+			// key left over from 2026nyny pulled last season's schedule into a
+			// freshly created 2027nyny.
+			//
+			// Applied to the patch rather than written separately, so one update is
+			// one set of writes and a caller cannot observe a half-cleared session.
+			const stale = resetForEventChange(this.eventCode, patch.eventCode);
+			if (stale) patch = { ...stale, ...patch };
+
 			this.eventCode = patch.eventCode;
 			await setSetting('eventCode', patch.eventCode);
 		}

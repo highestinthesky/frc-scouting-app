@@ -41,7 +41,7 @@
 	import { session } from '$lib/session.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
 	import { listMyEvents, createEvent } from '$lib/events.js';
-	import { eventLabel, looksLikeTbaKey } from '$lib/event-rules.js';
+	import { eventLabel, looksLikeTbaKey, currentEvent as pickCurrentEvent } from '$lib/event-rules.js';
 	import { setEventCode, syncState } from '$lib/sync.svelte.js';
 	import Button from './Button.svelte';
 
@@ -95,13 +95,21 @@
 	/** The event this device is on, as a row, when we can name it. */
 	const currentEvent = $derived(events.find((e) => e.code === session.eventCode) ?? null);
 
-	// A scout on exactly one event, with nothing selected, is adopted into it.
-	// Without this, removing the picker would leave them with no event and no way
-	// to get one.
+	// Nobody picks an event that the dates already name.
+	//
+	// At a competition there is one event that matters, and `events` carries
+	// starts_on/ends_on, so asking a human to choose it is asking them to restate
+	// what the app knows. currentEvent() picks the one happening today, else the
+	// soonest upcoming, else the most recent — and returns null on a genuine
+	// ambiguity rather than guessing.
+	//
+	// ONLY when nothing is selected. A manager preparing next week's event must
+	// not have the app drag them back to today's, so this never overrides a
+	// choice already made — it only fills a blank.
 	$effect(() => {
-		if (!auth.signedIn || canChoose) return;
-		if (session.eventCode || events.length !== 1) return;
-		choose(events[0].code);
+		if (!auth.signedIn || session.eventCode || events.length === 0) return;
+		const pick = pickCurrentEvent(events);
+		if (pick) choose(pick.code);
 	});
 
 	async function choose(code) {
