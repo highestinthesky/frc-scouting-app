@@ -167,9 +167,16 @@
 				</div>
 			</form>
 		{:else}
-			<Button variant="ghost" type="button" onclick={() => (creating = true)}>
-				Create an event
-			</Button>
+			<!-- Wrapped so it does not stretch. `.picker` is a column flex with the
+			     default align-items: stretch, so a bare Button spans the full width —
+			     and a GHOST button has no fill, so all that showed was its centred
+			     label floating in the middle of a left-aligned page. It read as a
+			     misalignment because it was one. -->
+			<div class="start">
+				<Button variant="ghost" type="button" onclick={() => (creating = true)}>
+					Create an event
+				</Button>
+			</div>
 		{/if}
 	{/if}
 
@@ -181,6 +188,16 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
+	}
+	/* Anything that should sit at its natural width rather than filling the
+	   column.
+	   Pulled left by the button's own horizontal padding so its LABEL lines up
+	   with the text above it. A ghost button draws no box, so that padding is
+	   invisible and reads as a 16px indent rather than as spacing. */
+	.start {
+		display: flex;
+		justify-content: flex-start;
+		margin-left: calc(var(--space-4) * -1);
 	}
 	.label {
 		font-size: var(--fs-sm);

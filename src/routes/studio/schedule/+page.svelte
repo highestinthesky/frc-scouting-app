@@ -42,6 +42,7 @@
 		listReminders
 	} from '$lib/reminders.js';
 	import { reminders as reminderStore } from '$lib/reminders.svelte.js';
+	import { orphanedOverrides } from '$lib/planning-rows.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import PublishSchedule from '$lib/components/studio/PublishSchedule.svelte';
@@ -392,6 +393,50 @@
 	 * overrides alone.
 	 */
 	let pendingOverrides = $state(/** @type {any[]|null} */ (null));
+
+	/**
+	 * Overrides addressed to somebody who is not on this event.
+	 *
+	 * Reads the SAVED list, not the staged one: these are rows already in the
+	 * database from an earlier season or an earlier test, and the point is that
+	 * they outlived the scout they were written for. Nine were found on
+	 * production this way.
+	 */
+	const overrideOrphans = $derived(
+		orphanedOverrides(
+			overrideList,
+			assignRows.map((r) => ({ scout_name: r.scout_name })),
+			roster
+		)
+	);
+
+	async function clearOrphanedOverrides() {
+		const names = new Set(overrideOrphans.map((o) => o.scout.toLowerCase()));
+		const doomed = overrideList.filter((o) =>
+			names.has(String(o.scout_name ?? '').trim().toLowerCase())
+		);
+		const ok = await dialog.confirm({
+			title: `Remove ${doomed.length} override${doomed.length === 1 ? '' : 's'}?`,
+			body:
+				`They are addressed to ${overrideOrphans.map((o) => o.scout).join(', ')}, ` +
+				`who are not on this event.\n\n` +
+				`Assignments are untouched — this removes only the per-match overrides.`,
+			confirmLabel: 'Remove',
+			danger: true
+		});
+		if (!ok) return;
+		busy = true;
+		err = '';
+		try {
+			for (const o of doomed) await removeOverride(session.eventCode, o.id);
+			overrideList = await listOverrides(session.eventCode);
+			msg = `${doomed.length} orphaned override${doomed.length === 1 ? '' : 's'} removed.`;
+		} catch (e) {
+			err = e?.message ?? String(e);
+		} finally {
+			busy = false;
+		}
+	}
 
 	// ── unsaved-draft persistence ───────────────────────────────────────────
 	//
@@ -927,7 +972,13 @@
 			<div class="col">
 				<ScoutRoster {scoutsInEvent} {now} />
 
-				<CoverageCheck {coverageConflicts} onOpenMatch={openMatch} />
+				<CoverageCheck
+					{coverageConflicts}
+					onOpenMatch={openMatch}
+					orphans={overrideOrphans}
+					onClearOrphans={clearOrphanedOverrides}
+					{busy}
+				/>
 
 				<ReminderPanel
 					bind:reminderTarget

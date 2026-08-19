@@ -86,3 +86,62 @@ export function reminderTarget(scoutName, roster) {
 	if (!typed) return { scout_name: null, profile_id: null };
 	return identityFields(refFor(typed, roster));
 }
+
+/**
+ * Overrides that can never reach anybody.
+ *
+ * An override says "for match 40, this scout watches THIS team instead of their
+ * usual list". It is keyed by `scout_name`, because that is still what the
+ * planning joins use — so it survives the scout it was written for. Nine such
+ * rows were found on production carrying names from an earlier season's test:
+ * Brian, Charlie, Haolun, Jayden, Josh, Maddie, Michelle, Miles, Sunny. None
+ * matched an account, none matched a current assignment.
+ *
+ * They are not a coverage bug. `evaluateCoverage()` iterates the scouts who have
+ * ASSIGNMENTS and looks their overrides up by key, so a row for somebody with no
+ * assignment is never consulted and never inflates the number. Checked, because
+ * the opposite was the obvious assumption.
+ *
+ * They are a **dormancy** bug, which is worse for being quiet. The key is a
+ * lowercased name. The moment a real scout called Josh is added to this event,
+ * a year-old row starts overriding their real assignment for whichever matches
+ * it names, and nothing anywhere says why. That is the same class as the
+ * reactivation risk `scout-identity.js` exists to manage, one table over.
+ *
+ * Reported rather than deleted. Settings shows an identity mismatch and offers
+ * to fix it instead of fixing it silently, and this follows that: a manager's
+ * data is not tidied out from under them.
+ *
+ * @param {{scout_name?: string, profile_id?: string|null, match_number?: number, team_number?: number}[]} overrides
+ * @param {{scout_name?: string, profile_id?: string|null}[]} assignments  the CURRENT assignment rows
+ * @param {any[]} [roster]  profiles, so an account-holder with no assignment still counts as real
+ * @returns {{scout: string, count: number}[]}  orphan names, most rows first
+ */
+export function orphanedOverrides(overrides, assignments, roster) {
+	const live = new Set();
+	for (const a of assignments ?? []) {
+		const k = scoutRef(a?.scout_name).key;
+		if (k) live.add(k);
+	}
+	// An account holder counts as reachable even with no assignment yet: a
+	// manager may write a per-match override before assigning anyone a base list.
+	for (const p of roster ?? []) {
+		const full = `${String(p?.first_name ?? '').trim()} ${String(p?.last_name ?? '').trim()}`.trim();
+		for (const candidate of [p?.username, full]) {
+			const k = scoutRef(candidate).key;
+			if (k) live.add(k);
+		}
+	}
+
+	const counts = new Map();
+	for (const o of overrides ?? []) {
+		// A row carrying a real account id is reachable whatever its name says.
+		if (o?.profile_id) continue;
+		const ref = scoutRef(o?.scout_name);
+		if (!ref.key || live.has(ref.key)) continue;
+		const seen = counts.get(ref.key);
+		if (seen) seen.count += 1;
+		else counts.set(ref.key, { scout: ref.label || ref.key, count: 1 });
+	}
+	return [...counts.values()].sort((a, b) => b.count - a.count || a.scout.localeCompare(b.scout));
+}

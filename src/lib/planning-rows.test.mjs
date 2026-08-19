@@ -5,7 +5,7 @@
 // it — that a saved assignment really does carry the account, and that a
 // broadcast reminder really does stay a broadcast.
 
-import { assignmentRows, overrideRows, reminderTarget, refFor } from './planning-rows.js';
+import { assignmentRows, overrideRows, reminderTarget, refFor, orphanedOverrides} from './planning-rows.js';
 
 let pass = 0;
 let fail = 0;
@@ -104,6 +104,83 @@ const ctx = { sessionId: 'sid-1', eventCode: 'evt', roster };
 	ok('refFor resolves through the roster', refFor('ning', roster).profileId === 'u1');
 	ok('refFor keeps the typed spelling', refFor('  Ning ', roster).label === 'Ning');
 	ok('refFor without a roster yields no account', refFor('ning').profileId === null);
+}
+
+// ─── orphanedOverrides ──────────────────────────────────────────────────────
+//
+// From a real finding on production: nine override names left over from an
+// earlier test season — Brian, Charlie, Haolun, Jayden, Josh, Maddie, Michelle,
+// Miles, Sunny — none matching an account or a current assignment.
+//
+// Not a coverage bug: evaluateCoverage() iterates scouts who HAVE assignments
+// and looks their overrides up by key, so a row for nobody is never consulted.
+// Checked, because the opposite was the obvious assumption.
+//
+// A DORMANCY bug. The key is a lowercased name, so the day a real scout called
+// Josh joins, a year-old row starts overriding their real assignment and
+// nothing says why. The last case below is the one that guards that.
+{
+	const roster3 = [{ username: 'rey', first_name: 'Rey', last_name: 'Ortiz' }];
+
+	const one = orphanedOverrides([{ scout_name: 'Brian' }], [{ scout_name: 'Alex Wang' }], []);
+	ok('an override for nobody is reported', one.length === 1 && one[0].scout === 'Brian');
+
+	ok(
+		'an override for an assigned scout is not an orphan',
+		orphanedOverrides([{ scout_name: 'Alex Wang' }], [{ scout_name: 'Alex Wang' }], []).length === 0
+	);
+
+	// A manager may write a per-match override before assigning a base list.
+	// Calling that an orphan would flag legitimate planning.
+	ok(
+		'an account holder with no assignment yet is still reachable',
+		orphanedOverrides([{ scout_name: 'Rey Ortiz' }], [], roster3).length === 0
+	);
+	ok(
+		'a username matches, not just a full name',
+		orphanedOverrides([{ scout_name: 'rey' }], [], roster3).length === 0
+	);
+
+	// The account is the identity; the name is only the join key.
+	ok(
+		'a row carrying a profile_id is reachable whatever its name says',
+		orphanedOverrides(
+			[{ scout_name: 'typo', profile_id: 'uuid-1' }],
+			[{ scout_name: 'Alex Wang' }],
+			[]
+		).length === 0
+	);
+
+	ok(
+		'matching is case- and space-insensitive, like every other join',
+		orphanedOverrides([{ scout_name: '  ALEX WANG ' }], [{ scout_name: 'alex wang' }], []).length === 0
+	);
+
+	const grouped = orphanedOverrides(
+		[{ scout_name: 'Josh' }, { scout_name: 'Josh' }, { scout_name: 'Miles' }],
+		[{ scout_name: 'Alex Wang' }],
+		[]
+	);
+	ok(
+		'rows are grouped per scout and counted, most first',
+		grouped.length === 2 && grouped[0].scout === 'Josh' && grouped[0].count === 2
+	);
+
+	// The dormancy guard. Prefix matching would attach a stale "Josh" row to
+	// Joshua Dai and silently override the assignments of a real person.
+	ok(
+		'"Josh" is not "Joshua Dai" — a prefix is a different person',
+		orphanedOverrides([{ scout_name: 'Josh' }], [{ scout_name: 'Joshua Dai' }], []).length === 1
+	);
+
+	ok(
+		'an empty name is skipped rather than reported',
+		orphanedOverrides([{ scout_name: '   ' }], [{ scout_name: 'Alex Wang' }], []).length === 0
+	);
+	ok(
+		'empty input does not throw',
+		orphanedOverrides(null, null, null).length === 0
+	);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

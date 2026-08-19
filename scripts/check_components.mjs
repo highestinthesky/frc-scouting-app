@@ -217,14 +217,20 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 	// manager surfaces to anyone who ticked it. auth.showsManagerTools decides now.
 	ok('Settings: theme picker meets the tap floor', floors('.theme-btn'));
 	ok('Settings: text inputs meet the tap floor', floors('input'));
+	// Settings has NO back link, and must not grow one.
+	//
+	// It is a top-level tab — back to what? The nav is already on screen, so the
+	// arrow was a second, worse copy of it, and it pushed the page title 56px
+	// right of every heading beneath it. That offset was the whole "the Settings
+	// page is unaligned" report.
+	//
+	// The 44x44 rule this replaces still applies everywhere a back link is real:
+	// the sweep over every +page.svelte below enforces it, and PageHead's own
+	// control is asserted directly.
 	ok(
-		'Settings: the back link is tappable, not just a glyph',
-		r.some(
-			(x) =>
-				unscoped(x.selector).includes('.back') &&
-				/var\(--tap-min\)/.test(valueOf(x.body, 'min-width') ?? '')
-		),
-		'a 1.5rem arrow is the most-tapped control on a sub-page and the smallest'
+		'Settings has no back link — it is a tab, not a sub-page',
+		!r.some((x) => usesClass(unscoped(x.selector), 'back')),
+		'a top-level tab does not need a way back to the tab beside it'
 	);
 }
 

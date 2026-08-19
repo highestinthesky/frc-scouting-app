@@ -4,7 +4,6 @@
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { clearEntries } from '$lib/db.js';
-	import { syncState, resync } from '$lib/sync.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
 	import EventPicker from '$lib/components/EventPicker.svelte';
@@ -81,17 +80,6 @@
 		clearMsg = 'All entries cleared.';
 	}
 
-	function statusLabel() {
-		if (!session.eventCode) return 'No event chosen';
-		// Name the reason rather than showing a status that will never advance.
-		if (syncState.reason === 'signed-out') return 'Paused — sign in to sync';
-		if (syncState.reason === 'no-such-event') return 'Paused — not on this event';
-		if (syncState.status === 'connected') return 'Connected';
-		if (syncState.status === 'connecting') return 'Connecting…';
-		if (syncState.status === 'offline') return 'Offline';
-		if (syncState.status === 'error') return `Error: ${syncState.error ?? 'unknown'}`;
-		return 'Idle';
-	}
 </script>
 
 <svelte:head>
@@ -99,8 +87,11 @@
 </svelte:head>
 
 <main>
+	<!-- No back arrow. Settings is a top-level TAB — back to what? The nav is on
+	     screen, so the arrow was a second, worse copy of it, and it pushed the
+	     page title 56px right of every heading beneath it. That offset was the
+	     "unaligned" complaint; the arrow was the cause. -->
 	<header class="page-head">
-		<a class="back" href="{base}/scouting/" aria-label="Back">←</a>
 		<h1>Settings</h1>
 	</header>
 
@@ -173,30 +164,18 @@
 					<small class="help">Match what the manager typed when assigning you teams.</small>
 					<input bind:value={scoutName} autocomplete="name" />
 				</label>
-			{/if}
 
-			<Button variant="primary" type="submit" disabled={saving}>
-				{saving ? 'Saving…' : 'Save'}
-			</Button>
-			{#if savedMsg}<small class="muted ok">{savedMsg}</small>{/if}
+				<!-- Inside the signed-OUT branch, because that is the only branch with
+				     anything to save. saveSession() writes scoutName and nothing else —
+				     its own comment says the event is the picker's — and signed in the
+				     name is read-only, so this button submitted a form with no editable
+				     field in it. -->
+				<Button variant="primary" type="submit" disabled={saving}>
+					{saving ? 'Saving…' : 'Save'}
+				</Button>
+				{#if savedMsg}<small class="muted ok">{savedMsg}</small>{/if}
+			{/if}
 		</form>
-	</section>
-
-	<section>
-		<h2>Sync</h2>
-		<p class="status {syncState.status}">
-			{statusLabel()}{#if syncState.pendingCount > 0} · {syncState.pendingCount} pending{/if}
-		</p>
-		<div class="sync-actions">
-			<Button
-				variant="primary"
-				onclick={resync}
-				disabled={!session.eventCode || syncState.status === 'offline'}
-			>Sync now</Button>
-			{#if syncState.lastSyncedAt}
-				<small class="muted">Last sync: {new Date(syncState.lastSyncedAt).toLocaleTimeString()}</small>
-			{/if}
-		</div>
 	</section>
 
 	<section>
@@ -248,22 +227,7 @@
 		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 	}
 	.page-head {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
 		margin: var(--space-4) 0;
-	}
-	.back {
-		font-size: var(--fs-xl);
-		text-decoration: none;
-		color: var(--accent);
-		/* A back arrow is the most-tapped control on a sub-page and was the
-		   smallest thing on it. */
-		min-width: var(--tap-min);
-		min-height: var(--tap-min);
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
 	}
 	h1 {
 		margin: 0;
@@ -291,50 +255,42 @@
 		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
-	.roles button,
-	.theme-btn {
-		flex: 1 1 0;
-		min-height: var(--tap-min);
-		background: var(--bg-card);
-		color: var(--text-primary);
-		border: 2px solid var(--border-strong);
-		border-radius: var(--radius-md);
-		cursor: pointer;
-		font: inherit;
-		transition: border-color var(--dur-short) var(--ease-out);
-	}
-	.roles button:focus-visible,
 	.theme-btn:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 	}
 	/* Selected is carried by border AND background AND text colour, not colour
 	   alone — the same rule the alliance colours follow. */
-	.roles button.selected,
+
+
+	.theme-btn {
+		flex: 1 1 0;
+		min-width: 6rem;
+		/* design.md treats 44px as non-negotiable. This lived in a rule shared
+		   with the removed role picker and went out with it. */
+		min-height: var(--tap-min);
+		padding: var(--space-2) var(--space-3);
+		font: inherit;
+		font-weight: 600;
+		background: var(--bg-card);
+		color: var(--text-primary);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		cursor: pointer;
+		transition: border-color var(--dur-short) var(--ease-out);
+	}
+	/* Selected is carried by border AND background AND text colour, not colour
+	   alone — the same rule the alliance colours follow. */
 	.theme-btn.selected {
 		border-color: var(--accent);
 		background: var(--accent-soft);
 		color: var(--accent);
 	}
 
-	.roles button {
-		min-width: 12rem;
-		text-align: left;
-		padding: var(--space-3) var(--space-4);
-		border-radius: var(--radius-lg);
-	}
-	.roles button strong { display: block; font-size: var(--fs-md); }
-	.roles button small {
-		display: block;
-		color: var(--text-muted);
-		font-size: var(--fs-sm);
-		margin-top: var(--space-1);
-	}
-
-	.theme-btn {
-		min-width: 6rem;
-		padding: var(--space-2) var(--space-3);
-		font-weight: 600;
+	@media (prefers-reduced-motion: reduce) {
+		.theme-btn {
+			transition-duration: 0.01ms;
+		}
 	}
 
 	/* ── form ───────────────────────────────────────────────────────────── */
@@ -359,27 +315,7 @@
 	}
 
 	/* ── sync status ────────────────────────────────────────────────────── */
-	.status {
-		font-size: var(--fs-md);
-		font-weight: 600;
-		padding: var(--space-1) var(--space-3);
-		border-radius: var(--radius-md);
-		display: inline-block;
-		margin-bottom: var(--space-1);
-	}
 	.status.idle,
-	.status.offline { background: var(--bg-subtle); color: var(--text-muted); }
-	.status.connected {
-		background: var(--success-bg);
-		color: var(--success);
-		border: 1px solid var(--success-border);
-	}
-	.status.connecting {
-		background: var(--warning-bg);
-		color: var(--warning);
-		border: 1px solid var(--warning-border);
-	}
-	.status.error { background: var(--danger-bg); color: var(--danger); }
 	.acct {
 		display: flex;
 		align-items: baseline;
@@ -399,30 +335,8 @@
 		color: var(--accent);
 	}
 	.acct-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
-	.acct-link {
-		font-weight: 600;
-		min-height: var(--tap-min);
-		display: inline-flex;
-		align-items: center;
-		padding: var(--space-2) var(--space-4);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-md);
-		background: var(--bg-card);
-		color: var(--text-primary);
-		text-decoration: none;
-	}
-	.acct-link:hover { background: var(--bg-subtle); }
 
-	.sync-actions {
-		display: flex;
-		gap: var(--space-3);
-		align-items: center;
-		flex-wrap: wrap;
-		margin-top: var(--space-2);
-	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.roles button,
-		.theme-btn { transition-duration: 0.01ms; }
 	}
 </style>
