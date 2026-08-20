@@ -837,6 +837,91 @@ It was scheduled as v0.80 and then **cut entirely** — see below.
   tested before kickoff. It needs no native work — that was checked before
   deferring it, so it is not waiting on the Apple waiver.
 
+### v0.76 — the scout's side
+
+v0.75 rebuilt what a manager sees. This is the other half: the surfaces a scout
+actually touches at an event, reported by the person running the team after
+using them. Seven items, all from that list.
+
+**The through-line.** Every one of these is the app failing a scout who is
+holding a phone between matches — losing their typing, telling them to watch two
+robots at once, or sending them somewhere they did not come from. None is a
+missing feature; each is the app being slightly wrong in a way that costs
+attention at the exact moment there is none to spare.
+
+#### 1. Back returns to where you came from
+
+The form's back link, Cancel, and post-save redirect were all hardcoded to
+`/scouting/`. Reaching the form from Home and pressing back therefore landed on
+a page the scout had not been on. Uses SvelteKit's `afterNavigate` to capture
+the real origin, falling back to `/scouting/` on a cold load or deep link — a
+hardcoded `history.back()` would walk off the app entirely when the form was
+opened from a notification or a pasted URL.
+
+#### 2. A started form survives leaving it
+
+Half-filled forms were lost on navigation, reload, or the phone locking. The
+draft persists to the `settings` store in IndexedDB — no schema bump, and it
+keeps `db.js` free of `auth.svelte.js`, which the recording invariant requires.
+
+Restored only when it belongs to the form being opened: a draft carries its
+match and team, and a deep link naming a different pair discards it rather than
+pouring Q3's observations into Q7. Cleared on successful submit, kept on
+cancel — an accidental back press is the case this exists for.
+
+#### 3. No greeting on `/scouting`
+
+It greeted you a second time, one tap after Home already had. Home is the front
+door; `/scouting` is the record of what you have done.
+
+#### 4. The full upcoming list, not the first four
+
+Five ahead by default, then an expandable list of the rest. A scout planning a
+bathroom break needs to know whether they are up in three matches or eleven.
+
+#### 5. One robot per match
+
+**The real bug of the seven.** `nextUnscoutedMatch()` resolves a scout's teams
+for a match through `resolveMyTeams()` — overrides replace the base list for the
+match they name. Home's "After that" list did not: it intersected the base
+assignment with the match roster directly, so a scout whose clash had already
+been resolved by an override still saw both robots, and the override that fixed
+it was invisible.
+
+`auto-assign.js` already states the consequence — *"a scout with two teams in one
+match covers one of them; the other is lost"* — and generates overrides to
+prevent exactly that. Home was showing the unresolved state.
+
+The resolver moves out of `tba.js`'s module scope and gains one exported caller
+so both surfaces resolve identically. It must stay one function: `auto-assign.js`
+carries a comment requiring its coverage maths to mirror it, and three call sites
+disagreeing about who watches what is the same class of bug as the `scout_name`
+comparisons that `scout-identity.js` exists to prevent.
+
+#### 6. One page rhythm
+
+Home, Scouting and Settings share `main` rules but not their first child's
+spacing, so two of the three began under the header. A shared page-head rhythm,
+not three hand-tuned paddings.
+
+#### 7. A larger, varied greeting
+
+Three fixed time bands read as a machine by the second morning of a two-day
+event. The pool varies, but **the choice is stable within the day**: the page
+re-derives `now` every 60 seconds, so anything seeded on the clock would reshuffle
+the greeting while the scout was reading it. Seeded on the date and the person.
+
+Larger needs a token — the scale stops at `--fs-xl`, and `check_components.mjs`
+fails a raw `rem` in a component's `font-size`. `--fs-display` is added to
+`:root` and to `design.md`, which is the only place a literal belongs.
+
+#### Deliberately not in v0.76
+
+- **Event dates.** `currentEvent()` returns null for 2+ undated events and
+  nothing in the app ever sets `starts_on`, so a scout put on a second event has
+  no auto-selection and no picker. Real, and its own decision — collecting dates
+  versus giving the scout a picker are different answers. Not folded in here.
+
 ## v0.80 — team against team
 
 Replaces the graph builder, at the request of the person who would have used it:

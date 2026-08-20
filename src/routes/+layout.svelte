@@ -452,6 +452,11 @@
 		--fs-md: 0.95rem;
 		--fs-lg: 1.1rem;
 		--fs-xl: 1.5rem;
+		/* One step above the scale, for the single greeting on Home. It is the only
+		   warm moment in an app that is otherwise a tool, and design.md forbids
+		   enrichment on app pages — so the warmth has to be typographic or it does
+		   not exist. Nothing else may use this. */
+		--fs-display: 2.25rem;
 		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
 		--shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
 

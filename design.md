@@ -264,6 +264,7 @@ because a changing number is easier to read when it moves.
   --radius-pill: 999px;
   --fs-xs: 0.75rem; --fs-sm: 0.85rem; --fs-md: 0.95rem;
   --fs-lg: 1.1rem;  --fs-xl: 1.5rem;
+  --fs-display: 2.25rem;   /* Home's greeting only */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-short: 240ms;
   --tap-min: 2.75rem;

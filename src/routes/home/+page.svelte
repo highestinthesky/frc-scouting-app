@@ -36,12 +36,13 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { listEntries } from '$lib/db.js';
-	import { getCachedSchedule, qualMatches, nextUnscoutedMatch, teamsInMatch } from '$lib/tba.js';
+	import { getCachedSchedule, qualMatches, myMatches } from '$lib/tba.js';
 	import { session } from '$lib/session.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import { reminders } from '$lib/reminders.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
+	import { greetingFor } from '$lib/greeting.js';
 	import Button from '$lib/components/Button.svelte';
 
 	let entries = $state([]);
@@ -77,15 +78,10 @@
 
 	// ── the greeting ──────────────────────────────────────────────────────────
 	//
-	// Three bands, on the device's own clock. Deliberately not cute — "Rise and
-	// shine" is a joke that stops being funny on the second morning of a two-day
-	// event, and this is the first thing a scout reads eleven times a day.
-	const greeting = $derived.by(() => {
-		const h = now.getHours();
-		if (h < 12) return 'Good morning';
-		if (h < 18) return 'Good afternoon';
-		return 'Good evening';
-	});
+	// greeting.js owns the choice, and owns the one hard constraint: `now` ticks
+	// every 60 seconds to keep relative times honest, which re-runs this derived.
+	// Anything seeded on the clock would reshuffle the greeting under whoever is
+	// reading it. It is seeded on the day and the person instead.
 
 	// auth.displayName, not session.scoutName. The typed name is the JOIN KEY and
 	// may be a lowercase handle; this is the one place the app is speaking TO the
@@ -96,16 +92,29 @@
 
 	const myTeams = $derived(session.assignedTeams ?? []);
 
-	const nextUp = $derived.by(() => {
-		if (!qmList.length) return null;
-		const overrides = session.overrides ?? [];
-		if (!myTeams.length && !overrides.length) return null;
-		return nextUnscoutedMatch(qmList, entries, {
+	/**
+	 * Every match I am on, with the team I am actually watching in each.
+	 *
+	 * myMatches() applies overrides; this page used to intersect the base
+	 * assignment with the match roster itself and therefore showed both robots of
+	 * a clash that had already been resolved. One resolver, in tba.js — see the
+	 * note there about auto-assign.js depending on the same answer.
+	 */
+	const myRows = $derived.by(() => {
+		if (!qmList.length) return [];
+		return myMatches(qmList, entries, {
 			assignedTeams: myTeams,
-			overrides,
+			overrides: session.overrides ?? [],
 			scout: auth.me
 		});
 	});
+
+	const greeting = $derived(greetingFor(now, who));
+
+	const nextRow = $derived(myRows.find((r) => r.pending.length > 0) ?? null);
+	const nextUp = $derived(
+		nextRow ? { match: nextRow.match, teams: nextRow.pending } : null
+	);
 
 	/**
 	 * When the next match is due, as a clock time.
@@ -125,21 +134,37 @@
 		return timeOfDay(m.predicted_time ?? m.time ?? null) || null;
 	});
 
-	/** The few matches after this one that involve a team I am watching. */
+	/**
+	 * Everything after the one I am on now that still needs recording.
+	 *
+	 * Not sliced here. A scout deciding whether they can leave the stand needs to
+	 * know whether they are up in three matches or eleven, and a list truncated
+	 * at four cannot answer that. The markup shows FIRST_FEW and offers the rest.
+	 */
 	const upcoming = $derived.by(() => {
-		if (!qmList.length || !myTeams.length) return [];
-		const mine = new Set(myTeams.map(Number));
 		const from = nextUp?.match?.match_number ?? 0;
-		return qmList
-			.filter((m) => (m.match_number ?? 0) > from)
-			.map((m) => {
-				const { red, blue } = teamsInMatch(m);
-				const watching = [...red, ...blue].filter((t) => t !== null && mine.has(Number(t)));
-				return { match: m, watching };
-			})
-			.filter((row) => row.watching.length > 0)
-			.slice(0, 4);
+		return myRows.filter((r) => !r.done && (r.match.match_number ?? 0) > from);
 	});
+
+	/** How many of `upcoming` show before the scout asks for the rest. */
+	const FIRST_FEW = 5;
+	let showAllUpcoming = $state(false);
+	const visibleUpcoming = $derived(
+		showAllUpcoming ? upcoming : upcoming.slice(0, FIRST_FEW)
+	);
+
+	/**
+	 * The one robot to watch in a match.
+	 *
+	 * A scout watches one robot; they cannot watch two. Where resolution still
+	 * leaves more than one, that is a real unresolved clash — auto-assign.js
+	 * counts the second as lost coverage — so the extra is named rather than
+	 * dropped, and the first is what the link records.
+	 *
+	 * @param {{teams: number[], pending: number[]}} row
+	 */
+	const watchOne = (row) => (row.pending.length ? row.pending[0] : row.teams[0]);
+	const clashCount = (row) => Math.max(0, row.teams.length - 1);
 
 	/** Entries this device recorded today. Real rows only — see the header note. */
 	const todayCount = $derived.by(() => {
@@ -183,17 +208,17 @@
 				<div class="next-row">
 					<div class="next-what">
 						<span class="qm">Q{nextUp.match.match_number}</span>
-						<span class="teams">
-							{#each nextUp.teams ?? [] as t, i (t)}
-								{#if i > 0}<span class="sep" aria-hidden="true">·</span>{/if}
-								<span class="team">{t}</span>
-							{/each}
-						</span>
+						<span class="team">{watchOne(nextRow)}</span>
 						{#if nextWhen}<span class="when">{nextWhen}</span>{/if}
+						{#if clashCount(nextRow) > 0}
+							<span class="clash">
+								+{clashCount(nextRow)} unassigned — tell your manager
+							</span>
+						{/if}
 					</div>
 					<Button
 						variant="primary"
-						href={newEntryHref(nextUp.match.match_number, (nextUp.teams ?? [])[0])}
+						href={newEntryHref(nextUp.match.match_number, watchOne(nextRow))}
 					>
 						Record it
 					</Button>
@@ -232,21 +257,32 @@
 			<section>
 				<h2>After that</h2>
 				<ul class="later">
-					{#each upcoming as row (row.match.match_number)}
+					{#each visibleUpcoming as row (row.match.match_number)}
 						<li>
-							<a class="later-link" href={newEntryHref(row.match.match_number, row.watching[0])}>
+							<a class="later-link" href={newEntryHref(row.match.match_number, watchOne(row))}>
 								<span class="qm">Q{row.match.match_number}</span>
-								<span class="teams">
-									{#each row.watching as t, i (t)}
-										{#if i > 0}<span class="sep" aria-hidden="true">·</span>{/if}<span class="team"
-											>{t}</span
-										>
-									{/each}
-								</span>
+								<span class="team">{watchOne(row)}</span>
+								{#if clashCount(row) > 0}
+									<span class="clash">+{clashCount(row)}</span>
+								{/if}
 							</a>
 						</li>
 					{/each}
 				</ul>
+				{#if upcoming.length > FIRST_FEW}
+					<button
+						type="button"
+						class="more"
+						aria-expanded={showAllUpcoming}
+						onclick={() => (showAllUpcoming = !showAllUpcoming)}
+					>
+						{#if showAllUpcoming}
+							Show fewer
+						{:else}
+							Show all {upcoming.length}
+						{/if}
+					</button>
+				{/if}
 			</section>
 		{/if}
 
@@ -270,8 +306,12 @@
 <style>
 	main {
 		max-width: var(--w-list);
+		/* One page rhythm across Home, Scouting and Settings. The top space lives
+		   HERE rather than on the first child, because each page has a different
+		   first child — Scouting can open with a next-match banner — and hanging
+		   it off the child made the three tabs start at three different heights. */
 		margin: var(--space-4) auto;
-		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
+		padding: var(--space-6) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 	}
 
 	/* ── the greeting ──────────────────────────────────────────────────────
@@ -279,11 +319,11 @@
 	   read eleven times a day, so it is large, quiet, and says the person's name
 	   properly rather than their join key. */
 	.hello {
-		padding: var(--space-6) 0 var(--space-5);
+		padding: 0 0 var(--space-5);
 	}
 	h1 {
 		margin: 0;
-		font-size: var(--fs-xl);
+		font-size: var(--fs-display);
 		font-weight: 700;
 		letter-spacing: -0.02em;
 		line-height: 1.15;
@@ -364,11 +404,6 @@
 		font-variant-numeric: tabular-nums;
 		color: var(--accent);
 	}
-	.teams {
-		display: inline-flex;
-		align-items: baseline;
-		flex-wrap: wrap;
-	}
 	.team {
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
@@ -376,6 +411,37 @@
 	.when {
 		font-size: var(--fs-sm);
 		color: var(--text-muted);
+	}
+	/* An unresolved clash is the scout being asked to watch two robots at once.
+	   auto-assign counts the second as lost coverage, so it is named here rather
+	   than dropped — but quietly, because it is the manager's problem to fix. */
+	.clash {
+		font-size: var(--fs-xs);
+		font-weight: 600;
+		color: var(--warning);
+		background: var(--warning-bg);
+		border-radius: var(--radius-pill);
+		padding: 0 var(--space-2);
+	}
+	.more {
+		margin-top: var(--space-2);
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: transparent;
+		color: var(--accent);
+		font: inherit;
+		font-size: var(--fs-sm);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.more:hover {
+		background: var(--bg-subtle);
+	}
+	.more:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 
 	/* ── manager notes ─────────────────────────────────────────────────── */

@@ -155,17 +155,6 @@
 </svelte:head>
 
 <main>
-	<!-- The draft asks Home to greet you and act as a directory. The greeting is
-	     the cheapest possible proof that signing in did something — before this,
-	     a signed-in device looked identical to one that was not. -->
-	<p class="greet">
-		{#if auth.displayName}
-			Welcome back, <strong>{auth.displayName}</strong>.
-		{:else}
-			Welcome.
-		{/if}
-	</p>
-
 	<!-- The next match is the only thing a scout needs the instant they open
 	     the app, so it leads — above the page title, not below it. -->
 	{#if nextSuggestion}
@@ -274,12 +263,6 @@
 </main>
 
 <style>
-	.greet {
-		margin: 0 0 var(--space-4);
-		color: var(--text-muted);
-		font-size: var(--fs-md);
-	}
-	.greet strong { color: var(--text-primary); }
 	.directory {
 		display: grid;
 		gap: var(--space-2);
@@ -304,16 +287,22 @@
 	 */
 
 	main {
-		max-width: var(--w-list); /* An entry list. More rows visible is the point, and on a phone it is capped by the viewport anyway. */
+		max-width: var(--w-list);
+		/* One page rhythm across Home, Scouting and Settings. The top space lives
+		   HERE rather than on the first child, because each page has a different
+		   first child — Scouting can open with a next-match banner — and hanging
+		   it off the child made the three tabs start at three different heights. */
 		margin: var(--space-4) auto;
-		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
+		padding: var(--space-6) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 	}
+	/* An entry list: more rows visible is the point, and on a phone the width is
+	   capped by the viewport anyway. */
 	.top {
 		display: flex;
 		justify-content: space-between;
 		align-items: flex-end;
 		gap: var(--space-3);
-		margin: var(--space-4) 0 var(--space-3);
+		margin: 0 0 var(--space-3);
 	}
 	.titles { min-width: 0; }
 	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
@@ -346,7 +335,10 @@
 		gap: var(--space-3);
 		min-height: var(--tap-min);
 		padding: var(--space-3);
-		margin: var(--space-4) 0 0;
+		/* No top margin: main owns the page's top space now, and this banner is
+		   the first child when it shows. The gap goes below it instead, so
+		   Scouting's first content starts level with Home's and Settings'. */
+		margin: 0 0 var(--space-3);
 		border-radius: var(--radius-lg);
 		border: 1.5px solid var(--banner-info-border);
 		background: var(--banner-info-bg);

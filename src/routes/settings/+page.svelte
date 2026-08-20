@@ -230,11 +230,15 @@
 	   are centred, so neither leans. */
 	main {
 		max-width: var(--w-form);
+		/* One page rhythm across Home, Scouting and Settings. The top space lives
+		   HERE rather than on the first child, because each page has a different
+		   first child — Scouting can open with a next-match banner — and hanging
+		   it off the child made the three tabs start at three different heights. */
 		margin: var(--space-4) auto;
-		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
+		padding: var(--space-6) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 	}
 	.page-head {
-		margin: var(--space-4) 0;
+		margin: 0 0 var(--space-4);
 	}
 	h1 {
 		margin: 0;

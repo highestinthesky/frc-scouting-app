@@ -608,11 +608,31 @@ for (const [label, file] of [
 	// them is a salutation. What IS asserted is that the greeting is really there
 	// — so the exception cannot quietly become an untitled page.
 	{
+		// The greeting itself moved to greeting.js in v0.76 — it has to vary, and a
+		// varying string needs a seed and a test. So this asserts the STRUCTURE
+		// rather than three literals: the <h1> renders the greeting and the
+		// person, and the pool it draws from really is time-appropriate. Matching
+		// literals here would have made moving the pool look like deleting it.
 		const src = readFileSync(path.join(root, 'src/routes/home/+page.svelte'), 'utf8');
+		// Stripped, not raw. greeting.js documents its own return type as
+		// {'morning'|'afternoon'|'evening'}, so searching the prose finds the very
+		// words this asserts and passes for a file that returns none of them. That
+		// is the third time a checker here has matched its own explanation.
+		const greet = readFileSync(path.join(root, 'src/lib/greeting.js'), 'utf8')
+			.replace(/\/\*[\s\S]*?\*\//g, '')
+			.split('\n')
+			.filter((l) => !l.trim().startsWith('//'))
+			.join('\n');
+		const h1 = src.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? '';
 		ok(
 			'"Home" opens a page that greets the scout by name',
-			/Good morning|Good afternoon|Good evening/.test(src) && /<h1[^>]*>/.test(src),
+			/\{greeting\}/.test(h1) && /\{who\}/.test(h1),
 			'Home is exempt from label==heading only because its heading is a greeting'
+		);
+		ok(
+			'and the greeting it draws from names the time of day',
+			/morning/.test(greet) && /afternoon/.test(greet) && /evening/.test(greet),
+			'greeting.js no longer offers a time-appropriate greeting'
 		);
 	}
 

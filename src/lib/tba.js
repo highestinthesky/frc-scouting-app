@@ -493,17 +493,52 @@ export function teamsInMatch(match) {
  * @returns {{match: TBAMatch, teams: number[]}|null}
  */
 export function nextUnscoutedMatch(qmList, entries, opts) {
-	const { assignedTeams, overrides, scout } = normalizeOpts(opts);
-	if (!qmList.length) return null;
-	const done = new Set(entries.map((e) => `${e.matchNumber}:${e.teamNumber}`));
-	const known = Boolean(scout?.key || scout?.profileId);
-	const hasOverrides = known && Array.isArray(overrides) && overrides.length > 0;
-	for (const match of qmList) {
-		const myTeams = resolveMyTeams(match, scout, assignedTeams, overrides, hasOverrides);
-		const pending = myTeams.filter((t) => !done.has(`${match.match_number}:${t}`));
-		if (pending.length > 0) return { match, teams: pending };
+	for (const row of myMatches(qmList, entries, opts)) {
+		if (row.pending.length > 0) return { match: row.match, teams: row.pending };
 	}
 	return null;
+}
+
+/**
+ * Every match this scout is on, in schedule order, with the teams they are
+ * actually watching in each.
+ *
+ * This exists because Home had its own copy of the question and got a different
+ * answer. It intersected the base assignment with the match roster directly,
+ * which ignores overrides — so a scout whose clash had already been resolved
+ * still saw both robots, and the override that resolved it was invisible.
+ *
+ * Resolution therefore happens in exactly one place, `resolveMyTeams` below.
+ * `auto-assign.js` carries a comment requiring its coverage maths to mirror that
+ * function; a third opinion about who is watching what is the same class of bug
+ * `scout-identity.js` exists to prevent.
+ *
+ * `teams` is what they are on the hook for after overrides. More than one is a
+ * genuine unresolved clash, not a display artefact: auto-assign generates
+ * overrides precisely to avoid it, and where one is missing a robot really does
+ * go unwatched. Callers should lead with the first and say the rest are a clash
+ * rather than silently dropping them.
+ *
+ * @param {TBAMatch[]} qmList
+ * @param {object[]} entries
+ * @param {number[]|{assignedTeams: number[], overrides?: any[], scout?: import('./scout-identity.js').ScoutRef}} opts
+ * @returns {{match: TBAMatch, teams: number[], pending: number[], done: boolean}[]}
+ */
+export function myMatches(qmList, entries, opts) {
+	const { assignedTeams, overrides, scout } = normalizeOpts(opts);
+	if (!Array.isArray(qmList) || !qmList.length) return [];
+	const done = new Set((entries ?? []).map((e) => `${e.matchNumber}:${e.teamNumber}`));
+	const known = Boolean(scout?.key || scout?.profileId);
+	const hasOverrides = known && Array.isArray(overrides) && overrides.length > 0;
+
+	const out = [];
+	for (const match of qmList) {
+		const teams = resolveMyTeams(match, scout, assignedTeams, overrides, hasOverrides);
+		if (!teams.length) continue;
+		const pending = teams.filter((t) => !done.has(`${match.match_number}:${t}`));
+		out.push({ match, teams, pending, done: pending.length === 0 });
+	}
+	return out;
 }
 
 function normalizeOpts(opts) {

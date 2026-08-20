@@ -1,9 +1,10 @@
 <script>
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { addEntry, listEntries } from '$lib/db.js';
+	import { draftSlot, hasContent, loadDraft, saveDraft, clearDraft } from '$lib/draft.js';
 	import { session } from '$lib/session.svelte.js';
 	import { rowScout, sameScout } from '$lib/scout-identity.js';
 	import { auth } from '$lib/auth.svelte.js';
@@ -29,6 +30,36 @@
 	let values = $state(blank());
 	let saving = $state(false);
 	let error = $state('');
+
+	// ─── where back goes ────────────────────────────────────────────────────
+	//
+	// Back, Cancel and the post-save redirect were all hardcoded to /scouting/,
+	// so reaching this form from Home and pressing back landed somewhere the
+	// scout had never been. afterNavigate reports the real previous page.
+	//
+	// Not history.back(): this form is reachable from a reminder, a pasted link
+	// and the installed PWA's start URL, and in each of those the previous entry
+	// belongs to another site or does not exist. A known-good fallback beats
+	// walking off the app.
+	let origin = $state(`${base}/scouting/`);
+
+	afterNavigate((nav) => {
+		const from = nav?.from?.url?.pathname;
+		if (!from) return; // cold load or deep link — keep the fallback
+		// Never return to a form: /new → /new is a loop, and coming from /edit
+		// means the scout was already redirected once.
+		if (from.startsWith(`${base}/scouting/new`) || from.startsWith(`${base}/scouting/edit`)) return;
+		origin = from;
+	});
+
+	// ─── the draft ──────────────────────────────────────────────────────────
+	//
+	// draftReady gates the save effect. Without it, the effect fires while
+	// applyPrefill() is still writing to `values` and immediately persists the
+	// pre-fill as if the scout had typed it.
+	let draftKey = $state('new');
+	let draftReady = $state(false);
+	let restoredDraft = $state(false);
 
 	// ─── schedule / next-match state ────────────────────────────────────────
 
@@ -77,90 +108,142 @@
 
 	onMount(async () => {
 		try {
-			const all = await listEntries();
-			const mine = all.filter(
-				(e) => e.eventCode === session.eventCode && sameScout(rowScout(e), auth.me)
-			);
-
-			const cached = session.eventCode ? await getCachedSchedule(session.eventCode) : null;
-			qmList = cached ? qualMatches(cached.matches) : [];
-
-			// 1) Highest priority: explicit query params from the Schedule tab
-			//    or a reminder banner.
-			//    Full form: /new/?match=12&team=1234&color=red
-			//    Match only: /new/?match=12  → resolve my team for that match.
-			const qp = new URLSearchParams(page.url.search);
-			const qMatch = Number(qp.get('match'));
-			const qTeam = Number(qp.get('team'));
-			const qColor = qp.get('color');
-			if (Number.isFinite(qMatch) && qMatch > 0 && Number.isFinite(qTeam) && qTeam > 0) {
-				values.matchNumber = String(qMatch);
-				values.teamNumber = String(qTeam);
-				// Prefer the schedule-derived color over whatever the URL claims,
-				// since the schedule is authoritative; fall back to the URL.
-				const match = qmList.find((m) => m.match_number === qMatch);
-				const color = match
-					? allianceForTeamInMatch(match, qTeam) ?? qColor
-					: qColor;
-				if (color === 'red' || color === 'blue') values.allianceColor = color;
-				return; // skip schedule + last-entry fallbacks
-			}
-			if (Number.isFinite(qMatch) && qMatch > 0) {
-				// Match-only deeplink (e.g. from a reminder). Fill the match number,
-				// then resolve which of my teams plays in it — overrides win, else
-				// my effective team list. Auto-fill when exactly one applies;
-				// otherwise show the picker so the scout chooses.
-				values.matchNumber = String(qMatch);
-				const match = qmList.find((m) => m.match_number === qMatch);
-				if (match) {
-					const ovTeams = (session.overrides ?? [])
-						.filter((o) => o.match_number === qMatch && sameScout(rowScout(o), auth.me))
-						.map((o) => Number(o.team_number))
-						.filter(Number.isFinite);
-					const { red, blue } = teamsInMatch(match);
-					const playing = new Set([...red, ...blue].filter(Number.isFinite));
-					const candidates = (ovTeams.length ? ovTeams : session.assignedTeams)
-						.filter((t) => playing.has(t));
-					const mine = [...new Set(candidates)].sort((a, b) => a - b);
-					if (mine.length === 1) {
-						fillFromMatchAndTeam(match, mine[0]);
-					} else if (mine.length > 1) {
-						suggestion = { match, teams: mine };
-					}
-				}
-				return;
-			}
-
-			// 2) Schedule-driven pre-fill: pick the next match where one of my
-			//    assigned teams is playing and I haven't entered it yet.
-			//    Per-match overrides (from session.overrides) win over the
-			//    base team list when one applies to the (match, scout) pair.
-			const teams = session.assignedTeams;
-			if (qmList.length && (teams.length || session.overrides?.length)) {
-				const next = nextUnscoutedMatch(qmList, all, {
-					assignedTeams: teams,
-					overrides: session.overrides ?? [],
-					scout: auth.me
-				});
-				if (next) {
-					suggestion = next;
-					// If only one of my teams is in the next match, auto-fill.
-					// If multiple, leave the form blank and let the scout pick
-					// from the banner.
-					if (next.teams.length === 1) {
-						fillFromMatchAndTeam(next.match, next.teams[0]);
-					}
-					return;
-				}
-			}
-
-			// 3) Fallback: carry forward alliance + bump match number from the
-			//    previous entry. Same behavior as before TBA integration.
-			if (mine.length > 0) applyLastEntryPrefill(mine[0]);
+			await applyPrefill();
 		} catch (_e) {
 			// Any failure here leaves the form blank — worst case is the scout
 			// types a few fields they could have inherited.
 		}
+
+		// AFTER pre-fill, never before. The draft to restore is chosen by the
+		// match and team this form was opened for, so a stale draft must not be
+		// what decides which draft to load — that is circular, and it is how a
+		// draft for Q3 would end up reopening itself on every visit.
+		await restoreDraft();
+		draftReady = true;
+	});
+
+	/** Everything that decides what a freshly-opened form starts out holding. */
+	async function applyPrefill() {
+		const all = await listEntries();
+		const mine = all.filter(
+			(e) => e.eventCode === session.eventCode && sameScout(rowScout(e), auth.me)
+		);
+
+		const cached = session.eventCode ? await getCachedSchedule(session.eventCode) : null;
+		qmList = cached ? qualMatches(cached.matches) : [];
+
+		// 1) Highest priority: explicit query params from the Schedule tab
+		//    or a reminder banner.
+		//    Full form: /new/?match=12&team=1234&color=red
+		//    Match only: /new/?match=12  → resolve my team for that match.
+		const qp = new URLSearchParams(page.url.search);
+		const qMatch = Number(qp.get('match'));
+		const qTeam = Number(qp.get('team'));
+		const qColor = qp.get('color');
+		if (Number.isFinite(qMatch) && qMatch > 0 && Number.isFinite(qTeam) && qTeam > 0) {
+			values.matchNumber = String(qMatch);
+			values.teamNumber = String(qTeam);
+			// Prefer the schedule-derived color over whatever the URL claims,
+			// since the schedule is authoritative; fall back to the URL.
+			const match = qmList.find((m) => m.match_number === qMatch);
+			const color = match
+				? allianceForTeamInMatch(match, qTeam) ?? qColor
+				: qColor;
+			if (color === 'red' || color === 'blue') values.allianceColor = color;
+			return; // skip schedule + last-entry fallbacks
+		}
+		if (Number.isFinite(qMatch) && qMatch > 0) {
+			// Match-only deeplink (e.g. from a reminder). Fill the match number,
+			// then resolve which of my teams plays in it — overrides win, else
+			// my effective team list. Auto-fill when exactly one applies;
+			// otherwise show the picker so the scout chooses.
+			values.matchNumber = String(qMatch);
+			const match = qmList.find((m) => m.match_number === qMatch);
+			if (match) {
+				const ovTeams = (session.overrides ?? [])
+					.filter((o) => o.match_number === qMatch && sameScout(rowScout(o), auth.me))
+					.map((o) => Number(o.team_number))
+					.filter(Number.isFinite);
+				const { red, blue } = teamsInMatch(match);
+				const playing = new Set([...red, ...blue].filter(Number.isFinite));
+				const candidates = (ovTeams.length ? ovTeams : session.assignedTeams)
+					.filter((t) => playing.has(t));
+				const mine = [...new Set(candidates)].sort((a, b) => a - b);
+				if (mine.length === 1) {
+					fillFromMatchAndTeam(match, mine[0]);
+				} else if (mine.length > 1) {
+					suggestion = { match, teams: mine };
+				}
+			}
+			return;
+		}
+
+		// 2) Schedule-driven pre-fill: pick the next match where one of my
+		//    assigned teams is playing and I haven't entered it yet.
+		//    Per-match overrides (from session.overrides) win over the
+		//    base team list when one applies to the (match, scout) pair.
+		const teams = session.assignedTeams;
+		if (qmList.length && (teams.length || session.overrides?.length)) {
+			const next = nextUnscoutedMatch(qmList, all, {
+				assignedTeams: teams,
+				overrides: session.overrides ?? [],
+				scout: auth.me
+			});
+			if (next) {
+				suggestion = next;
+				// If only one of my teams is in the next match, auto-fill.
+				// If multiple, leave the form blank and let the scout pick
+				// from the banner.
+				if (next.teams.length === 1) {
+					fillFromMatchAndTeam(next.match, next.teams[0]);
+				}
+				return;
+			}
+		}
+
+		// 3) Fallback: carry forward alliance + bump match number from the
+		//    previous entry. Same behavior as before TBA integration.
+		if (mine.length > 0) applyLastEntryPrefill(mine[0]);
+	}
+
+	/**
+	 * Bring back what was typed last time this form was open.
+	 *
+	 * The slot is decided by the match and team pre-fill settled on, so a draft
+	 * for Q3 never pours itself into a form opened for Q7. A deep link naming a
+	 * different pair simply looks up a different slot and finds nothing.
+	 */
+	async function restoreDraft() {
+		draftKey = draftSlot({ matchNumber: values.matchNumber, teamNumber: values.teamNumber });
+		try {
+			const found = await loadDraft(session.eventCode, draftKey);
+			if (!found?.values) return;
+			// Merge over the blank rather than assigning: a field added to
+			// form-config.js since the draft was written must exist, not be absent.
+			const merged = blank();
+			for (const k of Object.keys(merged)) {
+				if (k in found.values) merged[k] = found.values[k];
+			}
+			values = merged;
+			restoredDraft = true;
+		} catch (_e) {
+			// A broken draft must never block recording. Worst case is retyping.
+		}
+	}
+
+	// Persist on every change, debounced. $state.snapshot is not optional here:
+	// handing a Svelte proxy to IndexedDB throws DataCloneError, which has
+	// already cost this codebase a release — see ImportEntries.
+	$effect(() => {
+		if (!draftReady) return;
+		const snapshot = $state.snapshot(values);
+		if (!hasContent(snapshot, blank())) return;
+		const eventCode = session.eventCode;
+		const key = draftKey;
+		const t = setTimeout(() => {
+			saveDraft(eventCode, key, snapshot).catch(() => {});
+		}, 400);
+		return () => clearTimeout(t);
 	});
 
 	function applyLastEntryPrefill(last) {
@@ -207,7 +290,11 @@
 
 			kickSync();
 
-			await goto(`${base}/scouting/`);
+			// Only a successful save forgets the draft. Cancel deliberately does
+			// not — an accidental back press is the case the draft exists for.
+			await clearDraft(session.eventCode, draftKey);
+
+			await goto(origin);
 		} catch (err) {
 			error = err.message ?? String(err);
 		} finally {
@@ -222,9 +309,15 @@
 
 <main>
 	<header class="page-head">
-		<a href="{base}/scouting/" class="back" aria-label="Back to entries">←</a>
+		<a href={origin} class="back" aria-label="Back">←</a>
 		<h1>New entry</h1>
 	</header>
+
+	<!-- Say so. A form that fills itself in looks like stale data from someone
+	     else's match unless it explains itself. -->
+	{#if restoredDraft}
+		<p class="restored">Picked up where you left off.</p>
+	{/if}
 
 	<!--
 		Next-match banner: shown when the schedule is loaded, the scout has
@@ -316,7 +409,7 @@
 		{/if}
 
 		<div class="actions">
-			<a href="{base}/scouting/" class="cancel">Cancel</a>
+			<a href={origin} class="cancel">Cancel</a>
 			<button type="submit" disabled={saving}>
 				{saving ? 'Saving…' : 'Save entry'}
 			</button>
@@ -350,6 +443,15 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: var(--radius-sm);
+	}
+	.restored {
+		margin: 0 0 var(--space-3);
+		padding: var(--space-2) var(--space-3);
+		border-radius: var(--radius-md);
+		background: var(--banner-info-bg);
+		border: 1px solid var(--banner-info-border);
+		font-size: var(--fs-sm);
+		color: var(--text-muted);
 	}
 	.back:hover { background: var(--bg-subtle); }
 	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
