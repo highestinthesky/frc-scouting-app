@@ -379,11 +379,6 @@
 		margin: 0 0 var(--space-3);
 		color: var(--text-muted);
 	}
-	.hint {
-		margin: 0;
-		font-size: var(--fs-sm);
-		color: var(--text-muted);
-	}
 
 	.columns {
 		display: grid;

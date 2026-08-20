@@ -67,14 +67,18 @@ export async function deriveSessionId(eventCode) {
 
 /**
  * Build a Supabase client bound to a specific session id (an event-derived
- * UUID). The header is read by Postgres in the RLS policy via
- * `current_setting('request.headers')` — every SELECT/INSERT/DELETE we make
- * automatically carries the event's scope.
+ * UUID).
  *
- * No credential header any more. Manager writes used to carry x-manager-token,
- * a hash of a shared passphrase, and 0020 dropped the function that read it.
- * Authorisation now rides the access token: the policies ask manages_event(),
- * which is membership plus role.
+ * **The `x-session-id` header no longer authorises anything.** It used to be the
+ * partition: policies read it through `current_setting('request.headers')` and
+ * every scoped request carried the event that way. `0020` dropped all of that —
+ * the column, 29 policies, and the passphrase's `has_manager_token()` with them.
+ * Access is membership now, and the policies ask `manages_event()`.
+ *
+ * The header is still sent, and is inert. It stays only because removing it
+ * touches 28 call sites for no behavioural gain; `check_rls.mjs` deliberately
+ * sends NO header in its membership block precisely so the suite cannot pass on
+ * the strength of this vestige. Treat it as a label, like `events.code`.
  *
  * @param {string} sessionId
  * @param {object} [opts]  reserved; no options are read today

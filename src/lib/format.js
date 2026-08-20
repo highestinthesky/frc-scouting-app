@@ -34,18 +34,6 @@ export function timeOfDay(when) {
 	return t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-/**
- * Combine relative + absolute. "Q15 · in 8 min (2:47 PM)" use case.
- * @param {Date|string|number} when
- */
-export function timeWithRelative(when, now = new Date()) {
-	const rel = relativeTime(when, now);
-	const abs = timeOfDay(when);
-	if (!rel) return abs;
-	if (!abs) return rel;
-	return `${rel} · ${abs}`;
-}
-
 function toDate(v) {
 	if (v == null) return null;
 	if (v instanceof Date) return v;

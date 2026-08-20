@@ -366,14 +366,14 @@
 		font-size: var(--fs-sm);
 		margin-top: calc(-1 * var(--space-1));
 	}
-	input, textarea, select {
+	input, textarea {
 		font: inherit;
 		padding: var(--space-3);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-md);
 		background: var(--bg-card);
 	}
-	input:focus, textarea:focus, select:focus {
+	input:focus, textarea:focus {
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 		border-color: var(--accent);

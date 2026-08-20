@@ -81,7 +81,6 @@
 		color: var(--text-muted);
 	}
 	.as strong { color: var(--text-primary); }
-	a { color: var(--accent); }
 	.field {
 		display: flex;
 		flex-direction: column;

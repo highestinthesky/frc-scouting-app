@@ -667,7 +667,6 @@
 		border-radius: var(--radius-md);
 	}
 	.share.ro { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning); }
-	.share a { color: inherit; font-weight: 600; }
 	.stale { color: var(--danger); }
 
 	/* ── alliance selection ───────────────────────────── */

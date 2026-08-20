@@ -837,7 +837,7 @@ It was scheduled as v0.80 and then **cut entirely** — see below.
   tested before kickoff. It needs no native work — that was checked before
   deferring it, so it is not waiting on the Apple waiver.
 
-### v0.76 — the scout's side
+### v0.76 — the scout's side ✅ shipped 2026-08-20
 
 v0.75 rebuilt what a manager sees. This is the other half: the surfaces a scout
 actually touches at an event, reported by the person running the team after

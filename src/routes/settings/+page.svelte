@@ -258,9 +258,9 @@
 	.help { color: var(--text-faint); font-size: var(--fs-xs); }
 
 	/* ── choice groups ──────────────────────────────────────────────────
-	   Role and Appearance are the same control at two densities: a row of
-	   mutually-exclusive options. Shared geometry, different content. */
-	.roles,
+	   Appearance is a row of mutually-exclusive options. This used to be shared
+	   with a local Role picker; the role is the account's now, so only the one
+	   selector is left. */
 	.theme-row {
 		display: flex;
 		gap: var(--space-2);
@@ -326,7 +326,6 @@
 	}
 
 	/* ── sync status ────────────────────────────────────────────────────── */
-	.status.idle,
 	.acct {
 		display: flex;
 		align-items: baseline;

@@ -111,14 +111,6 @@
 	}
 	.reminder-form .field { margin-bottom: 0; }
 	.reminder-form .reminder-msg { grid-column: 1 / -1; }
-	.reminder-form select {
-		font: inherit;
-		padding: var(--space-2) var(--space-3);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-md);
-		background: var(--bg-card);
-		color: var(--text-primary);
-	}
 	.send { grid-column: 1 / -1; justify-self: start; }
 	.reminder-active-head {
 		margin: var(--space-4) 0 var(--space-2);

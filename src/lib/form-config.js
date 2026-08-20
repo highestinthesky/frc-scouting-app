@@ -165,15 +165,6 @@ export const ALL_FIELDS = [...IDENTITY_FIELDS, ...OBSERVATION_FIELDS];
 export const METRIC_KEYS = METRIC_FIELDS.map((f) => f.key);
 
 /**
- * Look up a metric's config by key. Returns undefined for non-metric keys.
- * @param {string} key
- * @returns {Field|undefined}
- */
-export function metricField(key) {
-	return METRIC_FIELDS.find((f) => f.key === key);
-}
-
-/**
  * 3: added METRIC_FIELDS (numeric counters).
  * 2: replaced the free-text `failures` textarea with a boolean `brokeDown`
  *    toggle plus a separate `comments` textarea.

@@ -368,52 +368,6 @@ export async function importEntries(rows) {
 }
 
 /**
- * Distinct, non-empty values for a given observations key across every entry.
- * Used by autocomplete fields to suggest previously-recorded values
- * (e.g. auto pathing names) so scouts converge on consistent labels instead
- * of typing the same path slightly differently each time.
- *
- * @param {string} observationKey  e.g. 'autoPathing'
- * @returns {Promise<string[]>}    distinct trimmed values, sorted A→Z
- */
-export async function getDistinctObservationValues(observationKey) {
-	const all = await db.entries.toArray();
-	const seen = new Set();
-	for (const row of all) {
-		const v = row.observations?.[observationKey];
-		if (typeof v !== 'string') continue;
-		const trimmed = v.trim();
-		if (trimmed) seen.add(trimmed);
-	}
-	return [...seen].sort((a, b) => a.localeCompare(b));
-}
-
-/**
- * Top-N most-used phrases for a given observations key, ordered by
- * frequency desc. For tag-preset rendering above textareas: when scouts
- * keep typing "fast cycles" we want that to be a one-tap pill.
- *
- * @param {string} observationKey
- * @param {number} [limit=6]
- * @returns {Promise<{value: string, count: number}[]>}
- */
-export async function getMostUsedObservationValues(observationKey, limit = 6) {
-	const all = await db.entries.toArray();
-	const counts = new Map();
-	for (const row of all) {
-		const v = row.observations?.[observationKey];
-		if (typeof v !== 'string') continue;
-		const trimmed = v.trim();
-		if (!trimmed) continue;
-		counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
-	}
-	return [...counts.entries()]
-		.map(([value, count]) => ({ value, count }))
-		.sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
-		.slice(0, limit);
-}
-
-/**
  * Distinct, non-empty values for a given observations key scoped to a
  * single team number. Used by autocomplete fields to suggest previously-
  * recorded values for the specific team being scouted.

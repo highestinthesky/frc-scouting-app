@@ -117,7 +117,7 @@ on the reasoning above — and the reasoning was about the palette rather than
 about the person reading it, who could not read it. Legibility settles that.
 
 There are now **two** Studio palettes and `check_contrast.mjs` measures both, at
-162 assertions. The roles invert between them and that inversion is the design:
+170 assertions. The roles invert between them and that inversion is the design:
 on light, purple is the only one of the four that reads, so it is the accent and
 does both jobs; cyan and aqua are 1.64 and 1.06 on a raised panel and are
 decorative only. The `--studio-series-*` are darkened on light and lifted on
@@ -167,21 +167,25 @@ scroll sideways.
 `PageHead` renders the page's `<h1>` from a `title` prop, and
 `check_components.mjs` reads that prop for the nav-label assertion.
 
-**`components/scouting/` is now only `MyAssignments`, `MyTeams` and
-`UpcomingMatches`.** The last two are unreferenced — see the v0.74 section of
-`ROADMAP.md` before deleting or reviving them.
+**`components/scouting/` is `MyAssignments` and `MyTeams`.** `MyTeams` is not
+dead — `MyAssignments` imports it and renders it. `UpcomingMatches` was the third
+and is gone; v0.76 gave the scout their upcoming list on Home instead, resolved
+through `myMatches()` so it agrees with the coverage maths.
 
 ### The checks, and why each exists
 
-`npm test` runs 16 suites. Two are not unit tests and are the important ones:
+`npm test` runs 21 unit suites plus 2 checkers. The checkers are the important
+ones, and neither is a unit test:
 
 - **`check_components.mjs`** reads *emitted* CSS, not source, because Svelte's
   scoping changes specificity and that shipped a bug once. It pins the tap-target
   floor, the focus ring, token usage, that nav labels match their page's `<h1>`,
   that no grid track is a bare `fr` or a nested `minmax()`, that the body font is
   declared once, and that every `Button` variant asked for is one Button defines.
-- **`check_contrast.mjs`** pins every token pairing against WCAG, in all three
-  palettes — light, dark and Studio.
+- **`check_contrast.mjs`** pins every token pairing against WCAG in all **four**
+  palettes — light, dark, Studio light and Studio dark. Studio is two palettes,
+  not one: the roles invert between them, and an unmeasured palette is how
+  `--border-strong` shipped at 2.27 the first time.
 
 **A false failure is worse than a missing one**, and two of these checks had one.
 `\b` is the wrong boundary for a CSS class name — class names contain hyphens, so
@@ -619,20 +623,29 @@ Checked, not remembered. A new session should re-verify before trusting it.
 - The Supabase MCP connection is available and is how migrations have been
   applied; `mcp__plugin_supabase_supabase__*`, project ref `hhvpkgwgkuiemxyarsuk`.
 
-**v0.74 is complete and committed; the user pushes.** A push deploys to GitHub
-Pages. Nothing in v0.74 depends on a migration, so the ordering rule that bit
-`0020` does not apply to this release.
+**v0.75 and v0.76 are shipped and deployed** (2026-08-20). A push deploys to
+GitHub Pages; the user pushes, always.
 
-**A scout has no schedule view.** `/scouting` shows `MyAssignments` and nothing
-else — v0.73 step 2's read-only `/schedule` was never built, and `MyTeams` and
-`UpcomingMatches` sat inside Studio behind a condition that can never be true.
-Build it or delete them; see the v0.74 section of `ROADMAP.md`.
+The v0.76 deploy needed a second commit to go green, and the cause is worth
+knowing because it can recur. A lockfile-only commit landed upstream that had
+been generated against a **different** `package.json` — one with `pako` added and
+`fake-indexeddb` and `pg` removed. `package.json` itself was never changed, so
+only the lock carried the edit, and `npm ci` refused it: the lock no longer
+satisfied the manifest. `npm ci` is the FIRST step in `deploy.yml`, so the red
+run had nothing to do with tests or the build. If that environment still exists,
+its next `npm install` re-breaks the lock the same way.
+
+**A scout sees their own matches, but not the event's.** v0.76 put the full
+upcoming list on Home — five ahead, the rest behind a disclosure — resolved
+through `myMatches()`. What still does not exist is a view of the whole schedule:
+Home only ever lists matches one of the scout's own teams is in. v0.73 step 2's
+read-only `/schedule` was never built.
 
 ## Where the reasoning lives
 
 | | |
 |---|---|
-| `ROADMAP.md` | the single dependency-ordered plan; v0.75 current, v0.80 is team comparison |
+| `ROADMAP.md` | the single dependency-ordered plan; v0.76 shipped, v0.80 is team comparison |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/adr-002-spatial-observations.md` | interactive auto scouting, designed for v0.90 |
 | `docs/adr-003-boards.md` | the graph builder — designed, then REJECTED; kept for its decisions |

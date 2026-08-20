@@ -355,14 +355,6 @@
 		font-weight: 600;
 		color: var(--text-muted);
 	}
-	.mb-field select {
-		font: inherit;
-		padding: var(--space-2);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-md);
-		background: var(--bg-card);
-		color: var(--text-primary);
-	}
 	.mb-add {
 		grid-column: 1 / -1;
 		justify-self: start;
