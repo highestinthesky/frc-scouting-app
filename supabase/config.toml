@@ -421,6 +421,12 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
+# Pre-authentication by definition: there is no user JWT until this function
+# returns a session. The function applies its own credential and rate-limit
+# checks and never exposes the resolved email address.
+[functions.username-sign-in]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

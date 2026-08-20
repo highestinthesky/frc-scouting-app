@@ -77,6 +77,15 @@ Two paths, both from `/studio/accounts`:
    one-time password to hand over. Needs `service_role`, which is why it is an
    Edge Function and not in the bundle.
 
+Username sign-in also crosses a trusted boundary now. `username-sign-in` accepts
+the username and password, resolves `auth.users.email` through the service-only
+`email_for_username` grant, performs the GoTrue password exchange and returns
+only a token pair. The browser installs it with `setSession()` and never receives
+an email merely for knowing a username. `0024` owns its atomic IP+username rate
+limit. The anon grant on the old lookup remains only for the cached-PWA rollout
+window; `supabase/rollout/revoke_email_for_username.sql` is the explicit final
+gate and must not move into `migrations/` before adoption is verified.
+
 ### Design system
 
 `design.md` is the locked system: spacing (`--space-1..6`), type (`--fs-xs..xl`),
@@ -433,12 +442,24 @@ was lost. **`[auth.sessions]` stays unset** — a timebox or inactivity timeout
 would force-log-out devices between events.
 
 *Email* (Authentication → Email): **Confirm email OFF**, **Secure email change
-OFF**. With
-Confirm email on, registration is not tedious — it is impossible. Every address
-is `<username>@scout.invalid`, RFC 2606 reserves `.invalid` as permanently
-unroutable, and GoTrue validates the recipient before sending. The error names
-the address, and the address is fine. Read the real setting with
-`GET /auth/v1/settings` → `mailer_autoconfirm: true` means Confirm email is off.
+OFF**. Read the real setting with `GET /auth/v1/settings` →
+`mailer_autoconfirm: true` means Confirm email is off.
+
+Turning it on still breaks registration, but the reason has changed once and the
+old one has not fully expired. `0016` made new addresses real, so the original
+argument — every address is `<username>@scout.invalid`, RFC 2606 reserves
+`.invalid` as permanently unroutable, GoTrue validates the recipient before
+sending, and the error names an address that is fine — now applies only to the
+**four legacy `.invalid` accounts still on production** (measured 2026-08-20: 6
+auth users, 4 `.invalid`, 2 real, all confirmed). Those four sign in normally,
+because the address is an identifier and not a mailbox, and cannot receive
+recovery mail at all; resetting one is a manual admin job.
+
+The reason that applies to *every* account is the invite flow: `register()`
+calls `signUp()` and redeems the invite with the session it returns. With
+confirmation on, signup can create the Auth user without a session, so
+`redeem_invite` never runs and the account is left orphaned until someone opens
+a link — at a venue, on a phone, using an address they may have typed wrong.
 
 **`0001` is corrective and re-runnable.** It is not a create-from-empty
 migration: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `CREATE OR
@@ -566,15 +587,33 @@ missing `box-sizing` turns 2rem of padding into a rail that looks unpinned.
 **The app has no `box-sizing` reset.** Everything is `content-box`. Studio's rail
 sets `border-box` locally; changing it globally is its own release.
 
-## Live state, as of 2026-08-17
+## Live state, as of 2026-08-20
 
 Checked, not remembered. A new session should re-verify before trusting it.
 
-- **Production is at migration `0023`.** `0016`–`0023` are applied; `0011`,
+- **Production is at migration `0024`.** `0016`–`0024` are applied; `0011`,
   `0012` and `0013` never were and live in `supabase/superseded/`.
 - **`AUTH_ENFORCED` is `true`** and the cutover is complete: no anonymous path
   exists in the database, and membership is the only thing granting access.
 - The `create-account` Edge Function is deployed and ACTIVE.
+- **Username privacy: server half is live, client half is not pushed.**
+  `0024` is applied and `username-sign-in` is deployed ACTIVE at
+  `verify_jwt = false`, smoke-tested against production on 2026-08-20: 401 on a
+  bad credential *without* an `Authorization` header (which is what proves both
+  the public route and the `service_role` RPC grant — a failed rate-limit call
+  returns 503, not 401), 429 with `Retry-After` on the 11th attempt, and a
+  different username from the same IP unaffected. `auth_logs` showed every probe
+  reaching GoTrue with `400 invalid_credentials` rather than an API-key error,
+  which is the only thing separating "wrong password" from "the function's
+  `SUPABASE_ANON_KEY` is broken and every login fails".
+  **The client that calls it is committed but unpushed** — until the user
+  pushes, browsers still sign in through the anon `email_for_username` path,
+  which is exactly why `0024` leaves that grant alone.
+- **The legacy anon lookup is still open, deliberately.**
+  `supabase/rollout/revoke_email_for_username.sql` is the final gate and stays
+  out of `migrations/`. Run it only after the pushed PWA has soaked; running it
+  early locks out every cached client, since a service worker can serve the old
+  bundle long after a deploy.
 - **Leaked password protection is still OFF** — a dashboard setting nobody but
   the user can change, worth doing before accounts are handed out.
 - The Supabase MCP connection is available and is how migrations have been

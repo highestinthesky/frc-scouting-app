@@ -5,7 +5,10 @@ Applied in filename order, they rebuild it from nothing.
 
 ## Audited live state
 
-Verified against the live project on 2026-08-07:
+Verified against the live project on 2026-08-20: production is at `0024`,
+`AUTH_ENFORCED` is true, and the old `0011`–`0013` drafts live under
+`superseded/` rather than in the active sequence.
+Do not infer production state from the presence of a migration file.
 
 | Migration | Live state |
 |---|---|
@@ -14,11 +17,24 @@ Verified against the live project on 2026-08-07:
 | `0008_auth.sql` | **Corrected version applied 2026-08-07** (guards + both triggers) |
 | `0009_picklist.sql` | Applied |
 | `0010_identity.sql` | Applied 2026-08-07 |
-| `0011_policies.sql` | Not applied — the one-way door |
-| `0012_passphrase_cleanup.sql` | Not applied — after `0011` soaks |
+| `0011`–`0013` | Superseded; never applied in this sequence |
 | `0016_real_emails.sql` | **Applied 2026-08-14** |
 | `0017_managed_accounts.sql` | **Applied 2026-08-14** |
 | `0018_revoke_from_anon.sql` | **Applied 2026-08-14** — grants, not behaviour |
+| `0019`–`0023` | Applied; account/event cutover complete |
+| `0024_username_sign_in_rate_limit.sql` | **Applied 2026-08-20** — before the function, per the ordering rule |
+
+`username-sign-in` is deployed and ACTIVE (v1, `verify_jwt` **off** — it runs
+before a session exists and is itself the credential check). Smoke-tested
+against production 2026-08-20: a bad credential sent with no `Authorization`
+header returns 401, which is the single result proving both that the public
+route works and that `consume_username_sign_in_attempt` executed as
+`service_role` — a failed rate-limit RPC returns 503 instead. The 11th attempt
+returns 429 with `Retry-After`, and a different username from the same IP is
+unaffected. `auth_logs` showed each probe reaching GoTrue as
+`400 invalid_credentials`, not an API-key rejection; that distinction is the
+only evidence separating "wrong password" from "the function's anon key is
+broken and every login fails closed".
 
 The `create-account` Edge Function is deployed and ACTIVE (v1, `verify_jwt`
 on). Verified against the live endpoint rather than assumed: the CORS preflight
@@ -28,9 +44,8 @@ runs. `apikey` had to be added to `Access-Control-Allow-Headers` — supabase-js
 sends it, and the preflight would have failed in a browser while passing under
 curl.
 
-Both `verify_migrations.sql` and `verify_entries.sql` return zero FAILs.
-`AUTH_ENFORCED` is still `false`, so accounts remain additive rather than the
-production authorization boundary.
+`AUTH_ENFORCED` is true. Membership and account roles are the production
+authorization boundary.
 
 `0018` went ahead of `0016`/`0017` because it only narrows privileges and
 depends on nothing they add. Order is safe in either direction: `0016` replaces
@@ -52,20 +67,13 @@ on before accounts are handed out.
 Two dashboard toggles are load-bearing, and no SQL file can set or enforce
 them. Both are one-time.
 
-**Authentication → Email → Confirm email: OFF.** Not optional. **With this on,
-registration is impossible** — not slow, not manual. Impossible.
-
-Every address here is `<username>@scout.invalid`. `.invalid` is reserved by
-RFC 2606 as permanently unroutable, deliberately: the address is an identifier
-and not a mailbox. With Confirm email on, GoTrue tries to send a confirmation
-message, and its mailer validates the RECIPIENT before sending. `.invalid` fails
-that check, so signup returns
-
-    Email address "someone@scout.invalid" is invalid
-
-and no account is created. The message points at the address, so you go and look
-at the address — which is the wrong place. The address is fine. Nothing is
-sending mail once this is off, so nothing validates the recipient.
+**Authentication → Email → Confirm email: OFF.** Invite registration calls
+`signUp()` and immediately redeems the invite with the returned authenticated
+session. Turning confirmation on changes that contract: signup may create the
+Auth user without a session, so `redeem_invite` cannot run and the account is
+left orphaned until email confirmation. Real addresses make confirmation
+possible now, but the application intentionally keeps the one-step, venue-safe
+flow and uses those addresses for password recovery instead.
 
 Two other symptoms of the same cause, both misleading:
 
@@ -241,6 +249,9 @@ still parses fine.
 | `migrations/0010_identity.sql` | `profile_id` beside `scout_name` — **not applied; expand/backfill stage** |
 | `migrations/0011_policies.sql` | hardened membership + event RLS and role cutover — **not applied; one-way door** |
 | `migrations/0012_passphrase_cleanup.sql` | drops the inert `has_manager_token()` and `manager_token` — **not applied; after 0011 has soaked** |
+| `migrations/0024_username_sign_in_rate_limit.sql` | service-only email bridge and atomic rate buckets for private username authentication |
+| `functions/username-sign-in/index.ts` | pre-auth username/password exchange; returns tokens, never the resolved email |
+| `rollout/revoke_email_for_username.sql` | final compatibility gate; intentionally outside `migrations/` |
 | `0013_applied_superseded.sql` | applied to production 2026-08-07, then removed from the sequence — it ran after `0011` and undid the cutover. Superseded by `0001`. |
 | `verify_entries.sql` | drift assertions for `entries`, read-only |
 | `verify_migrations.sql` | did 0007/0008/0009 land? read-only |
@@ -399,13 +410,16 @@ See [`../ROADMAP.md`](../ROADMAP.md) for the dependency-ordered checklist. Once
 policies require a member profile, an unsigned device stops syncing; schedule
 the release between events and leave time for ordinary-device soak testing.
 
-## Password recovery is not wired
+## Password recovery UI is not wired
 
-`profiles.recovery_email` is metadata only. Supabase Auth recovery sends to
-`auth.users.email`, which in this design is the derived and unroutable
-`<username>@scout.invalid` address. GoTrue does not consult the profile column.
+Accounts created since `0016` use a real address in `auth.users.email`, so
+Supabase Auth can send recovery mail to them. The application still has no
+forgot-password request screen or recovery callback route, so self-service
+recovery is incomplete at the client. `profiles.recovery_email` is the
+manager-visible copy used to spot typos; GoTrue continues to send to
+`auth.users.email`.
 
-A functional self-service reset therefore needs trusted server-side code, such
-as an Edge Function using the Auth admin API after verifying the recovery
-contact. Until that is implemented, recovery is a manual admin process; do not
-present the profile field as a working reset channel.
+Four accounts on production predate `0016` and still hold
+`<username>@scout.invalid`. They sign in normally — the address is an
+identifier, not a mailbox — but no recovery mail can ever reach them, so those
+four are a manual admin reset regardless of what the client grows later.

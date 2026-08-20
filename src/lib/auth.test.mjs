@@ -8,9 +8,8 @@
 //
 // What they protect:
 //
-//   · The email derivation IS the login identity. If it ever changed shape,
-//     every existing account would become unreachable — there is no lookup
-//     table to fall back on, by design.
+//   · Username sign-in must cross the private Edge Function. Putting the email
+//     lookup back in the browser restores anonymous address harvesting.
 //   · usernameProblem must agree with the database CHECK in migration 0008.
 //     If the form is laxer than the constraint, a scout fills in the whole
 //     registration form and gets a raw Postgres error at the end.
@@ -61,8 +60,9 @@ const ok = (name, cond, detail = '') => {
 // Someone was locked out of a super account with no way back; that is what paid
 // for this change.
 {
-	// A regression guard with teeth. If the derivation ever comes back, every
-	// account it creates is unrecoverable again, and nothing else would notice.
+	// A regression guard with teeth. If derivation ever comes back, every account
+	// it creates is unrecoverable. If email_for_username comes back, knowing a
+	// username reveals the real address again.
 	//
 	// Comments are stripped first. The file explains at length why the address
 	// USED to be derived, so a naive search finds the reserved domain in prose
@@ -74,17 +74,16 @@ const ok = (name, cond, detail = '') => {
 		.join('\n');
 	ok('no executable code mentions the reserved domain', !/@scout\.invalid/.test(code));
 
-	ok('signIn asks the database for the address',
-		/const email = await lookupEmail\(username\)/.test(src));
+	ok('the browser never calls the address lookup RPC', !/email_for_username/.test(code));
 
-	// An unknown username must be indistinguishable from a wrong password.
-	// Saying "no such user" is how an attacker enumerates a roster, and the
-	// lookup RPC already makes usernames cheap enough to guess.
-	const signInSrc = src.slice(src.indexOf('async signIn('), src.indexOf('async register('));
-	ok('an unknown username reports a credential failure, not a missing account',
-		/if \(!email\)[\s\S]*?username and password do not match/.test(signInSrc));
-	ok('and never calls signInWithPassword without an address',
-		signInSrc.indexOf('if (!email)') < signInSrc.indexOf('signInWithPassword'));
+	// All credential decisions now belong to the private endpoint; the auth store
+	// should only install the returned session and propagate its generic result.
+	const signInStart = src.indexOf('async signIn(');
+	const signInSrc = src.slice(signInStart, src.indexOf('\n\t},', signInStart) + 4);
+	ok('signIn uses the private username session exchange',
+		/establishUsernameSession\(getAuthClient\(\), username, password\)/.test(signInSrc));
+	ok('signIn no longer receives or handles an email address',
+		!/lookupEmail|signInWithPassword|\bemail\b/.test(signInSrc));
 
 	// Registration must collect somewhere reachable, or recovery is theatre.
 	const registerSrc = src.slice(src.indexOf('async register('));

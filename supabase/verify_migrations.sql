@@ -105,7 +105,17 @@ WITH expected(migration, kind, name, why) AS (
          '0011 precondition: 38 policies call it'),
         ('0001', 'index',    'entries_dedupe_idx',
          'sync relies on this raising 23505 and adopting the existing row'),
-        ('0001', 'index',    'entries_session_idx', 'the incremental pull index')
+        ('0001', 'index',    'entries_session_idx', 'the incremental pull index'),
+
+		-- ── 0024: private username authentication ─────────────────────────
+		('0024', 'table',    'username_sign_in_limits',
+		 'server-side attempt windows; browsers have no table grant'),
+		('0024', 'index',    'username_sign_in_limits_window_idx',
+		 'bounds cleanup of expired rate-limit buckets'),
+		('0024', 'function', 'consume_username_sign_in_attempt',
+		 'atomic pre-auth rate-limit decision, callable only by service_role'),
+		('0024', 'function', 'clear_username_sign_in_attempt',
+		 'successful login forgets prior typos for that account and network')
 ),
 
 -- ── what is actually there ─────────────────────────────────────────────────
@@ -260,9 +270,64 @@ checks AS (
           WHERE cfg LIKE 'search_path=%'
       )
 
-    UNION ALL
+	    UNION ALL
 
-    -- ── the username index is UNIQUE and on lower() ────────────────────────
+	    -- ── private username-auth grants ─────────────────────────────────────
+	    SELECT CASE
+	               WHEN has_function_privilege(
+	                   'service_role',
+	                   'public.email_for_username(text)',
+	                   'EXECUTE'
+	               ) THEN 'PASS' ELSE 'FAIL'
+	           END,
+	           'username sign-in has its service-only email bridge',
+	           CASE
+	               WHEN has_function_privilege(
+	                   'service_role',
+	                   'public.email_for_username(text)',
+	                   'EXECUTE'
+	               ) THEN 'service_role can resolve the Auth address inside the Edge Function'
+	               ELSE '0024 is incomplete — every valid username login will fail closed'
+	           END
+	    WHERE to_regprocedure('public.consume_username_sign_in_attempt(text,integer,integer)') IS NOT NULL
+
+	    UNION ALL
+
+	    SELECT CASE
+	               WHEN has_table_privilege('anon', 'public.username_sign_in_limits', 'SELECT')
+	                 OR has_table_privilege('anon', 'public.username_sign_in_limits', 'INSERT')
+	                 OR has_table_privilege('anon', 'public.username_sign_in_limits', 'UPDATE')
+	                 OR has_table_privilege('anon', 'public.username_sign_in_limits', 'DELETE')
+	               THEN 'FAIL' ELSE 'PASS'
+	           END,
+	           'rate-limit buckets are private',
+	           CASE
+	               WHEN has_table_privilege('anon', 'public.username_sign_in_limits', 'SELECT')
+	                 OR has_table_privilege('anon', 'public.username_sign_in_limits', 'INSERT')
+	                 OR has_table_privilege('anon', 'public.username_sign_in_limits', 'UPDATE')
+	                 OR has_table_privilege('anon', 'public.username_sign_in_limits', 'DELETE')
+	               THEN 'anon can inspect or alter rate-limit state'
+	               ELSE 'no anon table privileges'
+	           END
+	    WHERE to_regclass('public.username_sign_in_limits') IS NOT NULL
+
+	    UNION ALL
+
+	    SELECT CASE
+	               WHEN has_function_privilege('anon', 'public.email_for_username(text)', 'EXECUTE')
+	               THEN 'INFO' ELSE 'PASS'
+	           END,
+	           'legacy browser email lookup',
+	           CASE
+	               WHEN has_function_privilege('anon', 'public.email_for_username(text)', 'EXECUTE')
+	               THEN 'compatibility window OPEN — run rollout/revoke_email_for_username.sql only after PWA adoption'
+	               ELSE 'closed — knowing a username no longer returns a real address'
+	           END
+	    WHERE to_regprocedure('public.consume_username_sign_in_attempt(text,integer,integer)') IS NOT NULL
+
+	    UNION ALL
+
+	    -- ── the username index is UNIQUE and on lower() ────────────────────────
     -- The shape matters, not just the name. A non-unique index of the right
     -- name would pass an existence check and guarantee nothing, and duplicate
     -- usernames are unrecoverable once two people have them.
@@ -526,14 +591,14 @@ checks AS (
     UNION ALL
 
     SELECT CASE
-               WHEN NOT has_function_privilege('anon', 'public.reset_event_data()', 'EXECUTE')
-                AND has_function_privilege('authenticated', 'public.reset_event_data()', 'EXECUTE')
+	               WHEN NOT has_function_privilege('anon', 'public.reset_event_data(uuid)', 'EXECUTE')
+	                AND has_function_privilege('authenticated', 'public.reset_event_data(uuid)', 'EXECUTE')
                THEN 'PASS' ELSE 'FAIL'
            END,
            'post-cutover archive RPC grant',
-           'anon=' || has_function_privilege('anon', 'public.reset_event_data()', 'EXECUTE')::text ||
-           ', authenticated=' ||
-           has_function_privilege('authenticated', 'public.reset_event_data()', 'EXECUTE')::text
+	           'anon=' || has_function_privilege('anon', 'public.reset_event_data(uuid)', 'EXECUTE')::text ||
+	           ', authenticated=' ||
+	           has_function_privilege('authenticated', 'public.reset_event_data(uuid)', 'EXECUTE')::text
     WHERE NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'event_meta'

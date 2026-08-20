@@ -248,7 +248,11 @@ not exist.
 
 Usernames carry six digits, not the draft's three. `email_for_username()` turns
 a username into a real address for anonymous callers, so three digits is a
-thousand requests to harvest a named scout's email; six is a million.
+thousand requests to harvest a named scout's email; six is a million. **That was
+a temporary mitigation, not the fix.** The 2026-08-19 privacy rollout moves the
+lookup and password exchange into the public-but-rate-limited `username-sign-in`
+Edge Function. Migration `0024` grants the lookup to `service_role`; the final
+rollout script revokes it from browser roles only after the new PWA has soaked.
 
 ### Phase 4 — events and identity
 

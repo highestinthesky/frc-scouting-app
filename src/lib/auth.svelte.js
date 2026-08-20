@@ -21,17 +21,17 @@
 // because .invalid is permanently unroutable and Supabase sends recovery to
 // auth.users.email. The first person to forget a password had no way back.
 //
-// Addresses are real now, so signIn() asks email_for_username() for one. That
-// RPC is callable by anon — it has to be, it runs before there is a session —
-// which means a username can be exchanged for a real address by anyone. See
-// migration 0016 for the trade and the exit: when Phase 3's Edge Function
-// exists, the lookup moves inside it and the RPC is revoked from anon.
+// Addresses are real now. signIn() sends the username and password to the
+// pre-auth username-sign-in Edge Function, which resolves the address privately
+// and returns a session only after the password is proven. The browser never
+// receives an address merely for knowing a username.
 //
 // Usernames remain immutable. That was a consequence of the derivation and is
 // now a deliberate choice: the username is the join key people are told, and
 // changing it silently detaches an account from everything addressed to it.
 
 import { getAuthClient } from './supabase.js';
+import { establishUsernameSession } from './username-auth.js';
 import { forgetEvents } from './events.js';
 // session.svelte.js imports only db.js, so this direction is acyclic.
 import { session } from './session.svelte.js';
@@ -55,24 +55,6 @@ import { scoutRef } from './scout-identity.js';
 export const AUTH_ENFORCED = true;
 
 const PROFILE_CACHE_KEY = 'frc-scout-last-profile';
-
-/**
- * The login address for a username, or null if no account has that name.
- *
- * A round trip, where this used to be string concatenation. Unavoidable: the
- * address is real now and no rule relates it to the username, which is the
- * whole reason recovery works.
- *
- * @param {string} username
- * @returns {Promise<string|null>}
- */
-export async function lookupEmail(username) {
-	const u = String(username ?? '').trim().toLowerCase();
-	if (!u) return null;
-	const { data, error } = await getAuthClient().rpc('email_for_username', { p_username: u });
-	if (error) return null;
-	return data ?? null;
-}
 
 /** Same shape the database CHECK enforces, so the form can say so first. */
 export const USERNAME_RE = /^[a-z0-9._-]{3,24}$/;
@@ -286,21 +268,9 @@ export const auth = {
 	 * @returns {Promise<{ok: true} | {ok: false, message: string}>}
 	 */
 	async signIn(username, password) {
-		// One extra round trip before the sign-in. A username with no account
-		// resolves to null, and that is reported as a credential failure rather
-		// than "no such user" — telling an attacker which usernames exist is the
-		// thing Supabase itself is careful not to do.
-		const email = await lookupEmail(username);
-		if (!email) {
-			return { ok: false, message: 'That username and password do not match.' };
-		}
-		const { data, error } = await getAuthClient().auth.signInWithPassword({ email, password });
-		if (error) {
-			// Supabase says "Invalid login credentials" for both a wrong
-			// password and an unknown user, which is the right thing to show —
-			// distinguishing them tells an attacker which usernames exist.
-			return { ok: false, message: 'That username and password do not match.' };
-		}
+		const result = await establishUsernameSession(getAuthClient(), username, password);
+		if (!result.ok) return result;
+		const data = result.data;
 		state.signedIn = true;
 		rememberAuthIdentity(data);
 		await loadProfile(authUserId(data));
