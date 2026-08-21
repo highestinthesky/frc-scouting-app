@@ -646,6 +646,7 @@ read-only `/schedule` was never built.
 | | |
 |---|---|
 | `ROADMAP.md` | the single dependency-ordered plan; v0.76 shipped, v0.80 is team comparison |
+| `HANDOFF.md` | working preferences, environment traps, and the decisions still open |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/adr-002-spatial-observations.md` | interactive auto scouting, designed for v0.90 |
 | `docs/adr-003-boards.md` | the graph builder — designed, then REJECTED; kept for its decisions |
