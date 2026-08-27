@@ -505,6 +505,12 @@
 		min-width: 5rem;
 		padding: var(--space-3) var(--space-4);
 		font: inherit;
+		/* `font: inherit` does NOT carry colour, and a <button> keeps the UA's
+		   `color: buttontext` — black in every theme. Unselected pills were
+		   therefore black on --bg-card: 1.21 in dark mode, on the entry form.
+		   Only the .selected rules below ever set a colour, which is why this
+		   survived; in light mode black on a light card looks intentional. */
+		color: var(--text-primary);
 		font-weight: 600;
 		text-transform: capitalize;
 		background: var(--bg-card);

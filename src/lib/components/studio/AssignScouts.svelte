@@ -157,6 +157,8 @@
 		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		color: var(--text-primary);
+		/* Padding alone left these at 37px. */
+		min-height: var(--tap-min);
 	}
 	input:focus {
 		outline: 2px solid var(--accent);
@@ -193,6 +195,7 @@
 		background: var(--bg-card);
 		color: var(--text-primary);
 		min-width: 0;
+		min-height: var(--tap-min);
 	}
 	.row-x {
 		background: transparent;
@@ -201,6 +204,12 @@
 		font-size: var(--fs-lg);
 		cursor: pointer;
 		padding: 0 var(--space-2);
+		/* Same as .rr-x in ReminderPanel: padding alone left it under the floor. */
+		min-height: var(--tap-min);
+		min-width: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 	}
 	.row-x:hover { color: var(--danger); }
 </style>

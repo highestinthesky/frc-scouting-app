@@ -96,6 +96,8 @@
 		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		color: var(--text-primary);
+		/* Padding alone left these at 37px. */
+		min-height: var(--tap-min);
 	}
 	input:focus {
 		outline: 2px solid var(--accent);
@@ -148,6 +150,13 @@
 		color: var(--text-faint);
 		cursor: pointer;
 		padding: 0 var(--space-1);
+		/* Horizontal padding alone measured 18x20 against design.md's 44px
+		   floor. A borderless glyph button still has to be hittable. */
+		min-height: var(--tap-min);
+		min-width: var(--tap-min);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 	}
 	.rr-x:hover { color: var(--danger); }
 	@media (max-width: 28rem) {

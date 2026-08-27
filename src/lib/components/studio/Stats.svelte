@@ -21,7 +21,7 @@
 <style>
 	.stats {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
 		gap: var(--space-3);
 	}
 </style>

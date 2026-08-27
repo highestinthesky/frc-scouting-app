@@ -64,43 +64,102 @@ the correct answer.
 
 **Native is paused, not cancelled** — see *Deliberately not in v0.8* below.
 
-### v0.80 — what is actually on the screen
+### v0.80 — what is actually on the screen ✅ audited and fixed 2026-08-27
 
-Reported by the person running the team: black text on a black ground in
-places, and buttons clipping into each other. That is on a codebase with 170
-contrast assertions and a component checker, which makes the gap between them
-the real finding.
+Reported by the person running the team: black text on a black ground in places,
+and buttons clipping into each other. That is on a codebase with 170 contrast
+assertions and a component checker, which makes the gap between them the real
+finding.
 
-**Why the checks did not catch it.** `check_contrast.mjs` measures token
-*pairings* from a fixed table across four palettes. It never looks at a rendered
-page. So a component that sets a background and inherits its text colour from an
-ancestor is invisible to it — and that is exactly the hole v0.74 and v0.75
-opened when the Studio block began remapping the base tokens underneath
-components written for the scout app. Black on black is that shape. The check is
-not wrong; it is answering a different question than the one being asked.
+**The audit.** 48 route-renders — 12 routes × scout/Studio light and dark × 375px
+and 1280px — driven in the running app against a seeded local stack with 36
+entries, 8 teams and a 24-match schedule. Contrast and geometry measured
+computationally rather than by eye, because `#0a0a0a` on `#000` is not something a
+screenshot settles.
 
-**The clipping already has a name in `CLAUDE.md`:** the app has no `box-sizing`
-reset, so everything is `content-box` and padding adds to a declared width.
-Studio's rail sets `border-box` locally and the note says changing it globally is
-its own release. This is that release.
+Two traps caught it on the way, both already written down in `CLAUDE.md` and both
+worth the warning: the first sweep ran at a **zero-width viewport**, where every
+element overflows its parent and every number is an artifact; and a later reading
+of `data-studio` leaking onto scout routes turned out to be a stale async loop in
+the harness, not the app.
 
-1. **Audit first, fix second.** Drive the real app in a browser across all four
-   palettes — scout light, scout dark, Studio light, Studio dark — at phone and
-   desktop widths, and write down what is actually broken before changing
-   anything. A green test suite has shipped real bugs in this repo before; the
-   audit is not a test run.
-2. **The global box model**, if the audit confirms it. One change closing a
-   category, rather than a dozen spot repairs that each look local.
-3. **The remaining fixes**, from the audit's list.
-4. **Whatever the audit finds that the checks should have caught** goes back into
-   the checks — but only where a check can be made to answer the real question.
-   A false failure is worse than a missing one, and this file already carries two
-   examples of a checker that cost more than it caught.
+#### What was actually wrong
 
-**This release goes first, and not only because it is discovery.** If the box
-model is global, it has to land before any new surface is built — otherwise
-every page in v0.81 through v0.84 is built against a wrong box and has to be
-re-checked afterwards.
+1. **Every unselected pill was black on near-black in dark mode** —
+   `Field.svelte`. Contrast **1.21** against a 4.5 floor, on `/scouting/new/`,
+   which is the most-used screen in the app.
+
+   `.pill` sets `font: inherit` and never sets `color` — and `font` does not carry
+   colour, so a `<button>` keeps the user agent's `color: buttontext`, which is
+   black in every theme. Measured rather than inferred: the pill's parent computed
+   to `rgb(232,232,232)` while the pill computed to `rgb(0,0,0)`, so it was not
+   inheriting at all. The `.selected` rules below it set colours carefully — the
+   comment there is about getting dark mode right — and the default state was
+   simply never given one. In light mode black on a light card looks deliberate,
+   which is why it survived. Now `--text-primary`, which is a pair the contrast
+   check already measures in all four palettes.
+
+2. **`/studio/schedule/` put content off the right edge, unreachably.**
+   `repeat(auto-fit, minmax(24rem, 1fr))` is a 384px floor inside a 343px
+   container. Measured: 41px lost, and the document does not scroll sideways, so
+   the TBA event key field, the code/key row and the API key field were cut off
+   rather than reachable. `/studio/coverage/` had the same bug at 22rem, 9px.
+
+   Fixed with `minmax(min(24rem, 100%), 1fr)`, which is the shape
+   `check_components.mjs` already names in its own comment as the valid CSS its
+   stripper must not false-flag. Applied to **all seven** `auto-fit` tracks, not
+   the two that overflowed — the other five are safe only because 16rem happens to
+   fit today, and v0.72 set the precedent by fixing eleven bare `1fr` tracks
+   rather than the one that was noticed.
+
+3. **Six tap targets under 44px on `/studio/schedule/`**, in both themes. Worst
+   was a borderless `✕` at **18×20**. Two `✕` buttons had horizontal padding and
+   nothing else; four inputs sat at 37px because padding set their height and
+   nothing held the floor.
+
+#### Why the checks did not catch any of it
+
+- **`check_contrast.mjs` structurally cannot see the pill.** It compares token
+  *pairings*. The pill's foreground was not a token — it was a UA keyword. There
+  was no pair to look up. The check is not wrong; it was answering a different
+  question than the one being asked.
+- **`check_components.mjs` pins `min-height: var(--tap-min)` on `Dialog` and
+  `Button` only.** The `✕` buttons live in schedule components, entirely outside
+  its coverage.
+- Neither reads a rendered page, so a grid floor wider than the viewport is
+  invisible to both.
+
+**Nine control rules set padding with no height floor.** Eight of them measure
+at or above 44px today and were left alone; only `PublishSchedule` actually fell
+short. That is a latent class rather than a bug list, and it is the argument for
+a check — but a check that cannot compute rendered height would have to guess,
+and a false failure on correct CSS is worse than a missing one. Left as a
+recorded risk.
+
+#### Two corrections to what this section originally said
+
+- **The box-sizing hypothesis was wrong.** The clipping was predicted to be the
+  missing `box-sizing` reset. It is not — every clipping element computes
+  `border-box`. The cause was grid track floors in `rem` exceeding a phone's
+  content width. The global box-sizing change fixes nothing that was reported and
+  is **not** part of this release; it stays the separate release `CLAUDE.md`
+  already calls it.
+- **Two measured overflows are deliberate and were left.** `.start` in
+  `EventPicker` and `.entry-link` on `/scouting/` each carry a negative margin
+  that exactly cancels their own padding, so a borderless control's label lines
+  up with the text above it. Both are optical alignment, documented in place.
+
+#### After
+
+48 route-renders re-audited at both widths: **0 contrast failures, 0 tap targets
+under 44px, 0 horizontal document scroll**, and the only geometry findings left
+are the two deliberate negative margins above. `npm test` green, 170 contrast
+assertions included.
+
+**This release still goes first**, though not for the reason originally given.
+Not the box model — it is that the audit is what tells the next four releases
+what "correct" looks like on a phone, and building four new surfaces on top of
+unmeasured ground is how the same class comes back.
 
 ### v0.81 — interactive auto scouting
 

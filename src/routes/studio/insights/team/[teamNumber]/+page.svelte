@@ -179,7 +179,7 @@
 	/* ── metric cards ─────────────────────────────────── */
 	.metric-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr));
 		gap: var(--space-2);
 	}
 	.mcard {

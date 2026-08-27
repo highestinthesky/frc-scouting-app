@@ -108,6 +108,8 @@
 		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		color: var(--text-primary);
+		/* Padding alone left the TBA key fields at 37px. */
+		min-height: var(--tap-min);
 	}
 	input:focus {
 		outline: 2px solid var(--accent);

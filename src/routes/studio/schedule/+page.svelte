@@ -1036,7 +1036,7 @@
 
 	.board {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(min(24rem, 100%), 1fr));
 		gap: var(--space-4);
 		align-items: start;
 	}
