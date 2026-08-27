@@ -1,7 +1,8 @@
 # ADR 002 — Spatial observations
 
-Status: **accepted, not implemented** — scheduled for v0.90
+Status: **accepted, not implemented** — scheduled for v0.81
 Date: 2026-08-18
+Rescheduled: 2026-08-26, from v0.90 — see *Why this is v0.81* below.
 Depends on: nothing. Deliberately buildable without a native app.
 
 Design record for interactive auto scouting and everything that follows from it.
@@ -175,12 +176,23 @@ same call the coverage page already made and for the same reason.
   checked before scheduling, because "we need the native app first" would have
   parked the most differentiating feature behind an Apple developer waiver.
 
-## Why this is v0.90 and not v0.80
+## Why this is v0.81
 
-Not a ranking of ambition. Decision 5 needs a real field image, and a real field
-image needs a real game — so this cannot be finished, or honestly tested, before
-kickoff. `docs/adr-003-boards.md` works on data the team already has, out of
-season, so it goes first and this arrives with the field it needs.
+**The original reasoning, for the record.** Not a ranking of ambition: Decision 5
+needs a real field image, and a real field image needs a real game — so this
+could not be finished, or honestly tested, before kickoff. `docs/adr-003-boards.md`
+worked on data the team already had, out of season, so it went first and this was
+held for v0.90, to arrive with the field it needed.
+
+**Both halves of that changed on 2026-08-26.** Boards were rejected outright, so
+there is nothing for this to queue behind. And the field-image argument was right
+about the **2027 season** and wrong about an **offseason event**, which plays the
+**2026** game — that field image already exists. The target is now the offseason
+on 10–11 October 2026, which is the last chance to find out what is wrong with a
+new input method somewhere it does not cost a real match.
+
+The field image itself becomes season data, retuned every January alongside
+`METRIC_FIELDS`, rather than a reason to delay the feature.
 
 ## Open questions
 

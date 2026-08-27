@@ -645,7 +645,7 @@ read-only `/schedule` was never built.
 
 | | |
 |---|---|
-| `ROADMAP.md` | the single dependency-ordered plan; v0.76 shipped, v0.80 is team comparison |
+| `ROADMAP.md` | the single dependency-ordered plan; v0.76 shipped, v0.8 is the event series |
 | `HANDOFF.md` | working preferences, environment traps, and the decisions still open |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/adr-002-spatial-observations.md` | interactive auto scouting, designed for v0.90 |

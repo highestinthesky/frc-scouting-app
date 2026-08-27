@@ -4,49 +4,47 @@ This is the single planning document. Older improvement drafts and handoff
 documents were folded into it; update this file instead of starting another
 plan.
 
-Last audited: 2026-08-08. Planning v0.6 — see below.
+Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
 
-> **Live state, verified 2026-08-07.** `0001`, `0002`–`0010` and the corrected
-> `0008` are applied; `verify_migrations.sql` and `verify_entries.sql` both
-> return zero FAILs against the live project. `0011` and `0012` remain unapplied
-> and `AUTH_ENFORCED` is still `false`, so the manager passphrase is still the
-> production authorization path. The committed client is safe to deploy.
+> **Live state is maintained in `CLAUDE.md`, not here.** A plan document and a
+> state document drift apart, and this file has already carried a "live state"
+> block that stayed frozen at 2026-08-07 through nine migrations and two whole
+> releases, asserting a passphrase that no longer exists.
 >
-> Three things were found and fixed that day, none of which the previous audit
-> knew about, and all of which trace to `entries` having been built by clicking:
->
-> - **`entries` had no UPDATE policy.** Scout corrections had never reached the
->   cloud — observation edits were silently discarded, match/team edits
->   duplicated the row. `0001` contained the fix the whole time.
-> - **`current_session_header()` did not exist.** `0011` calls it 38 times, so
->   the cutover would have aborted on its first policy.
-> - **`0001` was believed unrunnable** and is not: `IF NOT EXISTS` throughout.
->   It was always the repair for that table and had simply never been run.
->
-> Rehearse future migrations with `scripts/rebuild_prod_replica.sh`, not
-> `supabase db reset` — the latter applies `0001`, which production had not, and
-> that gap is what made three earlier rehearsals worthless.
+> In short, as of 2026-08-26: production is at migration `0024`, `AUTH_ENFORCED`
+> is `true`, events are real rows with membership deciding access, and v0.76 is
+> shipped. One commit is unpushed.
 
 ## Where the app is now
 
 | Area | Current state |
 |---|---|
 | Offline scouting and sync | Shipped; IndexedDB remains the write target and edits sync via `updated_at` |
-| Schedule, assignments and coverage | Shipped; schedule UI is split into scouting components and auto-assign uses DSATUR |
+| Schedule, assignments and coverage | Shipped; auto-assign uses DSATUR, with overrides and reminders in Studio |
 | Metrics and manager analysis | Shipped across Insights, team detail, compare, CSV and picklist scoring |
-| Picklist and alliance selection | Cloud-synced picklist and live taken-team state shipped; real-event refinements remain |
-| Information architecture and design system | Route move and token/contrast enforcement shipped |
-| Accounts and roles | Account UI and database objects exist; v0.6 replaces the invite flow with manager-created accounts |
-| Studio and expanded Insights | Not started — v0.6 Phase 5 |
+| Picklist and alliance selection | Shipped; cloud-synced picklist and live taken-team state |
+| Accounts and roles | Shipped; manager-created accounts and invite codes, three roles enforced in RLS |
+| Studio | Shipped in v0.73–v0.74 — Event, Schedule, Coverage, Insights, Accounts, with its own two palettes |
+| What a scout sees at an event | Shipped in v0.76 — but the event's full schedule is still missing (v0.84) |
+| What is on the screen | Reported broken in places: black on black, clipping buttons (v0.80) |
+| Interactive auto scouting | Designed in ADR-002, not built (v0.81) |
+| Pre-match view | Not built (v0.82) |
+| Pit scouting and the team profile | Not built (v0.83) |
+| Native apps | Paused — see *Deliberately not in v0.8* |
 
-The current production model is still hybrid:
+**The production model is no longer hybrid.** `0020` dropped `session_id` from
+all eight tables along with 29 policies, `has_manager_token()` and the
+passphrase:
 
-- The event code hashes to `session_id` and partitions all shared data.
-- IndexedDB accepts scouting entries offline and sync retries later.
-- Live privileged writes still use `x-manager-token` and
-  `has_manager_token()`.
-- Supabase Auth profiles and invites exist, but login is optional because
-  `AUTH_ENFORCED` is off.
+- **An event is a row.** `events.id` scopes every shared table via `event_id`,
+  and `event_scouts` decides who may see it.
+- **The event code is a label, not a credential** — it is published on The Blue
+  Alliance. `eventIdForCode()` is the only resolver, and it needs a session,
+  which is what makes "record but do not sync" fall out of the schema.
+- **Recording never depends on auth.** IndexedDB accepts entries offline and
+  sync waits for a session.
+- **Roles live on `profiles.role`**, enforced in Postgres RLS, with
+  `manages_event()` as the one predicate.
 
 ## Already shipped — do not re-plan
 
@@ -356,18 +354,6 @@ claim RPC needed.
 
 `managerToken` removal (62 references across 9 files) happens here, as part of
 the new policy set rather than as a prerequisite for the old one.
-
-### Phase 5 — Manager Studio
-
-New surface, built on everything above. A route group with a left sidebar and
-tabs — Schedule, Graphs, more later — that the draft wants to feel like a
-separate, more futuristic application, opened in a new tab from Insights.
-
-The draft marks the drag-and-drop graph builder *"to be developed later due to
-difficulty"*, which is the right call: start with a small fixed set of
-decision-oriented charts and see what actually gets used at the offseason event.
-
----
 
 ---
 
@@ -739,7 +725,7 @@ What is left is the charter for this series:
 1. the data arrives, with no infrastructure;
 2. the data says something public sources structurally cannot see.
 
-Point 2 is **v0.80's** job — see `docs/adr-002-spatial-observations.md`, written
+Point 2 is **v0.81's** job — see `docs/adr-002-spatial-observations.md`, written
 and deliberately unscheduled here. Point 1 is this series.
 
 #### 1. One box model ✅
@@ -825,7 +811,8 @@ each a small query over the entry set, in a grid that is rearranged by hand. Fou
 things must exist that do not — a chart renderer, a language for saying what to
 chart, a builder that speaks it, and a layout that survives being dragged.
 
-It was scheduled as v0.80 and then **cut entirely** — see below.
+It briefly held the v0.80 slot and was then **cut entirely** — see below. That
+number now belongs to the v0.8 series; the graph builder has no successor.
 
 #### Deliberately not in v0.75
 
@@ -836,6 +823,10 @@ It was scheduled as v0.80 and then **cut entirely** — see below.
   field image, which needs a real game, so it cannot be finished or honestly
   tested before kickoff. It needs no native work — that was checked before
   deferring it, so it is not waiting on the Apple waiver.
+
+  **Superseded — it is v0.81.** The reasoning was right about the 2027 season and
+  wrong about an offseason event, which plays the **2026** game: that field image
+  already exists. The "needs no native work" half is what made the move possible.
 
 ### v0.76 — the scout's side ✅ shipped 2026-08-20
 
@@ -922,30 +913,106 @@ fails a raw `rem` in a component's `font-size`. `--fs-display` is added to
   no auto-selection and no picker. Real, and its own decision — collecting dates
   versus giving the scout a picker are different answers. Not folded in here.
 
-## v0.80 — team against team
+## v0.8 — the event series
 
-Replaces the graph builder, at the request of the person who would have used it:
+Enumerated in full before any of it ships, per the working agreement. The 7
+series closed with v0.76, so this is where the numbers resume.
 
-> "I think that the board is unnecessary. Instead, better UI for team to team
-> comparisons are needed."
+**The charter: everything here is used *at* an event, by someone standing in a
+gym.** That is what decides both what is in the series and the order it lands
+in. A feature that is only interesting on a laptop at home is not in v0.8.
 
-That is the right call, and the reason is visible on the page that already exists.
+**The target is the offseason event on 10–11 October 2026.** It is a rehearsal,
+and the point of a rehearsal is to find out what is broken — which is also the
+reason this series stays on the web. When a scout finds a bug on the Saturday
+morning, a push fixes it and they reload. Inside a native build the same fix
+waits on App Review. The web is not the fallback for a shakedown event; it is
+the correct answer.
+
+**Native is paused, not cancelled** — see *Deliberately not in v0.8* below.
+
+### v0.80 — what is actually on the screen
+
+Reported by the person running the team: black text on a black ground in
+places, and buttons clipping into each other. That is on a codebase with 170
+contrast assertions and a component checker, which makes the gap between them
+the real finding.
+
+**Why the checks did not catch it.** `check_contrast.mjs` measures token
+*pairings* from a fixed table across four palettes. It never looks at a rendered
+page. So a component that sets a background and inherits its text colour from an
+ancestor is invisible to it — and that is exactly the hole v0.74 and v0.75
+opened when the Studio block began remapping the base tokens underneath
+components written for the scout app. Black on black is that shape. The check is
+not wrong; it is answering a different question than the one being asked.
+
+**The clipping already has a name in `CLAUDE.md`:** the app has no `box-sizing`
+reset, so everything is `content-box` and padding adds to a declared width.
+Studio's rail sets `border-box` locally and the note says changing it globally is
+its own release. This is that release.
+
+1. **Audit first, fix second.** Drive the real app in a browser across all four
+   palettes — scout light, scout dark, Studio light, Studio dark — at phone and
+   desktop widths, and write down what is actually broken before changing
+   anything. A green test suite has shipped real bugs in this repo before; the
+   audit is not a test run.
+2. **The global box model**, if the audit confirms it. One change closing a
+   category, rather than a dozen spot repairs that each look local.
+3. **The remaining fixes**, from the audit's list.
+4. **Whatever the audit finds that the checks should have caught** goes back into
+   the checks — but only where a check can be made to answer the real question.
+   A false failure is worse than a missing one, and this file already carries two
+   examples of a checker that cost more than it caught.
+
+**This release goes first, and not only because it is discovery.** If the box
+model is global, it has to land before any new surface is built — otherwise
+every page in v0.81 through v0.84 is built against a wrong box and has to be
+re-checked afterwards.
+
+### v0.81 — interactive auto scouting
+
+`docs/adr-002-spatial-observations.md` as written; its seven decisions do not
+move. A scout marks where things happened on a picture of the field instead of
+typing counts, and the aggregation across many scouts is the feature.
+
+**Why this is no longer held for v0.90.** The deferral reasoning was that it
+needs a real field image, which needs a real game, so it could not be honestly
+tested before kickoff. That is true of the 2027 season and false of an offseason
+event, which plays the **2026** game — the field image it needs already exists.
+Building it now and testing it on 10 October is the sequence that does not
+involve debugging a new input method live at a real regional in March.
+
+**The field image joins the January ritual.** It is season data in exactly the
+way `METRIC_FIELDS` is, so it belongs in *Retuning metrics each season* below
+rather than in a release of its own.
+
+**It needs no native work.** That was checked before scheduling and is the
+reason this could move at all — pointer events on an SVG work on mobile Safari,
+so nothing here waits on a store.
+
+**It must be practised before the event.** A scout meeting a new input method
+during a real match is how a match's data is lost, which is why this sits at
+v0.81 rather than at the end. Early also means there is time to revise it once
+someone has actually used it, which is the more likely outcome than getting it
+right first.
+
+### v0.82 — the comparison pair
+
+Two questions, one table, **one release** — because they are the same rendering
+and building them apart is how `insights` ended up with the same shape under
+four names.
 
 **The problem, on `/studio/insights/compare` today.** It renders each team as a
-CARD, side by side, with the metrics stacked inside. So comparing "auto scored"
+CARD, side by side, with the metrics stacked inside. Comparing "auto scored"
 across four teams means reading three separate card bodies at three different
-vertical positions and holding the numbers in your head. The one job the page has
-— compare — is the thing its layout makes hardest.
-
-It is the same diagnosis v0.74 made about Insights, in the one place it was not
-fixed: cards are what you build when the data is one subject, and a comparison is
-never one subject.
+vertical positions and holding the numbers in your head. The one job the page
+has is the thing its layout makes hardest. It is the v0.74 diagnosis about
+Insights, in the one place it was not fixed: cards are what you build when the
+data is one subject, and a comparison is never one subject.
 
 **The fix is a transpose.** Metrics become ROWS and teams become COLUMNS, so a
 row reads as one measure across every team, aligned, in tabular-nums. `Table`
 already exists and already scrolls in its own wrapper.
-
-Enumerated before any of it ships, per the working agreement:
 
 1. **Transpose the grid.** Metrics down, teams across. Best-in-row keeps the
    existing leader mark; the mark moves from decorating a card to meaning "this
@@ -962,18 +1029,111 @@ Enumerated before any of it ships, per the working agreement:
    shape at the ranking layer.
 5. **Reachable from where the question is asked.** Selecting rows in the Insights
    table and pressing Compare, rather than typing team numbers into a box.
+6. **The pre-match view.** Pick a match, get the same table pointed at six teams
+   grouped red against blue, with each team's notes underneath. Nothing in the
+   app answers "who are we about to play" today: the schedule import already
+   knows who is in every match, and `alliances.js` only covers selection day.
+   This is the one item in the series used before *every* match rather than once
+   a weekend, and once the transpose exists it is close to free.
 
-**Deliberately not in v0.80:** charts of any kind. If the transposed table is
-still not enough, that is the evidence a chart is needed — and ADR-003 is where
-the thinking already is.
-- **Pit scouting**, deferred by choice: it wants a camera and is hard to judge
-  before there is a real app to judge it in.
+**Deliberately not in v0.82:** charts of any kind. If the transposed table is
+still not enough, that is the evidence a chart is needed — and `docs/adr-003-boards.md`
+is where the thinking already is.
+
+### v0.83 — pit scouting and the team profile
+
+**Pit scouting is not a new surface.** `/studio/insights/team/[teamNumber]`
+already renders what the matches say about a team; pit answers are what the team
+says about itself. Same route, second section. "Profile" is the right word for
+the union, and it is much cheaper than a page of its own.
+
+1. **The questions live in a config file**, in the same shape and next to
+   `form-config.js`, so a field added to the definition appears in the form, in
+   the profile and in the CSV export without being wired three times. Ship with
+   placeholders; the team supplies the real questions.
+2. **No camera, deliberately.** Wanting one is what deferred pit scouting in the
+   first place, and dropping it is what makes this cheap — it also keeps
+   Supabase Storage out of scope, which is where a photo feature would otherwise
+   have to go.
+3. **One pit record per team per event**, not per scout. A pit answer is a fact
+   about the robot, not an observation of a match, so it does not want the
+   `entries` dedupe fingerprint and should not pretend to.
+4. **Blank stays blank here too.** A question nobody asked is not a "no".
+
+**The schema is free this time.** The data can be wiped without consequence
+until after the first offseason, which removes the migration care that is
+normally the expensive half of adding a table here. That licence expires with
+the event.
+
+### v0.84 — the scout's schedule
+
+v0.73 step 2 planned a read-only `/schedule` and it was never built — there is
+no route for it. A scout sees the matches one of their own teams is in, on Home,
+and never the event's. Resolved through `myMatches()` so it agrees with the
+coverage maths rather than computing the same thing a second way.
+
+Last because it is the smallest and the only item in the series that can slip
+without costing anything on the day.
+
+### v0.85 — the app moves to rohawks.org/app
+
+Off GitHub Pages and onto the team's own hosting, once the features are stable.
+
+1. **A plain folder, not a WordPress page.** The build lands in
+   `public_html/app/` and is reached at `rohawks.org/app/`. WordPress's own
+   rewrite rule already skips anything that is a real file or directory, so it
+   never sees the request and Elementor's header never enters the picture. A
+   menu link on the main site is the whole integration.
+2. **`.htaccess`, not a source change.** Apache serves the existing `404.html`
+   for unknown paths, which keeps the prerendered root page that
+   `svelte.config.js` warns about losing. `/studio/insights/team/[teamNumber]`
+   sets `prerender = false` and depends entirely on that fallback.
+3. **`BASE_PATH` becomes `/app`.** Every call site goes through `$app/paths` —
+   24 files — so this is one variable in the workflow. `/app` and not `/scouting`, because the
+   app already has a page called `/scouting` and the result would be
+   `rohawks.org/scouting/scouting/`.
+4. **`deploy.yml` keeps everything above the upload.** `npm ci`, tests, SQL
+   validation and build are unchanged; only the two GitHub Pages steps become an
+   FTP upload. The credentials are the user's to add to the repository secrets.
+5. **Leave the last Pages build up** through the switch so nobody is stranded
+   mid-transition.
+
+**Checked, because these are what usually break on a domain move and none of
+them do here:** both Edge Functions send `Access-Control-Allow-Origin: *`, so
+there is no allowlist to update; the Supabase URL and anon key do not change;
+sign-in is a password exchange, so there are no OAuth redirect URLs to
+re-register. The one hard requirement is HTTPS — `deriveSessionId()` uses
+`crypto.subtle`, which browsers only expose on a secure origin.
+
+### Deliberately not in v0.8
+
+- **Native on four platforms — paused, not cancelled.** Android, iOS, macOS and
+  Windows were green-lit and then deprioritised behind features, which is the
+  right order: the offseason is a rehearsal and a rehearsal wants a deployment
+  you can fix in the middle of. The plan survives intact — Capacitor for mobile,
+  Tauri v2 for desktop, one `src/lib/native.js` as the only file that knows a
+  plugin exists, so the same bundle keeps running as the web app. Android via
+  Play internal testing (100 testers, live in minutes, no review) rather than a
+  sideloaded APK, iOS via TestFlight, desktop via GitHub Releases. It targets
+  2027, which is also when interactive scouting needs a new field image anyway.
+  Enrolling in the Apple Developer Program is worth doing early regardless: it is
+  a form and a wait, not work, and an organisation enrolment can take three
+  weeks against an individual's two days.
+- **Password recovery.** Wiping the data takes the four unroutable
+  `@scout.invalid` accounts with it, and every account created since `0016` has a
+  real address, so the urgent half of this problem disappears on its own. What
+  remains is that there is no recovery flow in the UI at all — a fair thing to
+  carry into v0.9, and still the most immediate reason a second Edge Function
+  gets written.
+- **A camera, and therefore Supabase Storage.** See v0.83.
+- **True peer-to-peer sync.** Still not possible in a browser: iOS Safari has no
+  Web Bluetooth and no local peer discovery, and WebRTC needs a signalling server
+  — which needs the internet the feature exists to avoid. It belongs to the
+  native release, where MultipeerConnectivity and Nearby Connections make it
+  straightforward, and it moves with native rather than ahead of it. The offline
+  file handoff shipped in v0.75 is the version that works without waiting.
 - **Scout reliability**, considered and rejected as superficial.
-- **True peer-to-peer sync.** Not possible in a browser: iOS Safari has no Web
-  Bluetooth and no local peer discovery, and WebRTC needs a signalling server —
-  which needs the internet the feature exists to avoid. It belongs to the native
-  release, where MultipeerConnectivity and Nearby Connections make it
-  straightforward. Item 2 is the version that ships without waiting.
+- **The season retune.** January's ritual, not this series'.
 
 ### Out of scope for the interface series (v0.72–v0.74)
 

@@ -215,8 +215,19 @@ Measured on production 2026-08-20, so re-verify rather than trust: 6 auth users,
 2 events (both undated), 51 assignments all carrying a `profile_id`, 218
 overrides all valid and scoped to members of their event.
 
-The next planned work is **v0.80 — team against team**, the comparison UI that
-replaced the rejected graph builder. `docs/adr-003-boards.md` is marked REJECTED
-and kept for its decisions; `docs/adr-002-spatial-observations.md` is designed
-and deliberately held for v0.90 because it needs a real field image, which needs
-a real game.
+The next planned work is **v0.8 — the event series**, enumerated in `ROADMAP.md`
+as six releases: the visual audit and box model (v0.80), interactive auto
+scouting (v0.81), the comparison pair (v0.82), pit scouting and the team profile
+(v0.83), the scout's schedule (v0.84) and the move to `rohawks.org/app` (v0.85).
+Everything in it is used at an event, and it targets the offseason on 10–11
+October 2026.
+
+`docs/adr-003-boards.md` is marked REJECTED and kept for its decisions.
+`docs/adr-002-spatial-observations.md` moved from v0.90 to v0.81 on 2026-08-26:
+it needs a real field image, and an offseason event plays the 2026 game, so that
+image already exists.
+
+**Native apps are paused, not cancelled.** Android, iOS, macOS and Windows were
+green-lit and then put behind features, deliberately — a rehearsal event wants a
+deployment that can be fixed on the Saturday morning, and a native build cannot
+be. The plan is recorded under *Deliberately not in v0.8*.

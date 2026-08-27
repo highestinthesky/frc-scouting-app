@@ -3,7 +3,7 @@
 Status: **REJECTED** — not built, and not scheduled
 Date: 2026-08-18
 Rejected: 2026-08-18, the same day, by the person who asked for it
-Superseded by: v0.80 — team-to-team comparison (see `ROADMAP.md`)
+Superseded by: v0.82 — the comparison pair (see `ROADMAP.md`)
 
 > "I think that the board is unnecessary. Instead, better UI for team to team
 > comparisons are needed."
@@ -215,6 +215,12 @@ the team already has, today, out of season.
 
 So: **v0.80 is boards, v0.90 is spatial observations**, timed to arrive with the
 field it needs.
+
+> **Superseded 2026-08-26.** Neither half survived. Boards were rejected — this
+> document — and spatial observations moved to **v0.81**, because the field-image
+> argument holds for the 2027 season but not for an offseason event, which plays
+> the 2026 game. v0.80 is now the visual audit. Kept as written, since the
+> reasoning is the point of this file.
 
 ## Open questions
 
