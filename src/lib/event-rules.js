@@ -275,3 +275,90 @@ export function currentEvent(events, now = new Date()) {
 
 	return null;
 }
+
+// ─── the season, and why an event code carries one ─────────────────────────
+//
+// A team's numbers are worth carrying between events within a year and are not
+// worth carrying across years: the game changes every January, so a 2025 cycle
+// count and a 2026 cycle count measure different actions and averaging them is
+// meaningless rather than merely noisy.
+//
+// TBA event keys begin with the four-digit season — `2026onsum`, `2026onto` —
+// which is what makes this derivable rather than a field somebody has to
+// remember to fill in. It is derived defensively: `events.code` is only
+// CONSTRAINED to `^[a-z0-9._-]{2,32}$`, so a hand-typed code that carries no
+// year is legitimate, and it gets a null season and stands alone. That is the
+// correct answer for it — an event whose year is unknown must not be pooled
+// with one whose year is known.
+
+/**
+ * The season an event code belongs to, or null if it does not declare one.
+ *
+ * Null is a real answer and not an error: it means "this event pools with
+ * nothing", which is the safe direction. A season that guessed would silently
+ * mix two games' worth of observations into one mean.
+ *
+ * @param {unknown} code
+ * @returns {number|null}
+ */
+export function seasonOf(code) {
+	const key = normalizeCode(code);
+	if (!key) return null;
+	const m = /^(\d{4})(?=[a-z0-9._-])/.exec(key);
+	if (!m) return null;
+	const year = Number(m[1]);
+	// FRC started in 1992. An upper bound would need maintaining, so there is
+	// none — a wrong-but-plausible year is a data-entry problem, not this
+	// function's to catch.
+	return year >= 1992 ? year : null;
+}
+
+/**
+ * Do two event codes belong to the same season?
+ *
+ * Two events with NO season are not the same season. That asymmetry is
+ * deliberate: `seasonOf` returning null means "unknown", and two unknowns are
+ * not evidence of a match. Pooling every undated event together would make one
+ * hand-typed code enough to merge a team's 2025 and 2026 numbers.
+ *
+ * @param {unknown} a
+ * @param {unknown} b
+ * @returns {boolean}
+ */
+export function sameSeason(a, b) {
+	const sa = seasonOf(a);
+	const sb = seasonOf(b);
+	return sa !== null && sa === sb;
+}
+
+// ─── codes that would shadow a route ───────────────────────────────────────
+//
+// Studio's match and team pages live under `/studio/[eventCode]/`, which puts
+// an event code in the same position as Studio's own static segments. SvelteKit
+// resolves a static segment before a dynamic one, so an event coded `schedule`
+// would be reachable at no URL at all while `/studio/schedule` kept working —
+// a page that exists, holds data, and cannot be opened.
+//
+// Rejecting the collision at creation is the cheap half of the fix. The
+// alternative is a prefix segment like `/studio/e/<code>/`, which never
+// collides but costs every URL a meaningless letter forever.
+
+/** Static segments directly under `/studio/`. An event code may not be one. */
+export const RESERVED_EVENT_CODES = Object.freeze([
+	'accounts',
+	'coverage',
+	'event',
+	'insights',
+	'schedule'
+]);
+
+/**
+ * Would this code be shadowed by one of Studio's own routes?
+ *
+ * @param {unknown} code
+ * @returns {boolean}
+ */
+export function isReservedCode(code) {
+	const key = normalizeCode(code);
+	return key !== null && RESERVED_EVENT_CODES.includes(key);
+}

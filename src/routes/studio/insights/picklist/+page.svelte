@@ -628,7 +628,7 @@
 								{#if t.discrepancyCount > 0} · ⚠ {t.discrepancyCount}{/if}
 							</span>
 							<div class="ops">
-								<a class="peek" href="{base}/studio/insights/team/{t.teamNumber}/" title="Open team page">peek</a>
+								<a class="peek" href="{base}/studio/{session.eventCode}/team/{t.teamNumber}/" title="Open team page">peek</a>
 								<button
 									onclick={() => addToPick(t.teamNumber)}
 									disabled={!isManager}

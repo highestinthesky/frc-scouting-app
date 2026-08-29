@@ -178,9 +178,9 @@ this, because the superseded design is the one that sounds more cautious.
 
 **This release lands in two steps, and step 1 ships and gets used first.**
 
-#### Step 1 — the match page
+#### Step 1 — the match page ✅ shipped 2026-08-29
 
-`/studio/match/[matchNumber]`. Nothing in the app answers *"what happened in
+`/studio/[eventCode]/q[matchNumber]`, e.g. `/studio/2026onsum/q12`. Nothing in the app answers *"what happened in
 match 12?"* today. Insights aggregates a team across matches, coverage says
 whether a match was watched, and neither shows the match itself.
 
@@ -198,6 +198,29 @@ than a guess at what the replay will need:
 3. **Reachable from the schedule and from coverage**, which are the two places
    the question gets asked.
 4. **It is where the replay lands in step 2.** Sized for that, built without it.
+
+**The event went into the URL, and the team page moved with it.** A match number
+means nothing without an event, and `/studio/insights/team/<n>` had the same
+problem one level down: it answered with every entry the device held, from every
+event, pooled into one mean. Both now live under `/studio/<eventCode>/`, and the
+team page answers *at this event* and *this season* as separate columns. The old
+route redirects, because an installed PWA still holds bundles that link there.
+
+**What the build found that the suite did not**, all three by opening the page:
+
+- The coverage fraction counted a stray team in the numerator, so a match with
+  two of six scheduled teams watched read **3/6**. A coverage number that
+  overstates coverage is worse than none.
+- A link inside a table cell had no colour rule anywhere and kept the user
+  agent's `#0000EE`, which is **1.97** on a Studio dark card. That is the v0.80
+  pill bug exactly: the foreground was not a token, so `check_contrast.mjs` had
+  no pair to look up. Fixed in `Table` rather than per page.
+- `Panel` rendered `children` unconditionally, so a title-and-hint empty state
+  threw `invalid_snippet` and left the page on "Loading…" — a blank screen for
+  what is only an absence of data.
+
+The zero-width-viewport trap fired once here too, reporting horizontal scroll on
+a page that has none. `docW === 0` is now asserted before any geometry is read.
 
 **Why this ordering is not optional.** A recorder whose output cannot be played
 back cannot be verified — the only feedback is a base64 blob, and "the track

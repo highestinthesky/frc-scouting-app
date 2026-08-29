@@ -23,6 +23,11 @@ import {
 	PER_EVENT_SETTINGS
 ,
 	currentEvent
+,
+	seasonOf,
+	sameSeason,
+	isReservedCode,
+	RESERVED_EVENT_CODES
 } from './event-rules.js';
 
 let pass = 0;
@@ -258,6 +263,53 @@ const ok = (name, cond, detail = '') => {
 
 	ok('no events is null', currentEvent([], NOW) === null);
 	ok('junk input is null', currentEvent(null, NOW) === null);
+}
+
+// ─── the season ────────────────────────────────────────────────────────────
+//
+// A team's numbers pool within a year and never across one. The game changes
+// every January, so a 2025 cycle count and a 2026 cycle count measure different
+// actions — pooling them is not noisy, it is meaningless.
+{
+	ok('a TBA code declares its season', seasonOf('2026onsum') === 2026);
+	ok('case and padding do not matter', seasonOf('  2026ONTO ') === 2026);
+	ok('a hand-typed code has no season', seasonOf('practice') === null);
+	ok('a bare year is not an event code', seasonOf('2026') === null);
+	ok('junk is null', seasonOf(null) === null && seasonOf(42) === null);
+	ok('a year before FRC existed is not a season', seasonOf('1970abc') === null);
+
+	ok('two events in one year pool', sameSeason('2026onsum', '2026onto'));
+	ok('two years never pool', !sameSeason('2025onsum', '2026onsum'));
+
+	// The asymmetry that matters: unknown is not a value two events can share.
+	// Pooling every undated code together would let one hand-typed event merge a
+	// team's 2025 and 2026 numbers into a single mean.
+	ok('two undated events do not pool', !sameSeason('practice', 'scrimmage'));
+	ok('an undated event does not pool with a dated one',
+		!sameSeason('practice', '2026onsum'));
+	ok('an event always pools with itself when dated', sameSeason('2026onsum', '2026onsum'));
+	ok('an undated event does not even pool with itself',
+		!sameSeason('practice', 'practice'));
+}
+
+// ─── codes that would shadow a Studio route ────────────────────────────────
+//
+// `/studio/[eventCode]/` puts a code where Studio's own static segments live.
+// SvelteKit resolves static before dynamic, so an event coded `schedule` would
+// exist, hold data, and be reachable at no URL at all.
+{
+	for (const word of RESERVED_EVENT_CODES) {
+		ok(`${word} is reserved`, isReservedCode(word));
+	}
+	ok('a real event code is not reserved', !isReservedCode('2026onsum'));
+	ok('reservation is case-insensitive', isReservedCode('Schedule'));
+	ok('a code merely containing one is fine', !isReservedCode('2026schedule'));
+	ok('junk is not reserved', !isReservedCode(null) && !isReservedCode(''));
+
+	// If a static route is ever added under /studio/ this list has to grow with
+	// it, so the check is worth stating as an invariant rather than a constant.
+	ok('every reserved word is a plain lowercase segment',
+		RESERVED_EVENT_CODES.every((w) => /^[a-z]+$/.test(w)));
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

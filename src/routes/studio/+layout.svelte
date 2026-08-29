@@ -38,10 +38,24 @@
 	// The SECOND segment after /studio, not the last one — /studio/insights/team/254
 	// must still light up Insights. Taking the last segment lit nothing on any
 	// sub-page, which is precisely where a manager needs to know where they are.
+	//
+	// The event-scoped routes break that rule and have to be mapped by hand:
+	// /studio/<code>/q12 and /studio/<code>/team/254 put an EVENT CODE in the
+	// second slot, which matches no tab, so the rail went dark on exactly the two
+	// pages added to be linked to from everywhere. A match belongs to Schedule
+	// and a team belongs to Insights, so they light those.
 	const current = $derived.by(() => {
 		const parts = page.url.pathname.replace(/\/$/, '').split('/').filter(Boolean);
 		const i = parts.indexOf('studio');
-		return i >= 0 ? (parts[i + 1] ?? '') : '';
+		if (i < 0) return '';
+		const second = parts[i + 1] ?? '';
+		if (!second || TABS.some((t) => t.href === second)) return second;
+		// Not a tab, so it is an event code. Which page is decided by what comes
+		// after it.
+		const third = parts[i + 2] ?? '';
+		if (/^q\d+$/.test(third)) return 'schedule';
+		if (third === 'team') return 'insights';
+		return '';
 	});
 </script>
 

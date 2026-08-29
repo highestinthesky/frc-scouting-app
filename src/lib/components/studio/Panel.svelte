@@ -23,7 +23,7 @@
 	 *   tone?: 'default'|'raised'|'quiet',
 	 *   flush?: boolean,
 	 *   actions?: import('svelte').Snippet,
-	 *   children: import('svelte').Snippet
+	 *   children?: import('svelte').Snippet
 	 * }}
 	 */
 	let { title = '', hint = '', tone = 'default', flush = false, actions, children } = $props();
@@ -39,7 +39,14 @@
 			{#if actions}<div class="actions">{@render actions()}</div>{/if}
 		</header>
 	{/if}
-	<div class="body" class:flush>{@render children()}</div>
+	<!-- children is optional: a panel with a title and a hint and no body is how
+	     an empty state is said here ("No schedule for this match"), and the header
+	     already carries the whole message. Rendering it unconditionally threw
+	     invalid_snippet and left the page stuck on "Loading…" — a blank screen for
+	     what is only an absence of data. -->
+	{#if children}
+		<div class="body" class:flush>{@render children()}</div>
+	{/if}
 </section>
 
 <style>

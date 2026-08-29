@@ -34,6 +34,23 @@ on `/studio` — because the global tab bar was a trapdoor out of it.
 | `/studio/coverage` | What is being watched and what is not. |
 | `/studio/insights` | Team metrics, compare, picklist. |
 | `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles. |
+| `/studio/[eventCode]/q[n]` | One match: its six teams by alliance, what was recorded, what was missed. |
+| `/studio/[eventCode]/team/[n]` | One team at one event, with its season record beside it. |
+
+**The event is in the URL for the last two, and that is load-bearing.** A match
+number means nothing without an event, and a team's average means something
+different at each one. `/studio/insights/team/<n>` still exists as a redirect —
+this is an installed PWA and a phone holding an old bundle still links there —
+and it resolves through `session.eventCode`.
+
+`q` is honest rather than decorative: `tba.js` keeps only `comp_level === 'qm'`,
+so quals are the only matches this app has ever modelled, and `sf`/`f` stay free
+to mean something later without moving these URLs.
+
+An event code may not be one of `RESERVED_EVENT_CODES` (`event-rules.js`).
+SvelteKit resolves a static segment before a dynamic one, so an event coded
+`schedule` would exist, hold entries, and be reachable at no URL at all.
+`createEvent()` refuses it.
 
 ### The data path
 
@@ -258,6 +275,20 @@ Each of these produced a confident wrong answer before being caught:
   The invariants below are what isn't negotiable.
 
 ## Invariants
+
+**A team's numbers pool within a season and never across one, and pooling is
+asked for rather than assumed.** `summarize()` read every entry from every event
+and grouped by team with no event filter at all — it counted `events` into a Set
+and then never partitioned by it. A manager reading "4.2 average" in a gym had
+no way to know how much of it came from a different weekend.
+
+That is the blank-is-not-zero failure in a second costume: a number that looks
+like one thing and is another. `scopeEntries()` takes the scope explicitly,
+`teamProfile()` answers the two questions separately — *at this event* decides
+the next match, *this season* says whether that is normal — and `seasonOf()` in
+`event-rules.js` derives the year from the code's `2026` prefix. It refuses two
+nulls, so an undated event pools with nothing else; the event itself is unioned
+back in, because it plainly contains its own entries.
 
 **Blank is not zero.** Blank means *not recorded*; `0` means *recorded and it
 was zero*. `readMetric()` in `src/lib/metrics.js` enforces it and eight tests

@@ -7,6 +7,7 @@
 	import { fmt } from '$lib/metrics.js';
 	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { syncState } from '$lib/sync.svelte.js';
+	import { session } from '$lib/session.svelte.js';
 	import PageHead from '$lib/components/studio/PageHead.svelte';
 
 	let summary = $state(null);
@@ -235,7 +236,7 @@
 
 						<dt>Full match log</dt>
 						<dd>
-							<a href="{base}/studio/insights/team/{t.teamNumber}/">Open team page →</a>
+							<a href="{base}/studio/{session.eventCode}/team/{t.teamNumber}/">Open team page →</a>
 						</dd>
 					</dl>
 				</section>

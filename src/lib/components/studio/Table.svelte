@@ -89,6 +89,27 @@
 	.dense :global(td) {
 		padding: var(--space-2) var(--space-3);
 	}
+	/* A link in a cell had NO colour rule anywhere, so it kept the user agent's
+	   default `-webkit-link` blue — #0000EE, which is 1.97 against a Studio dark
+	   card. This is the v0.80 pill bug in a second costume: the foreground was not
+	   a token, so check_contrast.mjs had no pair to look up and structurally could
+	   not see it. Owned here rather than per page, because every table in Studio
+	   that links a team or a match would arrive at the same default.
+
+	   The tap floor comes with it: a bare inline link in a cell is a target, and
+	   these are the smallest ones on the match and team pages. */
+	.wrap :global(td a),
+	.wrap :global(th a) {
+		color: var(--accent);
+		text-decoration: none;
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap-min);
+	}
+	.wrap :global(td a:hover),
+	.wrap :global(th a:hover) {
+		text-decoration: underline;
+	}
 	/* Last row keeps the panel's own edge rather than drawing a second line
 	   one pixel above it. */
 	.wrap :global(tbody tr:last-child td) {

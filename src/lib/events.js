@@ -25,7 +25,7 @@
 // gone from all eight tables and this is the only key there is.
 
 import { getAuthClient } from './supabase.js';
-import { normalizeCode, sortEvents } from './event-rules.js';
+import { normalizeCode, sortEvents, isReservedCode, RESERVED_EVENT_CODES } from './event-rules.js';
 
 /**
  * code -> event id, for the lifetime of the tab.
@@ -135,6 +135,16 @@ export async function createEvent(input) {
 		// Same shape the events_code_shape constraint enforces. Checked here too so
 		// the message names the problem instead of quoting a constraint name.
 		throw new Error('An event code is 2–32 characters: letters, digits, dot, dash or underscore.');
+	}
+	// Studio's match and team pages live at /studio/<code>/, which puts the code
+	// in the same position as Studio's own static segments. SvelteKit resolves
+	// static before dynamic, so an event coded `schedule` would exist, hold
+	// entries, and be reachable at no URL at all. Refused here, where the message
+	// can name the problem, rather than discovered at an event.
+	if (isReservedCode(code)) {
+		throw new Error(
+			`"${code}" is a reserved word in this app. Reserved: ${RESERVED_EVENT_CODES.join(', ')}.`
+		);
 	}
 	const name = String(input?.name ?? '').trim() || code;
 

@@ -517,7 +517,7 @@
 									     chevron at the end of the row expands in place. Those were
 									     one control before: the row expanded, and the link to the
 									     full log was INSIDE the thing you had to expand. -->
-									<a class="team-num" href="{base}/studio/insights/team/{t.teamNumber}/">
+									<a class="team-num" href="{base}/studio/{session.eventCode}/team/{t.teamNumber}/">
 										{t.teamNumber}
 									</a>
 									{#if thin}
@@ -668,7 +668,7 @@
 													{t.entries.length - 6 === 1 ? 'more entry' : 'more entries'}
 												</button>
 											{/if}
-											<a class="full-view-link" href="{base}/studio/insights/team/{t.teamNumber}/">
+											<a class="full-view-link" href="{base}/studio/{session.eventCode}/team/{t.teamNumber}/">
 												Full match log →
 											</a>
 										</section>
