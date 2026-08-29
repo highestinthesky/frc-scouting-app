@@ -3,11 +3,45 @@
 Status: **accepted, not implemented** — scheduled for v0.81
 Date: 2026-08-18
 Rescheduled: 2026-08-26, from v0.90 — see *Why this is v0.81* below.
+Revised: 2026-08-29 — **substantially rewritten** against
+`docs/auto-scouting-plan.md`. See *What changed in the revision*.
 Depends on: nothing. Deliberately buildable without a native app.
 
 Design record for interactive auto scouting and everything that follows from it.
 This is a decision record, not a second plan document — `ROADMAP.md` stays the
-single plan and points here.
+single plan and points here. The feature's source document is
+`docs/auto-scouting-plan.md`, and **where the two disagree, that document wins**;
+this one records how its requirements resolve into a data format and a screen.
+
+---
+
+## What changed in the revision
+
+The first draft of this ADR was written on 2026-08-18 **without the plan
+document**, and it contradicted it in three places that were each load-bearing:
+
+| The plan asks for | The first draft said |
+|---|---|
+| Drag the robot; a continuous path | Decision 2 rejected a polyline outright |
+| Hold action buttons during the 15 seconds | Decision 6 required marking only *after* auto |
+| Replay a match, every path at once | "Not a replay", on data-volume grounds |
+
+All three resolved toward the plan, and two of the three because **the original
+reasoning was wrong on the facts**, not merely outvoted:
+
+- *"A polyline captures where the robot was, which nobody asks."* The plan asks.
+  Route clustering and "seconds spent scoring" are both unanswerable from four
+  tapped points, and those are the two questions the feature exists to answer.
+- *"Storing enough to animate the robot is a different data volume."* It is about
+  **500 bytes** — see Decision 2. A fully covered 24-match event is roughly 70 KB.
+  The volume argument does not survive the arithmetic.
+
+The third — recording during auto — was a real objection and is answered rather
+than dismissed, in Decision 6.
+
+What survived unchanged: normalised field-absolute coordinates (Decision 1),
+riding `observations` so there is no migration (Decision 3), blank stays blank
+(Decision 4), and the field image as season data (Decision 5).
 
 ---
 
@@ -21,22 +55,16 @@ dataset slightly worse.
 
 **Where a robot went is not in any public dataset.** Which side of the field it
 starts on, which route it takes in auto, where on the field it scores from,
-where it gets stuck, which corner it plays defense in — none of that is
-recoverable from a score breakdown, and all of it decides alliance selection.
-That is the leverage a team's own scouts have, and this app currently throws it
-away.
+where it gets stuck — none of that is recoverable from a score breakdown, and
+all of it decides alliance selection. That is the leverage a team's own scouts
+have, and this app currently throws it away.
 
-Lovat popularised the interaction: the scout taps a field diagram instead of
-filling in a number. The interaction is the easy part. The decisions below are
-the parts that are hard to change later.
-
-### The constraint that shapes it
+### The constraints that shape it
 
 > **A scout is watching the field, not the phone.** Auto is fifteen seconds.
 
-Everything else follows. An input that requires looking at the screen during
-auto does not get used, it gets guessed at afterwards — and a guessed path is
-worse than no path, because it looks like data.
+This is the one the design has to earn its way past rather than ignore — see
+Decision 6.
 
 And the standing one, unchanged:
 
@@ -47,9 +75,9 @@ And the standing one, unchanged:
 
 ## Decision 1 — Coordinates are normalised and field-absolute
 
-Store `x` and `y` as floats in `0..1`, relative to the **field**, with a fixed
-origin: `(0,0)` is the red alliance wall's left corner as drawn on the reference
-image, `(1,1)` the far corner.
+Store `x` and `y` as fractions of the **full field**, with a fixed origin:
+`(0,0)` is the red alliance wall's left corner as drawn on the reference image,
+`(1,1)` the far corner.
 
 Not pixels. A pixel coordinate is meaningless the moment the phone rotates, the
 field image is redrawn at a different resolution, or a season changes the image
@@ -65,50 +93,115 @@ one subtraction.
 This is the same reasoning as `scout_name` being a join key rather than a label:
 store the thing that is true, derive the thing that is convenient.
 
-## Decision 2 — A sequence of events, not a path
+**The sharp edge: the drawn field is cut, and the coordinate space is not.** The
+plan is right that a robot can only reach the alliance and neutral regions in
+auto, so the picture shows that slice and not the whole field. The fractions
+must still be **relative to the full field anyway.** Normalising to the cut
+region instead would mean a season that cuts differently silently rescales every
+stored path, and red and blue would no longer share a coordinate space. The cut
+is a property of the picture. It is not a property of the data.
 
-    observations.autoMap = [
-      { t: 0,    x: 0.12, y: 0.44, a: 'start'  },
-      { t: 3200, x: 0.31, y: 0.40, a: 'score'  },
-      { t: 7800, x: 0.55, y: 0.62, a: 'miss'   },
-      { t: 11400, x: 0.48, y: 0.71, a: 'stuck' }
-    ]
+## Decision 2 — A sampled track, plus action intervals
 
-`t` is milliseconds from the start of the recording, not wall-clock: it survives
-a device with a wrong clock, which is the same reason `updated_at` is set by a
-trigger rather than by the client.
+Two separable things, because they have different resolutions and different
+value.
 
-Actions are a closed set — `start`, `score`, `miss`, `pickup`, `stuck`,
-`defense` — versioned with the season alongside `METRIC_FIELDS`, because what a
-robot can *do* changes every January and a free-text action would be
-unaggregatable within one event.
+    observations.autoTrack = {
+      v: 1,                       // format version, independent of SCHEMA_VERSION
+      hz: 10,
+      start: { x: 0.12, y: 0.44 },
+      p: "<base64>",              // 2 bytes per sample: x as uint8, y as uint8
+      s: [                        // action intervals, ms from t0
+        { a: 'collect', t0: 1200, t1: 2600 },
+        { a: 'score',   t0: 4100, t1: 5000 },
+        { a: 'fault',   t0: 9300, t1: 9800 }
+      ]
+    }
 
-A polyline of positions was the alternative and is rejected: it captures where
-the robot was, which nobody asks, and not what it did there, which is the whole
-question. It is also far more data for a worse answer.
+**`t` is milliseconds from the start of the recording**, not wall-clock: it
+survives a device with a wrong clock, which is the same reason `updated_at` is
+set by a trigger rather than by the client. It is also *not* the start of auto —
+see Decision 8, which is the problem that creates.
+
+**10 Hz, and not more.** Human pursuit tracking lags by roughly 200–300 ms, so
+sampling faster than that records the scout's thumb tremor rather than the
+robot. 150 samples over fifteen seconds is already finer than the input is
+honest to.
+
+**8 bits per axis.** 256 steps across a 16.5 m field is 6.4 cm — under a tenth of
+a robot's width, and well under a thumb's precision on a field drawn 350 px wide,
+where one step is 1.4 px. Quantisation is not the limiting error here; the scout
+is.
+
+**The actions are intervals, not instants**, because that is what a held button
+produces and it is what "seconds spent scoring" needs. Their endpoints are
+recorded at full event resolution rather than snapped to the 10 Hz grid — a
+button press is an exact moment, and the sample rate is a property of the
+position track only.
+
+The action set is closed — `collect`, `score`, `fault` — and versioned with the
+season alongside `METRIC_FIELDS`, because what a robot can *do* changes every
+January and a free-text action would be unaggregatable within one event.
+
+### The arithmetic, since the plan raises it
+
+> *"I worry about the database size limitations."*
+
+150 samples × 2 bytes = **300 bytes** of position, plus a start pair and maybe
+ten intervals at ~24 bytes of JSON each. Call it **500 bytes** encoded, per robot
+per match. A fully covered 24-match offseason — 144 tracks — is **about 70 KB.**
+Supabase's free tier is 500 MB.
+
+Even the lazy encoding, 60 Hz of unquantised JSON floats, is 27 KB per track and
+3.9 MB per event, which is still not a problem. The concern is reasonable and
+the numbers do not support it. What actually grows is the size of a single
+`entries` row, roughly doubling it, and that is the honest way to state the cost.
+
+### Partial records are a feature, not a degraded case
+
+`start` is stored separately from `p` rather than being read off the first
+sample, and the reason is that the three pieces have to be independently
+recordable:
+
+- **Start only** — the scout placed the robot before the match and then watched
+  it instead of tracking it. This is a legitimate and common outcome, and it
+  still feeds the single most-asked question (Decision 7).
+- **Start and track** — no action buttons pressed.
+- **All three.**
+
+A histogram of starting positions also should not have to base64-decode 144
+tracks to count them.
 
 ## Decision 3 — It rides `observations`, so there is no migration
 
 `entries.observations` is already a JSON blob that syncs. A new key inside it
 needs **no schema change, no migration, and no new RLS policy**, and it inherits
-the existing dedupe fingerprint and watermark sync unchanged.
+the existing dedupe fingerprint and watermark sync unchanged. At ~500 bytes this
+remains true; it would not survive a 27 KB blob nearly as comfortably, which is
+the second reason Decision 2 quantises.
 
-The key is `autoMap`. Deliberately not `autoPathing` — that key already exists
-as a free-text autocomplete field and is displayed on the team page. Two
-concepts must not share a name; that is the mistake `scout-identity.js` exists
-to have already fixed once.
+The key is `autoTrack`. Deliberately not `autoPathing` — that key already exists
+as a free-text autocomplete field (`form-config.js:111`) and is rendered on the
+Insights and team pages. Two concepts must not share a name; that is the mistake
+`scout-identity.js` exists to have already fixed once.
 
-`SCHEMA_VERSION` goes 3 → 4 when this ships.
+`SCHEMA_VERSION` goes 3 → 4 when this ships. `autoTrack.v` is a *separate*
+version for the encoding itself, so the sample rate or quantisation can change
+without pretending the whole form changed.
 
 ## Decision 4 — Blank stays blank
 
-**No map recorded is not "the robot did not move."**
+**No track recorded is not "the robot did not move."**
 
 This is the app's oldest invariant and it extends here without amendment: an
-entry from before v0.80, or from a scout who did not have time, must contribute
+entry from before v0.81, or from a scout who did not have time, must contribute
 *nothing* to a heat map rather than contributing an empty field. `readMetric()`
 returns `null` for absent scalars; the spatial reader must return `null` for an
-absent map, and every aggregate must count its own sample size.
+absent track, and every aggregate must count its own sample size.
+
+Per Decision 2 this applies **per piece**: a record with `start` and no `p`
+counts toward start-position frequency and toward nothing else. It is not a
+robot that started and then stood still.
 
 The failure this prevents is specific and would be invisible: a heat map that
 silently averages in fifty empty auto routines looks like a team that does
@@ -117,64 +210,142 @@ nothing in auto, and it looks exactly like real data.
 ## Decision 5 — The field image is season data, not an asset
 
 One SVG per season, checked in beside `METRIC_FIELDS`, with its own version. The
-January retune ritual gains a step: update the image, update the action set, bump
-`SCHEMA_VERSION`.
+January retune ritual gains a step: update the image, update the action set,
+update the legal-region mask, bump `SCHEMA_VERSION`.
 
 SVG rather than a bitmap: it scales to any phone without a second file, it is a
-few KB in a bundle that has to work offline, and the tap regions can be derived
-from it rather than maintained as a parallel list of rectangles that drifts.
+few KB in a bundle that has to work offline, and the regions can be derived from
+it rather than maintained as a parallel list of rectangles that drifts.
 
-Because coordinates are normalised, **a new image does not invalidate old data**
-— last season's paths still plot, on last season's image, at the same relative
-positions.
+**The legal region is part of the image.** The plan requires that a robot cannot
+be dragged into a wall or through the hub, so the season data carries a mask and
+the drag clamps to it. This is a recording aid and not a validation rule — it
+keeps a thumb from parking the robot somewhere impossible, which is a different
+thing from rejecting a scout's input.
 
-## Decision 6 — The input has to work without looking
+Because coordinates are normalised to the full field, **a new image does not
+invalidate old data** — last season's paths still plot, on last season's image,
+at the same relative positions.
 
-Three rules, in priority order:
+## Decision 6 — Record live, correct after
 
-1. **Marking happens after auto ends, not during.** The realistic flow is: watch
-   the fifteen seconds, then tap what happened while it is fresh. Anything that
-   demands attention during auto competes with the job.
-2. **Targets are thumb-sized**, `--tap-min` at minimum, on a field that is at
-   most a few tap regions wide. A pixel-accurate tap is not achievable one-handed
-   in a gym and should not be asked for.
-3. **Every mark is undoable and the whole thing is skippable.** A scout who
-   cannot remember must be able to record nothing — see Decision 4. A required
-   field here would manufacture false data at exactly the moment the real data
-   was unavailable.
+The first draft forbade recording during auto, on the grounds that a scout
+looking at a phone is not watching the field. That objection is real. It is not
+answered by giving up the track, because a path reconstructed from memory
+afterwards is exactly the "guessed path that looks like data" the objection was
+protecting against.
 
-## Decision 7 — Aggregation is the feature, not the drawing
+**So: the scout drags during the fifteen seconds, and then gets a correction pass
+before submitting.**
 
-Recording paths is worthless until they answer a question a manager asks. Three,
-in order of how often they get asked:
+1. **Live capture gets the shape.** Tracking one robot with a thumb is a pursuit
+   task, which people are reasonably good at, and it is a different task from
+   filling in a form. It will lag by a couple of hundred milliseconds and it will
+   be approximate. Decision 2's sample rate already assumes that.
+2. **The correction pass is where accuracy is bought.** Auto ends, the recording
+   stops, and the scout can scrub the track, drag a misplaced segment, or trim an
+   action interval that started late. This is the part that runs with no clock
+   pressure, and it is the part the original objection was actually asking for.
+3. **Every mark is undoable and the whole thing is skippable.** A scout who could
+   not track must be able to record nothing, or to record the start position
+   alone — see Decision 4. A required field here would manufacture false data at
+   exactly the moment the real data was unavailable.
+4. **Targets are thumb-sized.** The three action buttons are `--tap-min` at
+   minimum and sit under the thumb of whichever hand holds the phone, which is
+   why the plan makes the rail side-swappable.
+
+**The correction pass and the manager's replay are the same renderer.** That is
+not a coincidence to exploit later; it is the reason both can be in one release.
+A track that can be scrubbed and played by its own scout is already the component
+the eagle's-eye view needs.
+
+## Decision 7 — Orientation and handedness are display state
+
+The plan asks for two toggles: alliance side on the left or the right, and the
+action rail on the left or the right. Both are **device preferences**, stored
+where the theme is, and neither touches a stored coordinate — that is what
+Decision 1's field-absolute storage buys.
+
+The same applies to **start position classification.** "Behind the hub is Middle"
+is stated from the perspective of a member of that team, so the classifier is
+alliance-relative and therefore a display-time function over field-absolute
+data, versioned with the season like the rest of Decision 5. Storing the label
+instead of deriving it would freeze one season's vocabulary into every old row.
+
+## Decision 8 — The replay is a reconstruction, and says so
+
+Six scouts start their recordings at six slightly different moments. `t = 0` is
+when *that scout* pressed record, not when auto started, and there is no shared
+clock to fix it — a gym has no signal, which is the premise of the whole app.
+
+**So tracks from different scouts are not time-aligned, and playing them together
+without saying so would be a lie told in a convincing format.** The plan's
+eagle's-eye replay is the one feature where this matters, and it is the thing
+most likely to be trusted more than it deserves.
+
+Three parts to the answer:
+
+1. **Align on first movement**, not on `t = 0` — the first sample where position
+   changes beyond a threshold. Robots start on a shared cue even when scouts do
+   not, so this recovers most of the offset for free.
+2. **Let the manager nudge.** A per-track offset in the replay, because the
+   heuristic will be wrong sometimes and the person watching can see it.
+3. **Say it on the screen.** The replay is labelled as a reconstruction from
+   independent recordings. It is not footage, and one sentence prevents it being
+   read as though it were.
+
+## Decision 9 — Aggregation is the feature, not the drawing
+
+Recording paths is worthless until they answer a question a manager asks. In
+order of how often they get asked:
 
 - **Start position frequency.** "Where does 254 line up?" — a histogram over
-  `start` marks. Cheap, and immediately useful for predicting field conflicts
-  with your own robot.
-- **Scoring location heat map**, per team, over `score` marks.
-- **Route consistency.** A team whose auto varies every match is a different
-  alliance risk from one that does the same thing eleven times, and that is the
-  same argument the existing standard-deviation consistency signal already makes
-  for scalars.
+  `start`, cheap, immediately useful for predicting field conflicts with your own
+  robot, and answerable from a start-only record.
+- **Scoring location heat map**, per team, over `score` intervals sampled against
+  the position track.
+- **Cycle statistics.** Seconds spent scoring, seconds spent collecting, and the
+  count of complete collect→score cycles. These come from Decision 2's intervals
+  and need no geometry at all.
+- **Route clustering.** The plan's "find similar auto paths", and the plan is
+  also right that it is the hard one.
 
-None of these needs the graph builder. They are three fixed views, which is the
-same call the coverage page already made and for the same reason.
+### How clustering works, since the plan flags it as hard
+
+> *"Turning auto paths into general words would be very difficult."*
+
+It is, if the words have to come from the geometry. They do not.
+
+**Cluster on the route signature first** — the start zone plus the ordered action
+sequence, e.g. `Middle → score → collect → score`. That is discrete, cheap,
+robust to a shaky thumb, and it is *already how a manager says it out loud*. The
+words come from the action sequence, which was recorded as words, so the hard
+problem is sidestepped rather than solved.
+
+**Refine geometrically only within a signature group**, where a distance measure
+over resampled tracks is comparing like with like and the result means something.
+Two routes with different signatures are different routes no matter how close
+their curves are.
+
+None of this needs the graph builder. They are fixed views, which is the same
+call the coverage page already made and for the same reason.
 
 ---
 
 ## What this deliberately is not
 
-- **Not teleop tracking.** A full teleop heat map means marking for two minutes
+- **Not teleop tracking.** A full teleop heat map means tracking for two minutes
   fifteen, which no scout sustains across eleven matches. Auto is bounded,
   scripted, and the part teams actually rehearse — the highest-value fifteen
   seconds on the field. Teleop can reuse every decision here if it is ever
   wanted.
-- **Not a replay.** Storing enough to animate the robot is a different data
-  volume and answers a question nobody asks twice.
 - **Not native-dependent.** Pointer events on an SVG are well supported on
   mobile Safari; this needs no app shell, no plugin, and no store review. It was
   checked before scheduling, because "we need the native app first" would have
   parked the most differentiating feature behind an Apple developer waiver.
+- **Not a prediction engine.** The plan's future section — predicting which
+  combination of paths a team will run, and folding that into match prediction
+  with Statbotics — is downstream of having the data and is not in scope here.
 
 ## Why this is v0.81
 
@@ -187,17 +358,20 @@ held for v0.90, to arrive with the field it needed.
 **Both halves of that changed on 2026-08-26.** Boards were rejected outright, so
 there is nothing for this to queue behind. And the field-image argument was right
 about the **2027 season** and wrong about an **offseason event**, which plays the
-**2026** game — that field image already exists. The target is now the offseason
-on 10–11 October 2026, which is the last chance to find out what is wrong with a
-new input method somewhere it does not cost a real match.
+**2026** game — that field image already exists. The target is the offseason on
+10–11 October 2026, which is the last chance to find out what is wrong with a new
+input method somewhere it does not cost a real match.
 
-The field image itself becomes season data, retuned every January alongside
-`METRIC_FIELDS`, rather than a reason to delay the feature.
+**The match page comes first inside the release**, and the plan says why: a
+recorder whose output cannot be played back cannot be verified. See `ROADMAP.md`.
 
 ## Open questions
 
-- Whether `defense` marks belong here or stay on the existing defense field.
-  They are spatial, but they are a teleop concept, and Decision "not teleop"
-  cuts against it.
-- Whether a scout should be able to mark a path for a robot they were not
+- Whether a scout should be able to record a track for a robot they were not
   assigned. Coverage says no; a scout with spare attention says yes.
+- What the `fault` button does to the rest of the form. The plan says pressing it
+  prompts an additional malfunction form, and the form already has a `brokeDown`
+  boolean and a comments field — so the likely answer is that it jumps there
+  rather than adding a fourth place to record the same fact.
+- Whether the correction pass should let a scout redraw a segment freehand or
+  only drag existing samples. Freehand is better input and a much larger build.

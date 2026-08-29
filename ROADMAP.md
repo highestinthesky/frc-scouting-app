@@ -27,8 +27,9 @@ Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
 | Studio | Shipped in v0.73–v0.74 — Event, Schedule, Coverage, Insights, Accounts, with its own two palettes |
 | What a scout sees at an event | Shipped in v0.76 — but the event's full schedule is still missing (v0.84) |
 | What is on the screen | Reported broken in places: black on black, clipping buttons (v0.80) |
-| Interactive auto scouting | Designed in ADR-002, not built (v0.81) |
-| Pre-match view | Not built (v0.82) |
+| Interactive auto scouting | Planned in `docs/auto-scouting-plan.md`, designed in ADR-002, not built (v0.81) |
+| What happened in one match | No route for it at all; the replay needs one (v0.81 step 1) |
+| Pre-match view | Not built — moved into v0.81's match page |
 | Pit scouting and the team profile | Not built (v0.83) |
 | Native apps | Paused — see *Deliberately not in v0.8* |
 
@@ -163,24 +164,67 @@ unmeasured ground is how the same class comes back.
 
 ### v0.81 — interactive auto scouting
 
-`docs/adr-002-spatial-observations.md` as written; its seven decisions do not
-move. A scout marks where things happened on a picture of the field instead of
-typing counts, and the aggregation across many scouts is the feature.
+`docs/auto-scouting-plan.md` is the source document; `docs/adr-002-spatial-observations.md`
+is how it resolves into a data format and a screen. A scout drags the robot they
+are watching around a picture of the field while holding action buttons, and the
+aggregation across many scouts is the feature.
 
-**Why this is no longer held for v0.90.** The deferral reasoning was that it
-needs a real field image, which needs a real game, so it could not be honestly
-tested before kickoff. That is true of the 2027 season and false of an offseason
-event, which plays the **2026** game — the field image it needs already exists.
-Building it now and testing it on 10 October is the sequence that does not
-involve debugging a new input method live at a real regional in March.
+**The ADR was rewritten on 2026-08-29 to match the plan.** Its first draft was
+written without the plan document and contradicted it on three load-bearing
+points — a dragged path, recording during auto, and the replay. Two of the three
+were wrong on the facts rather than merely outvoted, so the ADR changed. It is
+worth reading its *What changed in the revision* section before building any of
+this, because the superseded design is the one that sounds more cautious.
 
-**The field image joins the January ritual.** It is season data in exactly the
-way `METRIC_FIELDS` is, so it belongs in *Retuning metrics each season* below
-rather than in a release of its own.
+**This release lands in two steps, and step 1 ships and gets used first.**
 
-**It needs no native work.** That was checked before scheduling and is the
-reason this could move at all — pointer events on an SVG work on mobile Safari,
-so nothing here waits on a store.
+#### Step 1 — the match page
+
+`/studio/match/[matchNumber]`. Nothing in the app answers *"what happened in
+match 12?"* today. Insights aggregates a team across matches, coverage says
+whether a match was watched, and neither shows the match itself.
+
+This is a prerequisite, but **not a speculative one** — it is a hole in the app
+independent of auto scouting, which is what makes building it first safe rather
+than a guess at what the replay will need:
+
+1. **The entries recorded for one match**, grouped red against blue, with each
+   scout's notes. The data is already there and unrendered.
+2. **Two tenses, one route.** Before the match it is the pre-match view — who are
+   we about to play, and what does history say. After it, it is the review. Same
+   six teams, same table; only the tense of the content changes. This absorbs
+   item 6 of v0.82 rather than building the same shape twice, which is the
+   argument that release already makes about itself.
+3. **Reachable from the schedule and from coverage**, which are the two places
+   the question gets asked.
+4. **It is where the replay lands in step 2.** Sized for that, built without it.
+
+**Why this ordering is not optional.** A recorder whose output cannot be played
+back cannot be verified — the only feedback is a base64 blob, and "the track
+looks right" is not a judgement anyone can make about that. Step 1 ships,
+gets pushed, and gets used before the recorder is written.
+
+#### Step 2 — the recorder and the replay
+
+5. **Record live, correct after** (ADR Decision 6). The drag runs during the
+   fifteen seconds; the scrub-and-fix pass runs after, with no clock on it. The
+   correction pass and the manager's replay are **the same renderer**, which is
+   why they are one step and not two.
+6. **The encoding is pinned in the ADR** — 10 Hz, 8 bits per axis, ~500 bytes per
+   robot per match, ~70 KB for a fully covered event. The plan's database-size
+   worry was checked arithmetically and does not survive it.
+7. **Partial records count.** Start-only is a legitimate outcome and feeds the
+   most-asked question. Blank stays blank, per piece.
+8. **The replay says it is a reconstruction** (ADR Decision 8). Six scouts start
+   recording at six different moments and there is no shared clock, so tracks are
+   aligned on first movement with a manual nudge — and labelled, because a replay
+   is the one surface here that will be trusted more than it deserves.
+9. **`SCHEMA_VERSION` 3 → 4**, and the field SVG plus its legal-region mask join
+   the January ritual in *Retuning metrics each season* below.
+
+**A per-scout page is not a prerequisite** and is not in this release. The plan
+lists it beside the match page, but coverage already carries the by-scout counts,
+and nothing in the recorder or the replay is blocked by it.
 
 **It must be practised before the event.** A scout meeting a new input method
 during a real match is how a match's data is lost, which is why this sits at
@@ -221,12 +265,13 @@ already exists and already scrolls in its own wrapper.
    shape at the ranking layer.
 5. **Reachable from where the question is asked.** Selecting rows in the Insights
    table and pressing Compare, rather than typing team numbers into a box.
-6. **The pre-match view.** Pick a match, get the same table pointed at six teams
-   grouped red against blue, with each team's notes underneath. Nothing in the
-   app answers "who are we about to play" today: the schedule import already
-   knows who is in every match, and `alliances.js` only covers selection day.
-   This is the one item in the series used before *every* match rather than once
-   a weekend, and once the transpose exists it is close to free.
+6. **The match page inherits the transpose.** The pre-match view was item 6 here
+   and **moved to v0.81**, because the replay needed a match route to live on and
+   building the same six-teams-red-against-blue shape twice is the exact mistake
+   this release exists to correct. What stays here is the second half of that
+   bargain: once the transpose exists, `/studio/match/[matchNumber]` swaps its
+   own table for it rather than keeping a simpler one. v0.81 builds the route and
+   the grouping; v0.82 makes the numbers in it read across teams.
 
 **Deliberately not in v0.82:** charts of any kind. If the transposed table is
 still not enough, that is the evidence a chart is needed — and `docs/adr-003-boards.md`

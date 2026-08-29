@@ -623,6 +623,15 @@ Checked, not remembered. A new session should re-verify before trusting it.
 - The Supabase MCP connection is available and is how migrations have been
   applied; `mcp__plugin_supabase_supabase__*`, project ref `hhvpkgwgkuiemxyarsuk`.
 
+**ADR-002 was rewritten on 2026-08-29** against `docs/auto-scouting-plan.md`,
+which is the team's own source document and had never been read when the ADR
+was first written. The ADR had rejected a dragged path, live recording and the
+replay; the plan requires all three, and two of the three rejections were wrong
+on the facts — a track is ~500 bytes, not a volume problem, and route clustering
+is unanswerable from tapped points. **The plan wins where they disagree.** v0.81
+now ships in two steps, the match page first, because a recorder whose output
+cannot be played back cannot be verified.
+
 **v0.75 and v0.76 are shipped and deployed** (2026-08-20). A push deploys to
 GitHub Pages; the user pushes, always.
 
@@ -648,7 +657,8 @@ read-only `/schedule` was never built.
 | `ROADMAP.md` | the single dependency-ordered plan; v0.76 shipped, v0.8 is the event series |
 | `HANDOFF.md` | working preferences, environment traps, and the decisions still open |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
-| `docs/adr-002-spatial-observations.md` | interactive auto scouting, designed for v0.90 |
+| `docs/auto-scouting-plan.md` | interactive auto scouting as the team asked for it — the source document, reference not draft |
+| `docs/adr-002-spatial-observations.md` | how that plan resolves into a data format and a screen; v0.81 |
 | `docs/adr-003-boards.md` | the graph builder — designed, then REJECTED; kept for its decisions |
 | `supabase/README.md` | migration runbook, and repo state vs live state |
 | `design.md` | the locked design system |
