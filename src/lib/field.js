@@ -1,26 +1,35 @@
-// The field, as season data.
+// The field, as season data. 2026 — REBUILT.
 //
 // ADR-002 Decision 5: one field per season, checked in beside METRIC_FIELDS,
 // with its own version. The January retune ritual gains a step — update the
 // geometry, update the action set, update the legal region, bump
 // SCHEMA_VERSION.
 //
-// ─── this geometry is a PLACEHOLDER and is meant to be replaced ────────────
+// ─── everything below is derived from FIRST's published dimensions ─────────
 //
-// It is a schematic of the 2026 field drawn from measurements, not a traced
-// game manual. It is correct in the things the recorder depends on — the aspect
-// ratio, an auto-legal region that is a sub-rectangle of the full field, a
-// central obstacle, and three start bands — and it is a guess about where the
-// lines actually are. Replacing it is editing the numbers below.
+// Not traced from a field image, and that is the better outcome rather than a
+// compromise: the picture and the collision test read the SAME numbers, so they
+// cannot drift, which is the whole reason the ADR asked for regions "derived
+// from it rather than maintained as a parallel list of rectangles". A trace
+// would have put a bitmap on one side of that line and a hand-kept list on the
+// other.
 //
-// ─── why the drawing is derived from data rather than a checked-in SVG ─────
+// Sources, so the next person can check rather than trust:
+//   Field Dimension Drawings  https://www.firstinspires.org/resource-library/frc/playing-field
+//   Game Manual, ARENA        https://firstfrc.blob.core.windows.net/frc2026/Manual/2026GameManual.pdf
 //
-// The ADR asks for an SVG so the regions can be derived from it "rather than
-// maintained as a parallel list of rectangles that drifts". That is the right
-// instinct pointed one level down: what must not drift is the geometry, and the
-// way to guarantee that is for the picture and the collision test to read the
-// SAME numbers. When a traced field image arrives it replaces `render()` and
-// keeps `LEGAL`/`OBSTACLES`, which is the half the recorder actually uses.
+// ─── what a placeholder got wrong, for the record ──────────────────────────
+//
+// The first version of this file was a schematic guess, and it was wrong in
+// three ways that matter, all of which would have taught scouts a field that
+// does not exist:
+//
+//   - It had ONE obstacle at field centre. There are TWO HUBs, one per alliance,
+//     each 158.6in from ITS OWN alliance wall. Nothing is at the centre line.
+//   - The HUB is a 47in square, not a circle.
+//   - It would have been natural to add the BUMPs and TRENCHes as obstacles.
+//     They are not. A robot drives OVER a BUMP and UNDER a TRENCH, so both are
+//     landmarks and neither blocks a path.
 //
 // ─── the coordinate system, which is the part that must not change ────────
 //
@@ -33,53 +42,185 @@
 // red and blue would stop sharing a coordinate space. The cut is a property of
 // the picture. It is not a property of the data.
 
-/** Bump when the geometry moves. Stored on nothing — it dates the picture. */
-export const FIELD_VERSION = 1;
+/** Bump when the geometry moves. Dates the picture; stored on nothing. */
+export const FIELD_VERSION = 2;
 
-/** 16.54 m by 8.21 m. Only the ratio matters here. */
-export const FIELD_ASPECT = 16.54 / 8.21;
+/** The season this geometry is. Retuned every January, like METRIC_FIELDS. */
+export const FIELD_SEASON = 2026;
+
+// ─── inches, exactly as published ──────────────────────────────────────────
+//
+// Kept in inches and converted once, at the bottom. Fractions are unreadable to
+// anyone holding the drawings, and "0.2435" cannot be checked against a manual.
+
+/** Carpet, alliance wall to alliance wall. */
+const FIELD_LENGTH_IN = 651.2;
+/** Carpet, guardrail to guardrail. */
+const FIELD_WIDTH_IN = 317.7;
+
+/** Alliance wall to the ROBOT STARTING LINE, which is the ALLIANCE ZONE edge. */
+const ALLIANCE_ZONE_IN = 158.6;
+
+/** The HUB: a 47in square, centred on the starting line, one per alliance. */
+const HUB_SIZE_IN = 47;
+
+/** BUMP: driven OVER. 73in wide, 44.4in deep, 6.5in tall. Landmark, not wall. */
+const BUMP_WIDTH_IN = 73;
+const BUMP_DEPTH_IN = 44.4;
+
+/** TRENCH: driven UNDER. Guardrail to BUMP, on both sides. 47in deep. */
+const TRENCH_DEPTH_IN = 47;
+
+/** DEPOT: 42in x 27in, along the alliance wall. */
+const DEPOT_WIDTH_IN = 42;
+const DEPOT_DEPTH_IN = 27;
+
+/** Half a robot, for keeping a dragged centre off the walls and the HUB. */
+const HALF_ROBOT_IN = 17.7;
+
+// ─── laterally ─────────────────────────────────────────────────────────────
+//
+// The HUB is centred across the width with a BUMP either side, and the TRENCHes
+// run from each guardrail to the outer BUMP edge. That fills the width exactly,
+// which is also the check that this reading of the manual is right:
+//
+//     47 (HUB) + 2 x 73 (BUMPs) + 2 x 62.35 (TRENCHes) = 317.7
+//
+// The manual gives the TRENCH as 65.65in wide against the 62.35 the layout
+// leaves. A 3.3in difference is which face is being measured, so the derived
+// number is used — a width that sums is worth more here than one that is quoted.
+
+const MID_W = FIELD_WIDTH_IN / 2;
+const HUB_HALF = HUB_SIZE_IN / 2;
+const BUMP_OUTER = HUB_HALF + BUMP_WIDTH_IN;
+
+// ─── fractions, derived ────────────────────────────────────────────────────
+
+const fx = (inches) => inches / FIELD_LENGTH_IN;
+const fy = (inches) => inches / FIELD_WIDTH_IN;
+
+/** 651.2 / 317.7. */
+export const FIELD_ASPECT = FIELD_LENGTH_IN / FIELD_WIDTH_IN;
+
+export const HALF_ROBOT_X = fx(HALF_ROBOT_IN);
+export const HALF_ROBOT_Y = fy(HALF_ROBOT_IN);
 
 /**
- * The portion drawn during auto, in full-field fractions.
+ * The portion drawn during auto.
  *
- * A robot can only reach its own alliance zone and the neutral zone in auto, so
- * showing the whole field wastes the half of the screen a thumb has to cross.
- *
- * The right edge has to leave a robot's width clear PAST the hub, or there is a
- * band of field a robot cannot legally occupy and dragging into it snaps the
- * robot backwards. At 0.62 that band existed and a test found it.
+ * A robot may not enter the opponent's ALLIANCE ZONE in auto, so the picture
+ * stops where that zone begins and the far half of the screen is not carpet a
+ * thumb has to cross. Everything from the near wall through the whole NEUTRAL
+ * ZONE is drawn, which includes the opponent's HUB — it straddles the boundary,
+ * so half of it is reachable.
  */
-export const DRAWN = Object.freeze({ x0: 0, y0: 0, x1: 0.68, y1: 1 });
+export const DRAWN = Object.freeze({
+	x0: 0,
+	y0: 0,
+	x1: fx(FIELD_LENGTH_IN - ALLIANCE_ZONE_IN),
+	y1: 1
+});
 
 /**
  * Where a robot cannot be.
  *
  * A recording aid, not a validation rule: it keeps a thumb from parking the
- * robot inside the hub, which is a different thing from rejecting a scout's
- * input. Everything is in full-field fractions.
+ * robot inside the HUB, which is a different thing from rejecting a scout's
+ * input. Rectangles in full-field fractions, `x`/`y` being the centre.
+ *
+ * Both HUBs are here. The near one is centred on this alliance's own starting
+ * line; the far one is centred on the opponent's, which is the cut edge, so it
+ * appears as a half square against the right-hand boundary.
  */
 export const OBSTACLES = Object.freeze([
-	{ kind: 'circle', label: 'hub', cx: 0.5, cy: 0.5, r: 0.075 }
+	{
+		kind: 'rect',
+		label: 'hub',
+		x: fx(ALLIANCE_ZONE_IN),
+		y: 0.5,
+		w: fx(HUB_SIZE_IN),
+		h: fy(HUB_SIZE_IN)
+	},
+	{
+		kind: 'rect',
+		label: 'opponent hub',
+		x: fx(FIELD_LENGTH_IN - ALLIANCE_ZONE_IN),
+		y: 0.5,
+		w: fx(HUB_SIZE_IN),
+		h: fy(HUB_SIZE_IN)
+	},
+	{
+		kind: 'rect',
+		label: 'depot',
+		x: fx(DEPOT_DEPTH_IN / 2),
+		y: fy(MID_W),
+		w: fx(DEPOT_DEPTH_IN),
+		h: fy(DEPOT_WIDTH_IN)
+	}
 ]);
 
 /**
- * How far from the field edge a robot's CENTRE can be, as a fraction. Half a
- * robot: 0.9 m of a 16.54 m field on x, of an 8.21 m field on y.
+ * Drawn for orientation, driven straight through.
+ *
+ * These are the difference between a grey box and a field a scout recognises,
+ * and keeping them OUT of OBSTACLES is the point: a BUMP is driven over and a
+ * TRENCH is driven under, so a robot's path crosses both and a collision test
+ * that stopped it there would be fighting the scout.
  */
-export const HALF_ROBOT_X = 0.45 / 16.54;
-export const HALF_ROBOT_Y = 0.45 / 8.21;
+export const FEATURES = Object.freeze([
+	{
+		kind: 'rect',
+		label: 'bump',
+		x: fx(ALLIANCE_ZONE_IN),
+		y: fy(MID_W - HUB_HALF - BUMP_WIDTH_IN / 2),
+		w: fx(BUMP_DEPTH_IN),
+		h: fy(BUMP_WIDTH_IN)
+	},
+	{
+		kind: 'rect',
+		label: 'bump',
+		x: fx(ALLIANCE_ZONE_IN),
+		y: fy(MID_W + HUB_HALF + BUMP_WIDTH_IN / 2),
+		w: fx(BUMP_DEPTH_IN),
+		h: fy(BUMP_WIDTH_IN)
+	},
+	{
+		kind: 'rect',
+		label: 'trench',
+		x: fx(ALLIANCE_ZONE_IN),
+		y: fy((MID_W - BUMP_OUTER) / 2),
+		w: fx(TRENCH_DEPTH_IN),
+		h: fy(MID_W - BUMP_OUTER)
+	},
+	{
+		kind: 'rect',
+		label: 'trench',
+		x: fx(ALLIANCE_ZONE_IN),
+		y: 1 - fy((MID_W - BUMP_OUTER) / 2),
+		w: fx(TRENCH_DEPTH_IN),
+		h: fy(MID_W - BUMP_OUTER)
+	},
+	{ kind: 'line', label: 'starting line', x: fx(ALLIANCE_ZONE_IN) },
+	{ kind: 'line', label: 'centre line', x: 0.5 }
+]);
 
 /**
  * Start bands, named from the perspective of a member of that alliance.
  *
- * The plan is explicit about the perspective: "behind the hub for this season
- * would be considered Middle". The hub is at the centre, so the middle band has
- * to contain y = 0.5, and the names have to swap between alliances — the two
- * teams are standing at opposite ends looking at each other.
+ * The plan is explicit about both the perspective and the anchor: "behind the
+ * hub for this season would be considered Middle". So Middle is the HUB's own
+ * lateral footprint, widened by half a robot on each side — a robot overlapping
+ * the hub's shadow is behind the hub. Left and Right are what remains, and they
+ * land almost exactly on the BUMP/TRENCH boundaries, which is the same thing a
+ * driver would say out loud.
+ *
+ * Derived rather than picked, so moving the HUB moves the bands with it.
  */
+const MIDDLE_HALF = fy(HUB_HALF + HALF_ROBOT_IN);
+
 export const START_BANDS = Object.freeze([
-	{ label: 'Left', upTo: 1 / 3 },
-	{ label: 'Middle', upTo: 2 / 3 },
+	{ label: 'Left', upTo: 0.5 - MIDDLE_HALF },
+	{ label: 'Middle', upTo: 0.5 + MIDDLE_HALF },
 	{ label: 'Right', upTo: 1 }
 ]);
 
@@ -113,10 +254,6 @@ export function startZone(pos, allianceColor) {
  * hub." Applied to the robot's CENTRE with half a robot of margin, because that
  * is what the scout is dragging.
  *
- * Resolution is radial for a circle — the shortest way out — rather than
- * snapping to an axis, which would make a robot dragged across the hub jump
- * sideways instead of sliding around it.
- *
  * @param {{x:number,y:number}} pos
  * @returns {{x:number,y:number}}
  */
@@ -125,42 +262,47 @@ export function clampToField(pos) {
 		x: clamp(p.x, DRAWN.x0 + HALF_ROBOT_X, DRAWN.x1 - HALF_ROBOT_X),
 		y: clamp(p.y, DRAWN.y0 + HALF_ROBOT_Y, DRAWN.y1 - HALF_ROBOT_Y)
 	});
-	// Distances are measured in the x fraction's units with y scaled into them:
-	// the field is not square, so a circle in fractional coordinates is an
-	// ellipse on screen and the hub would otherwise repel from the wrong shape.
-	const gap = (p, o) => Math.hypot(p.x - o.cx, (p.y - o.cy) / FIELD_ASPECT);
-	const clearOf = (p, o) => gap(p, o) >= o.r + HALF_ROBOT_X - 1e-9;
+
+	/** Half-extents of the keep-out box: the obstacle, grown by half a robot. */
+	const keepOut = (o) => ({ hw: o.w / 2 + HALF_ROBOT_X, hh: o.h / 2 + HALF_ROBOT_Y });
+	const inside = (p, o) => {
+		const { hw, hh } = keepOut(o);
+		return Math.abs(p.x - o.x) < hw - 1e-9 && Math.abs(p.y - o.y) < hh - 1e-9;
+	};
 
 	let out = inBounds({ x: Number(pos?.x) || 0, y: Number(pos?.y) || 0 });
 
 	for (const o of OBSTACLES) {
-		if (o.kind !== 'circle' || clearOf(out, o)) continue;
-		const need = o.r + HALF_ROBOT_X;
-		const dx = out.x - o.cx;
-		const dy = (out.y - o.cy) / FIELD_ASPECT;
-		const d = Math.hypot(dx, dy);
+		if (o.kind !== 'rect' || !inside(out, o)) continue;
+		const { hw, hh } = keepOut(o);
 
-		// Candidates, nearest first. Radial is the shortest way out and is what
-		// makes a robot dragged across the hub slide around it rather than snap to
-		// an axis. The rest exist because the shortest way out can land in a wall:
-		// resolving the obstacle and THEN clamping to the field pushed the robot
-		// straight back inside, which is a defect any obstacle near a boundary
-		// reproduces — it is not specific to this placeholder geometry.
-		const dirs = [];
-		if (d > 1e-6) dirs.push([dx / d, dy / d], [-dx / d, -dy / d]);
-		dirs.push([1, 0], [-1, 0], [0, 1], [0, -1]);
+		// Four ways out of a box; take the nearest that is still on the field.
+		//
+		// Resolving the obstacle and THEN clamping to the field is what the first
+		// version did, and the wall pushed the robot straight back inside. Any
+		// obstacle near a boundary reproduces it, and here two of the three are ON
+		// one: the DEPOT is against the alliance wall and the far HUB straddles the
+		// cut edge. So each candidate is bounds-clamped BEFORE it is judged.
+		const candidates = [
+			{ x: o.x - hw, y: out.y },
+			{ x: o.x + hw, y: out.y },
+			{ x: out.x, y: o.y - hh },
+			{ x: out.x, y: o.y + hh }
+		];
 
 		let best = null;
-		for (const [ux, uy] of dirs) {
-			const c = inBounds({ x: o.cx + ux * need, y: o.cy + uy * need * FIELD_ASPECT });
-			if (!clearOf(c, o)) continue;
-			const cost = Math.hypot(c.x - out.x, (c.y - out.y) / FIELD_ASPECT);
-			if (!best || cost < best.cost) best = { c, cost };
+		for (const c of candidates) {
+			const p = inBounds(c);
+			if (inside(p, o)) continue;
+			// Measured in x-fraction units with y scaled in, so a diagonal cost is
+			// not distorted by the field being twice as long as it is wide.
+			const cost = Math.hypot(p.x - out.x, (p.y - out.y) / FIELD_ASPECT);
+			if (!best || cost < best.cost) best = { p, cost };
 		}
-		// Every direction blocked means the geometry has no room for a robot here
-		// at all. Leaving the position where the scout put it beats teleporting it
+		// Every way out blocked means the geometry leaves no room for a robot
+		// here. Leaving the position where the scout put it beats teleporting it
 		// somewhere arbitrary — this is a recording aid, not a validation rule.
-		if (best) out = best.c;
+		if (best) out = best.p;
 	}
 
 	return out;
@@ -188,8 +330,7 @@ export function fromDrawn(u, v) {
 }
 
 /** The drawn box's own aspect ratio, for sizing the SVG viewBox. */
-export const DRAWN_ASPECT =
-	((DRAWN.x1 - DRAWN.x0) * FIELD_ASPECT) / (DRAWN.y1 - DRAWN.y0);
+export const DRAWN_ASPECT = ((DRAWN.x1 - DRAWN.x0) * FIELD_ASPECT) / (DRAWN.y1 - DRAWN.y0);
 
 /**
  * Mirror a position for display when the scout has put their alliance on the

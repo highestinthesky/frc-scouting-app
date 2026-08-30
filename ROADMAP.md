@@ -245,14 +245,18 @@ gets pushed, and gets used before the recorder is written.
 9. **`SCHEMA_VERSION` 3 → 4**, and the field geometry plus its legal-region mask
    join the January ritual in *Retuning metrics each season* below.
 
-**The field geometry is a placeholder and is meant to be replaced.** `field.js`
-is a schematic drawn from measurements, correct in the things the recorder
-depends on — aspect ratio, a cut auto-legal region, a central obstacle, three
-start bands — and a guess about where the lines actually are. Replacing it is
-editing numbers. The heat map (ADR Decision 9) is deliberately **not** built for
-this reason: a heat map on placeholder geometry is a picture of nothing, drawn
-convincingly. Start-zone frequency, cycle statistics and route clustering shipped,
-because none of them needs geometry beyond the start position.
+**The field is the real 2026 REBUILT field**, built in `field.js` from FIRST's
+published dimensions — 651.2in × 317.7in, two 47in HUBs each 158.6in from their
+own alliance wall, the BUMPs and TRENCHes as landmarks, and the cut at the
+opponent's ALLIANCE ZONE. It replaced a placeholder schematic that had one
+circular obstacle at field centre, which is wrong in every particular.
+
+The heat map (ADR Decision 9) is still **not** built. It was deferred because
+the geometry was a guess; now that it is not, the reason has changed rather than
+gone: a heat map wants more than a handful of recordings before it says
+anything, and the honest time to build it is after the offseason has produced
+some. Start-zone frequency, cycle statistics and route clustering are enough to
+tell whether the input method works, which is what October is for.
 
 **What the build found that the suite did not**, again all by driving the app:
 

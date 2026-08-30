@@ -217,21 +217,57 @@ The failure this prevents is specific and would be invisible: a heat map that
 silently averages in fifty empty auto routines looks like a team that does
 nothing in auto, and it looks exactly like real data.
 
-## Decision 5 — The field image is season data, not an asset
+## Decision 5 — The field is season data, not an asset
 
-One SVG per season, checked in beside `METRIC_FIELDS`, with its own version. The
-January retune ritual gains a step: update the image, update the action set,
-update the legal-region mask, bump `SCHEMA_VERSION`.
+One field per season in `field.js`, checked in beside `METRIC_FIELDS`, with its
+own version. The January retune ritual gains a step: update the geometry, update
+the action set, update the legal region, bump `SCHEMA_VERSION`.
 
-SVG rather than a bitmap: it scales to any phone without a second file, it is a
-few KB in a bundle that has to work offline, and the regions can be derived from
-it rather than maintained as a parallel list of rectangles that drifts.
+**Built from published dimensions, not traced from an image**, and that is the
+better outcome rather than a compromise. This decision originally asked for an
+SVG so the regions could be "derived from it rather than maintained as a parallel
+list of rectangles that drifts" — which is the right instinct pointed one level
+down. What must not drift is the geometry, and the way to guarantee that is for
+the picture and the collision test to read the *same numbers*. A trace would have
+put a bitmap on one side of that line and a hand-kept list on the other.
 
-**The legal region is part of the image.** The plan requires that a robot cannot
-be dragged into a wall or through the hub, so the season data carries a mask and
-the drag clamps to it. This is a recording aid and not a validation rule — it
-keeps a thumb from parking the robot somewhere impossible, which is a different
-thing from rejecting a scout's input.
+So `field.js` holds the 2026 REBUILT field in inches, exactly as FIRST publishes
+it, and derives every fraction. Inches rather than fractions because `0.2435`
+cannot be checked against a game manual and `158.6` can.
+
+Vector rather than a bitmap for the same reasons as before: it scales to any
+phone without a second file, and it is bytes rather than kilobytes in a bundle
+that has to work offline.
+
+### What a placeholder got wrong
+
+The first implementation was a schematic guess, and it was wrong in three ways
+that would each have taught scouts a field that does not exist:
+
+- **It had one obstacle at field centre.** There are **two HUBs**, one per
+  alliance, each 158.6in from *its own* alliance wall. Nothing is at the centre
+  line.
+- **The HUB is a 47in square**, not a circle.
+- **BUMPs and TRENCHes are not obstacles.** A robot drives *over* a BUMP and
+  *under* a TRENCH. Adding them as walls is the natural next step when putting
+  them in the picture, and it would have fought the scout on paths that really
+  do cross them. They are landmarks; only the HUBs and the DEPOT stop a robot.
+
+The lateral layout is its own check: `47 (HUB) + 2 × 73 (BUMPs) + 2 × 62.35
+(TRENCHes) = 317.7`. That it sums exactly is the evidence the manual was read
+correctly, so `field.test.mjs` asserts the sum rather than the individual widths.
+
+**The legal region is part of the geometry.** The plan requires that a robot
+cannot be dragged into a wall or through the hub, so the drag clamps to it. This
+is a recording aid and not a validation rule — it keeps a thumb from parking the
+robot somewhere impossible, which is a different thing from rejecting a scout's
+input.
+
+The cut is the opponent's ALLIANCE ZONE, which a robot may not enter in auto:
+the picture runs from the near wall through the whole NEUTRAL ZONE and stops
+158.6in short of the far wall. The opponent's HUB is centred on that line, so it
+renders as a half square against the right edge and is still collided with — the
+reachable half is reachable.
 
 Because coordinates are normalised to the full field, **a new image does not
 invalidate old data** — last season's paths still plot, on last season's image,

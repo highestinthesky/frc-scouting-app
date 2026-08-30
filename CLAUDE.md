@@ -314,6 +314,12 @@ A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — se
 - **Coordinates are fractions of the FULL field**, never the drawn (cut) region
   and never alliance-relative. `field.js` holds the season geometry and derives
   the alliance-relative answers — start zone, orientation — at display time.
+  It is the real 2026 REBUILT field, kept in **inches as FIRST publishes them**
+  and converted once, because `0.2435` cannot be checked against a game manual
+  and `158.6` can. The picture and the collision test read the same numbers, so
+  they cannot drift — which is why it is built from dimensions rather than
+  traced. **BUMPs and TRENCHes are landmarks, not obstacles**: a robot drives
+  over one and under the other, and only the two HUBs and the DEPOT stop it.
 - **`decodeTrack` refuses a version it does not know.** A future layout decoded
   as this one draws a plausible path in the wrong places, which is worse than a
   gap because a gap is visible.

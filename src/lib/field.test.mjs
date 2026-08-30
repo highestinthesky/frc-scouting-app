@@ -1,16 +1,25 @@
-// Tests for the season field geometry.
+// Tests for the season field geometry. 2026 — REBUILT.
 //   node src/lib/field.test.mjs
 //
-// The geometry itself is a placeholder and will be replaced with a traced field.
-// These assertions are about the RULES, which do not move when the numbers do:
-// which coordinate space things live in, that the alliance perspective inverts,
-// and that a robot cannot be parked inside a wall or the hub.
+// The numbers come from FIRST's published dimensions, so some of these
+// assertions check the ARITHMETIC — that the derived fractions still match the
+// inches in the manual. That is worth pinning: this file is retuned every
+// January by someone reading a drawing, and a transposed digit in a fraction is
+// invisible while a failing ratio is not.
+//
+// The rest check the RULES, which do not move when the numbers do: which
+// coordinate space things live in, that the alliance perspective inverts, and
+// that a robot cannot be parked inside a wall or a HUB.
 
 import {
 	DRAWN,
 	OBSTACLES,
+	FEATURES,
 	FIELD_ASPECT,
+	FIELD_SEASON,
 	HALF_ROBOT_X,
+	HALF_ROBOT_Y,
+	START_BANDS,
 	startZone,
 	clampToField,
 	toDrawn,
@@ -29,25 +38,83 @@ function ok(label, cond) {
 }
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 
+// ─── the published numbers ─────────────────────────────────────────────────
+{
+	ok('this is the 2026 field', FIELD_SEASON === 2026);
+	// 651.2in by 317.7in.
+	ok('the field is 651.2 by 317.7 inches', near(FIELD_ASPECT, 651.2 / 317.7, 1e-9));
+
+	// A robot may not enter the opponent's ALLIANCE ZONE in auto, and that zone is
+	// 158.6in deep, so the picture stops 158.6in short of the far wall.
+	ok('the cut is the opponent alliance zone', near(DRAWN.x1, (651.2 - 158.6) / 651.2, 1e-9));
+
+	const hubs = OBSTACLES.filter((o) => o.label.includes('hub'));
+	ok('there are two HUBs, not one', hubs.length === 2);
+	// Each is centred 158.6in from ITS OWN alliance wall. Nothing is at the
+	// centre line — the placeholder that preceded this put one obstacle there.
+	ok('the near HUB is 158.6in from this wall', near(hubs[0].x, 158.6 / 651.2, 1e-9));
+	ok('the far HUB is 158.6in from the far wall', near(hubs[1].x, (651.2 - 158.6) / 651.2, 1e-9));
+	ok('nothing sits on the centre line',
+		!OBSTACLES.some((o) => Math.abs(o.x - 0.5) < o.w / 2));
+	// 47in square.
+	ok('a HUB is a 47in square', near(hubs[0].w, 47 / 651.2, 1e-9) && near(hubs[0].h, 47 / 317.7, 1e-9));
+
+	// The far HUB straddles the cut, so half of it is reachable and it must be
+	// drawn and collided with rather than clipped away.
+	ok('the far HUB straddles the cut edge',
+		hubs[1].x - hubs[1].w / 2 < DRAWN.x1 && hubs[1].x + hubs[1].w / 2 > DRAWN.x1);
+}
+
+// ─── BUMPs and TRENCHes are landmarks, not walls ───────────────────────────
+{
+	// A robot drives OVER a BUMP and UNDER a TRENCH. Treating either as an
+	// obstacle would fight the scout on a path that really does cross them, and
+	// it is the most natural wrong thing to do when adding them to the picture.
+	const obstacleLabels = OBSTACLES.map((o) => o.label);
+	ok('a BUMP is not an obstacle', !obstacleLabels.includes('bump'));
+	ok('a TRENCH is not an obstacle', !obstacleLabels.includes('trench'));
+
+	const featureLabels = FEATURES.map((f) => f.label);
+	ok('but both are drawn', featureLabels.includes('bump') && featureLabels.includes('trench'));
+	ok('two BUMPs', FEATURES.filter((f) => f.label === 'bump').length === 2);
+	ok('two TRENCHes on this half', FEATURES.filter((f) => f.label === 'trench').length === 2);
+	ok('the starting line is drawn', featureLabels.includes('starting line'));
+
+	// HUB + two BUMPs + two TRENCHes fill the width exactly. That sum is the
+	// check that this reading of the manual is right, so it is asserted rather
+	// than assumed.
+	const bumps = FEATURES.filter((f) => f.label === 'bump');
+	const trenches = FEATURES.filter((f) => f.label === 'trench');
+	const hub = OBSTACLES.find((o) => o.label === 'hub');
+	const spanned = hub.h + bumps.reduce((n, b) => n + b.h, 0) + trenches.reduce((n, t) => n + t.h, 0);
+	ok(`the lateral elements fill the width exactly (got ${spanned.toFixed(6)})`, near(spanned, 1, 1e-9));
+}
+
 // ─── the alliance perspective inverts, and that is the whole of Decision 1 ──
 {
 	// The plan is explicit: "behind the hub for this season would be considered
-	// Middle", named from the perspective of a member of that team. The hub is at
-	// the centre, so the middle band must contain y = 0.5 for both alliances.
-	ok('the hub line is Middle for red', startZone({ x: 0.1, y: 0.5 }, 'red') === 'Middle');
-	ok('the hub line is Middle for blue', startZone({ x: 0.1, y: 0.5 }, 'blue') === 'Middle');
+	// Middle", named from the perspective of a member of that team. The HUB is
+	// centred across the width, so the middle band must contain y = 0.5 for both.
+	ok('behind the hub is Middle for red', startZone({ x: 0.2, y: 0.5 }, 'red') === 'Middle');
+	ok('behind the hub is Middle for blue', startZone({ x: 0.2, y: 0.5 }, 'blue') === 'Middle');
+
+	// Middle is the HUB's own footprint widened by half a robot, so a robot whose
+	// EDGE overlaps the hub's shadow is behind the hub.
+	const hub = OBSTACLES.find((o) => o.label === 'hub');
+	ok('Middle is the hub footprint plus half a robot each side',
+		near(START_BANDS[1].upTo - START_BANDS[0].upTo, hub.h + 2 * HALF_ROBOT_Y, 1e-9));
 
 	// The two teams stand at opposite ends looking at each other, so one physical
 	// corner has two names. Storing the LABEL instead of deriving it would freeze
 	// one season's vocabulary into every old row.
-	ok('one corner is Left to red', startZone({ x: 0.1, y: 0.05 }, 'red') === 'Left');
-	ok('and Right to blue', startZone({ x: 0.1, y: 0.05 }, 'blue') === 'Right');
+	ok('one corner is Left to red', startZone({ x: 0.2, y: 0.05 }, 'red') === 'Left');
+	ok('and Right to blue', startZone({ x: 0.2, y: 0.05 }, 'blue') === 'Right');
 	ok('and the far corner inverts too',
-		startZone({ x: 0.1, y: 0.95 }, 'red') === 'Right' &&
-			startZone({ x: 0.1, y: 0.95 }, 'blue') === 'Left');
+		startZone({ x: 0.2, y: 0.95 }, 'red') === 'Right' &&
+			startZone({ x: 0.2, y: 0.95 }, 'blue') === 'Left');
 
 	ok('an unknown alliance falls back to the field orientation',
-		startZone({ x: 0.1, y: 0.05 }, null) === 'Left');
+		startZone({ x: 0.2, y: 0.05 }, null) === 'Left');
 	ok('no position is no zone, not a guess', startZone(null, 'red') === null);
 }
 
@@ -60,40 +127,43 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 
 	const far = clampToField({ x: 5, y: 5 });
 	ok('and off the far corner', far.x <= DRAWN.x1 && far.y <= DRAWN.y1);
-
-	// The drawn region is CUT, so the right edge is the cut and not the far wall.
 	ok('the cut is the boundary, not the full field', far.x < 1);
 }
 
-// ─── a robot cannot be inside the hub ──────────────────────────────────────
+// ─── a robot cannot be inside a HUB, or the DEPOT ──────────────────────────
 {
-	const hub = OBSTACLES.find((o) => o.label === 'hub');
-	const dist = (p) => Math.hypot(p.x - hub.cx, (p.y - hub.cy) / FIELD_ASPECT);
+	const clearOf = (p, o) =>
+		Math.abs(p.x - o.x) >= o.w / 2 + HALF_ROBOT_X - 1e-9 ||
+		Math.abs(p.y - o.y) >= o.h / 2 + HALF_ROBOT_Y - 1e-9;
 
-	// Approaching from four sides must resolve to four different places — that is
-	// what makes it a slide around the obstacle rather than a snap to one axis.
-	const from = [
-		{ x: hub.cx - 0.02, y: hub.cy },
-		{ x: hub.cx + 0.02, y: hub.cy },
-		{ x: hub.cx, y: hub.cy - 0.02 },
-		{ x: hub.cx, y: hub.cy + 0.02 }
-	].map(clampToField);
-
-	for (const p of from) {
-		ok('pushed clear of the hub', dist(p) >= hub.r + HALF_ROBOT_X - 1e-6);
+	for (const o of OBSTACLES) {
+		// Approach from four sides. Each must resolve, and out of the box.
+		const from = [
+			{ x: o.x - o.w / 4, y: o.y },
+			{ x: o.x + o.w / 4, y: o.y },
+			{ x: o.x, y: o.y - o.h / 4 },
+			{ x: o.x, y: o.y + o.h / 4 },
+			{ x: o.x, y: o.y }
+		].map(clampToField);
+		for (const p of from) {
+			ok(`pushed clear of the ${o.label}`, clearOf(p, o));
+			ok(`${o.label} resolution stays on the field`,
+				Number.isFinite(p.x) && p.x >= DRAWN.x0 && p.x <= DRAWN.x1);
+		}
 	}
-	ok('the shortest way out is taken, not one fixed axis',
-		new Set(from.map((p) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`)).size === 4);
 
-	// Dead centre has no shortest direction. It must not divide by zero.
-	const centre = clampToField({ x: hub.cx, y: hub.cy });
-	ok('dead centre resolves rather than producing NaN',
-		Number.isFinite(centre.x) && Number.isFinite(centre.y));
-	ok('and ends up clear', dist(centre) >= hub.r + HALF_ROBOT_X - 1e-6);
+	// The DEPOT is against the alliance wall and the far HUB straddles the cut
+	// edge, so for both of them the nearest way out is off the field. Resolving
+	// the obstacle and THEN clamping pushed the robot back inside; a version of
+	// this file shipped that bug and a test found it.
+	const depot = OBSTACLES.find((o) => o.label === 'depot');
+	const pushed = clampToField({ x: depot.x, y: depot.y });
+	ok('an obstacle on a wall still resolves outward, not into the wall',
+		pushed.x > depot.x && clearOf(pushed, depot));
 
 	// A position already clear is left exactly alone. A clamp that nudges valid
 	// input would smear a whole path by a few centimetres a sample.
-	const clear = { x: DRAWN.x0 + 0.1, y: 0.2 };
+	const clear = { x: 0.45, y: 0.2 };
 	const same = clampToField(clear);
 	ok('a legal position is untouched', near(same.x, clear.x) && near(same.y, clear.y));
 }
@@ -110,10 +180,12 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 	ok('the drawn box left edge is u=0', near(toDrawn({ x: DRAWN.x0, y: 0 }).u, 0));
 	ok('the drawn box right edge is u=1', near(toDrawn({ x: DRAWN.x1, y: 0 }).u, 1));
 
-	// The cut is 62% of the field, so the middle of the PICTURE is not the middle
+	// The cut is 76% of the field, so the middle of the PICTURE is not the middle
 	// of the FIELD. Confusing the two is the bug this separation exists to stop.
 	ok('the centre of the picture is not the centre of the field',
 		!near(fromDrawn(0.5, 0.5).x, 0.5, 0.01));
+	// And specifically: the centre line sits past the middle of the picture.
+	ok('the centre line is right of the picture centre', toDrawn({ x: 0.5, y: 0.5 }).u > 0.5);
 }
 
 // ─── orientation is display only ───────────────────────────────────────────

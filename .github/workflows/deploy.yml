@@ -30,7 +30,12 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: GitHub deprecated the Node 20 runner and now forces every
+          # action that targets it onto 24, which shows up as an annotation on
+          # every green run. Pinning the build to 22 keeps the warning off and
+          # keeps the version explicit — an unpinned `node-version` would move
+          # under the repo without a commit.
+          node-version: 22
           cache: npm
 
       - name: Install dependencies

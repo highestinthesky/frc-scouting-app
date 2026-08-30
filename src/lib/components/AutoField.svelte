@@ -27,6 +27,7 @@
 		DRAWN,
 		DRAWN_ASPECT,
 		OBSTACLES,
+		FEATURES,
 		START_BANDS,
 		clampToField,
 		toDrawn,
@@ -71,11 +72,28 @@
 		return { cx: d.u * VB_W, cy: d.v * VB_H };
 	}
 
-	const hub = $derived(
-		OBSTACLES.filter((o) => o.kind === 'circle').map((o) => {
-			const p = place({ x: o.cx, y: o.cy });
-			return { ...o, ...p, rx: (o.r / (DRAWN.x1 - DRAWN.x0)) * VB_W };
-		})
+	/**
+	 * An axis-aligned rectangle in field fractions, as a viewBox box.
+	 *
+	 * The flip is applied to the CENTRE and the size is unchanged, because
+	 * mirroring is a reflection and a rectangle is symmetric about its own centre
+	 * — flipping the corners instead produces a negative height, which SVG drops
+	 * silently and which is how a field ends up missing its landmarks.
+	 */
+	function box(o) {
+		const c = place({ x: o.x, y: o.y });
+		const w = (o.w / (DRAWN.x1 - DRAWN.x0)) * VB_W;
+		const h = (o.h / (DRAWN.y1 - DRAWN.y0)) * VB_H;
+		return { x: c.cx - w / 2, y: c.cy - h / 2, w, h, label: o.label };
+	}
+
+	const solids = $derived(OBSTACLES.filter((o) => o.kind === 'rect').map(box));
+	const marks = $derived(FEATURES.filter((f) => f.kind === 'rect').map(box));
+	const lines = $derived(
+		FEATURES.filter((f) => f.kind === 'line').map((f) => ({
+			x: place({ x: f.x, y: 0.5 }).cx,
+			label: f.label
+		}))
 	);
 
 	// Band lines are drawn from the SAME numbers the classifier reads, so a
@@ -85,6 +103,23 @@
 			const y = flipped ? 1 - b.upTo : b.upTo;
 			return { y: y * VB_H, label: b.label };
 		})
+	);
+
+	// Band labels start clear of whatever is against the near wall.
+	//
+	// Centred in their band they sat exactly where the DEPOT is drawn — both are
+	// centred across the width — and "Middle" rendered as "ODLE". Anchoring to
+	// the top of the band left one pixel of overlap, which is the kind of fix
+	// that comes back the moment a band moves. So they clear the wall furniture
+	// HORIZONTALLY instead, computed from the widest thing touching x = 0 rather
+	// than from a number that happens to work today.
+	const labelX = $derived(
+		Math.max(
+			14,
+			...OBSTACLES.filter((o) => o.kind === 'rect' && o.x - o.w / 2 <= DRAWN.x0 + 1e-9).map(
+				(o) => ((o.x + o.w / 2) / (DRAWN.x1 - DRAWN.x0)) * VB_W + 16
+			)
+		)
 	);
 
 	const bandLabels = $derived(
@@ -211,17 +246,29 @@
 	<rect x="0" y="0" width={VB_W} height={VB_H} class="carpet" />
 
 	{#each bandLabels as b}
-		<text x="14" y={b.y} class="band-label" dominant-baseline="middle">{b.label}</text>
+		<text x={labelX} y={b.y} class="band-label" dominant-baseline="middle">{b.label}</text>
 	{/each}
 	{#each bands as b}
 		<line x1="0" y1={b.y} x2={VB_W} y2={b.y} class="band-line" />
 	{/each}
 
+	<!-- Driven over and driven under: landmarks a scout steers by, and paths
+	     legitimately cross both. Drawn under everything else. -->
+	{#each marks as m}
+		<rect x={m.x} y={m.y} width={m.w} height={m.h} rx="4" class="mark {m.label}" />
+	{/each}
+
+	{#each lines as l}
+		<line x1={l.x} y1="0" x2={l.x} y2={VB_H} class="mark-line {l.label.split(' ')[0]}" />
+	{/each}
+
 	<!-- The cut edge. The picture stops here; the coordinate space does not. -->
 	<line x1={VB_W - 1} y1="0" x2={VB_W - 1} y2={VB_H} class="cut" />
 
-	{#each hub as h}
-		<ellipse cx={h.cx} cy={h.cy} rx={h.rx} ry={h.rx} class="hub" />
+	<!-- Solid: a robot cannot be here. Both HUBs and the DEPOT. The far HUB
+	     straddles the cut, so it renders as a half square on the right edge. -->
+	{#each solids as o}
+		<rect x={o.x} y={o.y} width={o.w} height={o.h} rx="4" class="solid" />
 	{/each}
 
 	{#if path}<path d={path} class="trail" />{/if}
@@ -277,8 +324,14 @@
 		stroke-width: 2;
 		stroke-dasharray: 8 8;
 	}
+	/* --text-muted, not --text-faint. These are functional orientation labels, and
+	   faint measured 4.54 on the carpet in light mode — a pass with no margin, on
+	   SVG text that check_contrast.mjs structurally cannot see because its
+	   foreground is a `fill` rather than a token pairing. That is the same blind
+	   spot the v0.80 pill bug lived in, so the margin is bought here rather than
+	   relied on. */
 	.band-label {
-		fill: var(--text-faint);
+		fill: var(--text-muted);
 		font-size: 26px;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
@@ -287,10 +340,32 @@
 		stroke: var(--border-strong);
 		stroke-width: 3;
 	}
-	.hub {
+	/* A stroke means "this stops a robot", and nothing else on the field has one.
+	   That is the entire visual grammar here, and it has to survive being glanced
+	   at on a phone in a gym: the HUB and the BUMP beside it are adjacent
+	   rectangles of similar size, and if they read alike the scout learns a field
+	   where the hub is passable. */
+	.solid {
 		fill: var(--bg-card);
-		stroke: var(--border-strong);
-		stroke-width: 3;
+		stroke: var(--text-faint);
+		stroke-width: 5;
+	}
+	.mark {
+		fill: var(--bg-elev);
+		opacity: 0.6;
+	}
+	.mark.trench {
+		fill: none;
+		stroke: var(--border);
+		stroke-width: 2;
+		stroke-dasharray: 6 6;
+	}
+	.mark-line {
+		stroke: var(--border);
+		stroke-width: 2;
+	}
+	.mark-line.centre {
+		stroke-dasharray: 10 8;
 	}
 
 	.trail {
