@@ -1,6 +1,7 @@
 # Handoff
 
-Written 2026-08-21, after v0.76 shipped.
+Written 2026-08-21 after v0.76 shipped. Revised 2026-08-29, after v0.80
+and v0.81 shipped and deployed.
 
 **This is not a plan.** `ROADMAP.md` is the only plan document, and the working
 agreement says to update it rather than start a second one. This file holds the
@@ -34,11 +35,21 @@ face value. The v0.76 username-privacy rollout summary turned out accurate, but
 only because every claim in it was checked against the live project first. That
 same review found one assertion in Codex's test file that could not fail.
 
-### Never push
+### Do not push unless told to, in this turn
 
-`CLAUDE.md` says it, and the nuance matters: **a push deploys to GitHub Pages.**
-The user has overridden this twice for a specific commit, never as a general
-permission. Commit freely, then stop and say what is unpushed.
+`CLAUDE.md` says it and the nuance matters: **a push deploys to GitHub Pages.**
+
+What changed on 2026-08-29 is the frequency, not the rule. The user now says
+"push" fairly often, once the work is verified — but always as an instruction
+about the work in front of them, never as standing permission. Commit freely,
+then stop and say what is unpushed.
+
+**When you are told to push, run the CI sequence locally first.** `npm ci`,
+`npm test`, `npm run check:sql`, and `BASE_PATH="/frc-scouting-app" npm run
+build`. `npm ci` is the step that has actually gone red, and it goes red in
+fifteen seconds for reasons that have nothing to do with the code. Then watch
+the run to completion with `gh run watch` rather than assuming — a green push is
+not a green deploy.
 
 ### Bug reports arrive terse, batched and numbered
 
@@ -81,6 +92,33 @@ Not a survey of options. Pick one, say why, and note what you are not doing.
 
 ---
 
+### They report from use, and the reports are precise
+
+The v0.81 feedback was six numbered items, and five of them were things no test
+could have found: a toggle that turned the wrong axis, a field too small to aim
+at, buttons that clipped, a missing keybind, and a robot that snapped back at the
+end of a recording. Each one was correct and each one was specific.
+
+Two habits follow from that:
+
+- **Take a reported symptom literally and go find its mechanism.** "The flip is
+  wrong" turned out to be the wrong AXIS — mirrored across the field instead of
+  turned end for end — which every layer agreed on, so nothing looked broken.
+  "It snaps back at the end" was the scrub head landing at zero, which also made
+  the first correction edit sample zero and drag a line across the field.
+- **Check the claim against the source, not against the plan.** Asked to
+  research the field, the manual contradicted `docs/auto-scouting-plan.md` on
+  whether a robot may cross in auto. The plan is the team's document and it wins
+  on what they want; the manual wins on what the rules are. Say which is which.
+
+### Research when the answer is a fact, not a preference
+
+Field dimensions, robot size limits and starting rules are all published. Two of
+the three answers changed the design once looked up — the field should never
+have been cut, and the start is constrained far more tightly than either party
+assumed. Guessing at them produced geometry that was wrong in three particulars
+and would have taught scouts a field that does not exist.
+
 ## Environment behaviour that has cost time
 
 ### There is a second `package.json` somewhere
@@ -103,10 +141,18 @@ the lock the same way. `pako` is imported nowhere in `src/` or `scripts/`.
 
 ### Local toolchain
 
-Node v24.14.1, npm 11.11.0. The CI actions target Node 20 and GitHub force-runs
-them on Node 24 — a warning on every run, not yet a failure. `checkout@v4`,
-`setup-node@v4`, `setup-python@v5`, `upload-pages-artifact@v3`,
-`deploy-pages@v4` will all need bumping eventually.
+Node v24.14.1, npm 11.11.0. The CI actions were bumped on 2026-08-29 and the
+deprecation annotation is gone: `checkout@v5`, `setup-node@v5`,
+`setup-python@v6`, `upload-pages-artifact@v5`, `deploy-pages@v5`, with the build
+itself on Node 22.
+
+**Two things to know before touching that file again.** `node-version` is the
+Node the BUILD runs on and has nothing to do with the deprecation annotation —
+that is the runtime each action declares in its own `action.yml`, and only a
+`uses:` bump moves it. Bumping `node-version` alone was tried and changed
+nothing. And `upload-pages-artifact` v4 stopped including dotfiles, so v5 needs
+`include-hidden-files: true` or `build/.nojekyll` silently disappears — which
+surfaces as `_app/` 404ing on the live site, not as a red run.
 
 ### Driving the app in the browser tool
 
@@ -124,6 +170,19 @@ Each of these produced a confident wrong answer or a stall:
 - **Svelte 5 binds through delegated listeners.** Setting `.value` on an input
   does *not* update component state. Use the native property setter, then
   `dispatchEvent(new Event('input', { bubbles: true }))`.
+- **A hidden pane stops time.** `document.hidden` is usually true, and then
+  `setInterval` is throttled hard, `requestAnimationFrame` fires **zero** times
+  in 500 ms, and `resize` and `ResizeObserver` do not fire at all. Three separate
+  "bugs" this session were this: a recording that ran 52 seconds, a replay that
+  would not play, and a field that would not re-orient. Before concluding the app
+  is wrong, dispatch the event by hand — if the handler works, the app is fine
+  and the pane is asleep.
+- **HMR leaves component state behind.** Editing a component mid-session leaves
+  the old instance's state in place, so a `$state` that should have re-derived
+  has not. `location.reload()` before measuring anything that depends on mount.
+- **Toggling `data-theme` by hand does not re-resolve a transitioned property.**
+  Set the theme through `theme.set()` and reload. This produced a convincing
+  2.08 contrast failure that did not exist.
 
 ### The sync tick overwrites what you set
 
@@ -150,8 +209,14 @@ is easier to call `getAuthClient().auth.signInWithPassword(...)` in the console.
 The seed publishes no TBA schedule — write one into
 `settings['tba-schedule:<event>']` if you need to exercise anything match-based.
 
-Docker was not running at the start of this session; the user granted permission
-to start it. Ask before assuming that permission carries forward.
+**Docker stops on its own, mid-session.** It went down between two browser
+checks on 2026-08-29 and the only symptom was `Failed to fetch` on sign-in. Worse,
+the `.env.local` recipe reads the anon key from `supabase status`, so writing it
+while the daemon is down produces a file with an **empty key** and the app fails
+the same way for a second reason. Check the key is ~150 characters, not zero.
+
+The user has granted permission to start Docker more than once, but ask rather
+than assume it carries forward.
 
 ### Production data moves while you query it
 
@@ -203,29 +268,117 @@ answer.
    manual admin job. This is also a second, still-live reason Confirm email must
    stay OFF.
 
+7. **The field is drawn whole, and that costs screen.** The manual has no rule
+   confining a robot to its own half in auto, so drawing it cut would have had
+   nowhere to put a robot that crossed. The price is a 2.05 aspect instead of
+   1.55 — on a portrait phone the rotated field is 327×669 rather than 366×566,
+   about a quarter less area for the same fifteen seconds. If their scouts never
+   see a robot cross, cutting it back is one line in `DRAWN`. It is a trade
+   between correctness and precision and it is theirs.
+
+8. **G303-E is deliberately not enforced.** A robot may not start touching a
+   BUMP, and the lateral BUMP extents in `field.js` are *derived* from a width
+   that sums rather than measured off a drawing. Hard-blocking a placement on an
+   inferred number would fight a scout who watched a robot start somewhere the
+   file is wrong about. If someone measures the real extents off the field
+   drawings, enforcing it becomes reasonable.
+
+9. **The scoring heat map is designed and not built** (ADR-002 Decision 9). It
+   was deferred first because the geometry was a guess; the geometry is real now,
+   so the remaining reason is that a heat map wants more than a handful of
+   recordings before it says anything. The honest time to build it is after the
+   offseason has produced some.
+
+10. **The recorder has never been used by a scout.** Every verification of it is
+    synthetic pointer events driven from a console. It has not been held in one
+    hand, in a gym, for fifteen real seconds, and that is the only test that
+    matters for an input method. This is the reason v0.81 was scheduled early.
+
 ---
 
 ## Where things stood
 
-v0.76 shipped and deployed 2026-08-20. Production is at migration `0024`,
-`AUTH_ENFORCED` is true, and the `username-sign-in` Edge Function is live and
-smoke-tested. Working tree clean, nothing unpushed, CI green.
+**v0.80 and v0.81 shipped and deployed, 2026-08-29.** Working tree clean, CI
+green, nothing unpushed. Production is at migration `0024`, `AUTH_ENFORCED` is
+true, and **no migration was needed for any of v0.81** — the auto recording rides
+`entries.observations`, which is already a JSON blob that syncs.
 
-Measured on production 2026-08-20, so re-verify rather than trust: 6 auth users,
-2 events (both undated), 51 assignments all carrying a `profile_id`, 218
-overrides all valid and scoped to members of their event.
+`SCHEMA_VERSION` is **4**. An entry on 3 has no `autoTrack`, and that is not "the
+robot did not move": `readTrack()` returns null and every spatial aggregate counts
+its own sample size.
 
-The next planned work is **v0.8 — the event series**, enumerated in `ROADMAP.md`
-as six releases: the visual audit and box model (v0.80), interactive auto
-scouting (v0.81), the comparison pair (v0.82), pit scouting and the team profile
-(v0.83), the scout's schedule (v0.84) and the move to `rohawks.org/app` (v0.85).
-Everything in it is used at an event, and it targets the offseason on 10–11
-October 2026.
+### What v0.81 actually is, in one pass
 
-`docs/adr-003-boards.md` is marked REJECTED and kept for its decisions.
-`docs/adr-002-spatial-observations.md` moved from v0.90 to v0.81 on 2026-08-26:
-it needs a real field image, and an offseason event plays the 2026 game, so that
-image already exists.
+Five modules, in dependency order. The first two are pure and carry the rules:
+
+| | |
+|---|---|
+| `src/lib/auto-track.js` | the encoding, cycle stats, route signatures. 67 tests |
+| `src/lib/field.js` | 2026 REBUILT geometry, alliance-relative zones, collision, the view transforms. 113 tests |
+| `components/AutoField.svelte` | one renderer, three modes: record / correct / replay |
+| `components/AutoRecorder.svelte` | place → arm → live → correct |
+| `components/studio/AutoReplay.svelte` | every recording of a match at once |
+
+And two routes, both event-scoped, both added in step 1 so the recorder had
+somewhere to be played back:
+
+    /studio/<eventCode>/q<n>            one match, and the replay
+    /studio/<eventCode>/team/<n>        one team, at this event and this season
+
+### The five things most likely to be broken by an innocent change
+
+1. **`t` is derived from a sample's INDEX.** Evenly-spaced samples are the one
+   thing the encoding rests on, so the recorder fills forward to
+   `performance.now()` rather than counting `setInterval` ticks. Counting ticks
+   recorded 52 seconds that would have decoded as 15 seconds of motion at three
+   times the true speed, and nothing about the result looks wrong.
+2. **Every view transform is a rotation, never a mirror.** `toScreen` /
+   `fromScreen` own them. A mirror moves the alliance wall *and* reverses the
+   scout's left and right while the labels still look deliberate. `fromScreen` is
+   written out rather than reusing `toScreen` because a quarter turn is not
+   self-inverse.
+3. **Coordinates are fractions of the FULL field**, never the drawn region and
+   never alliance-relative. The drawn region has already changed twice; not one
+   stored path had to move, and that is Decision 1 paying for itself.
+4. **`decodeTrack` refuses a version it does not know.** A future layout decoded
+   as this one draws a plausible path in the wrong places, which is worse than a
+   gap because a gap is visible.
+5. **Blank stays blank, per piece.** Start-only is a real record. `climbLevel` is
+   `null` and never `0` — "climbed, rung unknown" and "did not climb" are
+   different facts.
+
+### Where v0.8 stands
+
+`ROADMAP.md` enumerates six releases. **v0.80 and v0.81 are done.** Remaining:
+
+- **v0.82 — the comparison pair.** Transpose `compare` so metrics are rows and
+  teams are columns. Its old item 6, the pre-match view, moved into v0.81's match
+  page; what is left here is that the match page swaps in the transposed table
+  once it exists.
+- **v0.83 — pit scouting**, as a second section on the team page.
+- **v0.84 — the scout's schedule**, the smallest item and the only one that can
+  slip without costing anything on the day.
+- **v0.85 — the move to `rohawks.org/app`.**
+
+The series targets the offseason on **10–11 October 2026**, and everything in it
+is used at an event by someone standing in a gym.
+
+### Two things only the user can do
+
+- **Leaked-password protection is still OFF** in the Supabase dashboard. Worth
+  doing before more accounts are handed out.
+- **The field geometry should be checked against the real drawings** before
+  scouts practise on it. It is built from published dimensions rather than
+  traced, and the one number that is inferred rather than quoted is the lateral
+  TRENCH width — 62.35in derived against 65.65in stated, which is a
+  which-face-is-measured difference. Everything in `field.js` is in inches for
+  exactly this reason: `158.6` can be checked against a manual and `0.2435`
+  cannot.
+
+`docs/adr-003-boards.md` is REJECTED and kept for its decisions.
+`docs/auto-scouting-plan.md` is the team's own source document for auto scouting
+and is reference, not a draft — where it and `docs/adr-002-spatial-observations.md`
+disagree, the plan won, twice.
 
 **Native apps are paused, not cancelled.** Android, iOS, macOS and Windows were
 green-lit and then put behind features, deliberately — a rehearsal event wants a

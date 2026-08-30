@@ -256,7 +256,15 @@ gets pushed, and gets used before the recorder is written.
 12. **A climb button that asks which rung.** The TOWER has three, and the level
     is optional — a scout who saw a robot get up but could not tell how far has
     recorded something true.
-13. **The whole field, and a constrained start.** Researched against the manual
+13. **The scrub head lands at the END of a recording, not the start.** Reported
+    from use: the robot snapped back to where it lined up the moment the whistle
+    went. The teleport was the visible half — the scrub index is also what a
+    correction edits, so a scout reaching out to fix the last thing they saw was
+    moving sample ZERO, dragging the start across the field and leaving a
+    straight line from there to the second sample. An extra line that was never
+    driven. Correcting sample zero now moves the stored start with it, since
+    nothing else kept the two agreeing.
+14. **The whole field, and a constrained start.** Researched against the manual
     rather than the plan: there is no rule confining a robot to its own half in
     auto (G403 restricts *contact* past the centre line), so a cut field would
     have had nowhere to put a robot that crossed and its path would have

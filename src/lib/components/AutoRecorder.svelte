@@ -165,6 +165,13 @@
 			if (scrubIndex >= 0 && scrubIndex < samples.length) {
 				samples[scrubIndex] = pos;
 				samples = samples;
+				// Correcting the first sample moves where the robot started, so the
+				// stored start has to move with it. They are separate keys (a
+				// start-only record is a real record) and nothing else keeps them
+				// agreeing — left alone, the start position and the head of the path
+				// would disagree, and the start zone would name a place the path does
+				// not begin.
+				if (scrubIndex === 0) start = pos;
 			} else if (samples.length === 0) {
 				start = pos;
 			}
@@ -230,7 +237,19 @@
 		held = {};
 		intervals = intervals;
 		phase = 'correct';
-		scrub = 0;
+		// The scrub head lands at the END of the recording, not the start.
+		//
+		// At 0 the robot teleported back to where it lined up the moment the
+		// whistle went, which reads as the recording having gone wrong. Worse, the
+		// scrub index is what a correction edits: a scout who reached out to fix
+		// the last thing they saw was moving SAMPLE ZERO instead, dragging the
+		// start position across the field and leaving a straight line from there to
+		// the second sample. An extra line that was never driven.
+		//
+		// Ending where the recording ended means the picture does not move, and the
+		// first correction lands on the last moment — which is the one still in the
+		// scout's head.
+		scrub = Math.max(0, (samples.length - 1) * STEP_MS);
 		// A climb that ended at the whistle never got its question. It gets it now,
 		// where there is no clock on the answer.
 		const pending = intervals.findIndex((iv) => iv.a === 'climb' && iv.lvl == null);
@@ -522,7 +541,7 @@
 	.rec {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: var(--space-2);
+		gap: var(--space-3);
 	}
 	.stage {
 		min-width: 0;
@@ -542,10 +561,15 @@
 		inset: 0;
 		z-index: 50;
 		background: var(--bg-page);
-		padding: var(--space-3);
+		/* Safe-area insets, not a flat pad: full screen puts the controls against
+		   the bottom of a phone, which is where the home indicator lives. */
+		padding: max(var(--space-3), env(safe-area-inset-top, 0))
+			max(var(--space-3), env(safe-area-inset-right, 0))
+			max(var(--space-3), env(safe-area-inset-bottom, 0))
+			max(var(--space-3), env(safe-area-inset-left, 0));
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-2);
+		gap: var(--space-3);
 		/* The recorder is the only thing on screen; nothing behind it should
 		   scroll under a thumb that misses the field. */
 		overflow: hidden;
@@ -610,6 +634,7 @@
 			flex: none;
 			overflow-y: auto;
 			align-content: start;
+			padding-left: var(--space-2);
 		}
 		.shell.full .controls .row {
 			flex-direction: column;
@@ -620,6 +645,9 @@
 	.rail {
 		display: grid;
 		gap: var(--space-2);
+		/* The rail is what a thumb aims at under time pressure. It gets air above
+		   it so a miss lands on carpet rather than on the wrong control. */
+		padding-top: var(--space-1);
 		grid-auto-flow: column;
 		grid-auto-columns: minmax(0, 1fr);
 		/* Four actions now. Without this the rail is as wide as its widest label
@@ -697,15 +725,19 @@
 		color: var(--on-alliance);
 	}
 
+	/* The controls are a stack of unlike things — a readout, a scrubber, a list,
+	   a row of buttons — so they get a full step between them rather than the
+	   half-step that suits items of one kind. Everything in here was touching. */
 	.controls {
-		margin-top: var(--space-3);
+		margin-top: var(--space-4);
 		display: grid;
-		gap: var(--space-2);
+		gap: var(--space-3);
 	}
 	.row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--space-2);
+		align-items: center;
+		gap: var(--space-2) var(--space-3);
 	}
 	.say {
 		margin: 0;
@@ -718,6 +750,7 @@
 	}
 	.say.live {
 		font-size: var(--fs-xl);
+		line-height: 1.1;
 		font-weight: 700;
 		color: var(--text-primary);
 		font-variant-numeric: tabular-nums;
@@ -726,7 +759,7 @@
 	.scrubber {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
+		gap: var(--space-3);
 		font-size: var(--fs-xs);
 		color: var(--text-muted);
 	}
@@ -741,11 +774,17 @@
 		text-align: right;
 	}
 
+	/* The rung question interrupts the flow, so it is set off as its own panel
+	   rather than sitting flush against the readout above it. */
 	.rungs {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
+		gap: var(--space-2) var(--space-3);
 		flex-wrap: wrap;
+		padding: var(--space-3);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		background: var(--bg-elev);
 	}
 	.rung {
 		min-width: var(--tap-min);
@@ -802,13 +841,22 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: var(--space-1);
+		gap: var(--space-2);
 	}
 	.ivs li {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
+		flex-wrap: wrap;
+		gap: var(--space-1) var(--space-2);
 		font-size: var(--fs-xs);
+		/* A rule between rows, not a gap alone: with two buttons on each line the
+		   list reads as one run-on paragraph without it. */
+		padding-bottom: var(--space-2);
+		border-bottom: 1px solid var(--border);
+	}
+	.ivs li:last-child {
+		padding-bottom: 0;
+		border-bottom: none;
 	}
 	.what {
 		font-weight: 600;
