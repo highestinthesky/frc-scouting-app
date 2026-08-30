@@ -25,16 +25,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          # 22, not 20: GitHub deprecated the Node 20 runner and now forces every
-          # action that targets it onto 24, which shows up as an annotation on
-          # every green run. Pinning the build to 22 keeps the warning off and
-          # keeps the version explicit — an unpinned `node-version` would move
-          # under the repo without a commit.
+          # The Node the BUILD runs on. Explicit, because an unpinned version
+          # would move under the repo without a commit.
+          #
+          # This is NOT what the Node 20 deprecation annotation was about — that
+          # is the runtime each ACTION declares in its own action.yml, which is
+          # fixed by the `uses:` bumps below, not here. Bumping this alone left
+          # the annotation exactly where it was.
           node-version: 22
           cache: npm
 
@@ -49,7 +51,7 @@ jobs:
       # into the Supabase SQL editor and watching it fail halfway through,
       # leaving the database partly migrated.
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -66,9 +68,14 @@ jobs:
         run: npm run build
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        # v4 stopped including dotfiles in the artifact, and `build/.nojekyll`
+        # is a dotfile. v5 adds the opt-in back, so the bump and the flag have to
+        # land together — taking v5 without it would silently drop the file and
+        # the failure would surface as `_app/` 404ing, not as a red run.
+        uses: actions/upload-pages-artifact@v5
         with:
           path: build
+          include-hidden-files: true
 
   deploy:
     needs: build
@@ -79,4 +86,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
