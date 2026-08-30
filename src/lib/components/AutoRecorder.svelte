@@ -55,6 +55,26 @@
 	let scrub = $state(0);
 	let handed = $state('right');
 	let flipped = $state(false);
+	let full = $state(false);
+	let portrait = $state(false);
+
+	// Full screen on a phone held upright is width-bound — the field is half
+	// again as wide as it is tall, so it bought 2% and left 607px of height
+	// empty. Turned a quarter, the long axis of the field runs down the long axis
+	// of the phone: about seven times the area to aim a thumb at.
+	//
+	// Only in full screen. Inline in the form the field sits in a column of
+	// fields and a tall picture there would push the rest of the form off the
+	// screen to solve a problem that page does not have.
+	const rotated = $derived(full && portrait);
+
+	$effect(() => {
+		const mq = window.matchMedia('(orientation: portrait)');
+		const read = () => (portrait = mq.matches);
+		read();
+		mq.addEventListener('change', read);
+		return () => mq.removeEventListener('change', read);
+	});
 
 	let timer = null;
 	let startedAt = 0;
@@ -211,6 +231,79 @@
 		emit();
 	}
 
+	// ─── keys, for the half of the team on a laptop ────────────────────────────
+	//
+	// A drag-only control with hold-to-record buttons is a two-hand job, and on a
+	// desktop one of those hands is on the mouse. A / S / D sit under the resting
+	// left hand while the right drags, which is the same reason those keys are
+	// the movement keys in every game these scouts have played.
+	//
+	// Bound on the window rather than the component: the pointer is captured by
+	// the SVG during a drag, so a listener on the recorder would only fire when
+	// focus happened to be inside it — which, mid-drag, it is not.
+	const KEYS = { a: 'collect', s: 'score', d: 'fault' };
+
+	function isTyping(t) {
+		return t instanceof HTMLElement && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
+	}
+
+	function keydown(ev) {
+		// `repeat` is the important guard. Holding a key fires keydown over and
+		// over, and each one would open a new interval while the first is still
+		// open — the release then closes only the last, and the rest never end.
+		if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+		if (isTyping(ev.target)) return;
+		if (phase === 'place' && ev.key === 'Enter' && start) {
+			ev.preventDefault();
+			begin();
+			return;
+		}
+		if (phase !== 'live') return;
+		if (ev.key === 'Escape') {
+			ev.preventDefault();
+			finish();
+			return;
+		}
+		const action = KEYS[ev.key.toLowerCase()];
+		if (!action) return;
+		ev.preventDefault();
+		press(action);
+	}
+
+	function keyup(ev) {
+		if (isTyping(ev.target)) return;
+		const action = KEYS[ev.key?.toLowerCase?.()];
+		if (action) release(action);
+	}
+
+	$effect(() => {
+		window.addEventListener('keydown', keydown);
+		window.addEventListener('keyup', keyup);
+		// A key held when the window loses focus never sends its keyup, so the
+		// interval would run to the end of the recording. Closing every held
+		// action on blur is the honest reading: we stopped being told.
+		const blur = () => {
+			for (const a of Object.keys(held)) release(a);
+		};
+		window.addEventListener('blur', blur);
+		return () => {
+			window.removeEventListener('keydown', keydown);
+			window.removeEventListener('keyup', keyup);
+			window.removeEventListener('blur', blur);
+		};
+	});
+
+	// Recording takes the whole screen, and gives it back afterwards.
+	//
+	// The field was sharing a phone with a form, which is the one thing it cannot
+	// afford: fifteen seconds of thumb-tracking on a 358px-wide picture is the
+	// input the whole feature rests on. Full screen is entered automatically at
+	// `begin` rather than offered as a preference, because a scout about to watch
+	// a match is not going to go looking for a setting.
+	$effect(() => {
+		if (phase === 'live') full = true;
+	});
+
 	onDestroy(() => {
 		if (timer) clearInterval(timer);
 	});
@@ -218,8 +311,10 @@
 	const remaining = $derived(Math.max(0, Math.ceil((AUTO_MS - elapsed) / 1000)));
 	const activeNow = $derived(Object.keys(held));
 	const LABELS = { collect: 'Collecting', score: 'Scoring', fault: 'Disrupted' };
+	const KEY_FOR = { collect: 'A', score: 'S', fault: 'D' };
 </script>
 
+<div class="shell" class:full>
 <div class="rec" class:left={handed === 'left'}>
 	<div class="stage">
 		<AutoField
@@ -227,6 +322,7 @@
 			position={phase === 'correct' ? atScrub : here}
 			trail={phase === 'place' ? [] : samples}
 			{flipped}
+			{rotated}
 			active={activeNow}
 			onmove={place}
 		/>
@@ -244,7 +340,8 @@
 					onpointerleave={() => release(a)}
 					onpointercancel={() => release(a)}
 				>
-					{LABELS[a]}
+					<span class="what">{LABELS[a]}</span>
+					<kbd>{KEY_FOR[a]}</kbd>
 				</button>
 			{/each}
 		</div>
@@ -258,15 +355,20 @@
 		</p>
 		<div class="row">
 			<Button variant="primary" disabled={!start} onclick={begin}>Start recording</Button>
-			<Button variant="ghost" onclick={() => (flipped = !flipped)}>Flip field</Button>
-			<Button variant="ghost" onclick={() => (handed = handed === 'right' ? 'left' : 'right')}>
-				Buttons {handed === 'right' ? 'left' : 'right'}
+			<Button variant="ghost" onclick={() => (flipped = !flipped)}>
+				Wall {flipped ? 'left' : 'right'}
+			</Button>
+			<Button variant="ghost" onclick={() => (full = !full)}>
+				{full ? 'Exit full screen' : 'Full screen'}
 			</Button>
 		</div>
 	{:else if phase === 'live'}
 		<p class="say live" aria-live="polite">{remaining}s</p>
 		<div class="row">
 			<Button variant="ghost" onclick={finish}>Stop early</Button>
+			<Button variant="ghost" onclick={() => (handed = handed === 'right' ? 'left' : 'right')}>
+				Buttons {handed === 'right' ? 'left' : 'right'}
+			</Button>
 		</div>
 	{:else}
 		<p class="say">
@@ -307,9 +409,15 @@
 
 		<div class="row">
 			<Button variant="ghost" onclick={discard}>Record again</Button>
-			<Button variant="ghost" onclick={() => (flipped = !flipped)}>Flip field</Button>
+			<Button variant="ghost" onclick={() => (flipped = !flipped)}>
+				Wall {flipped ? 'left' : 'right'}
+			</Button>
+			{#if full}
+				<Button variant="ghost" onclick={() => (full = false)}>Done</Button>
+			{/if}
 		</div>
 	{/if}
+</div>
 </div>
 
 <style>
@@ -323,6 +431,87 @@
 	}
 	.stage {
 		min-width: 0;
+	}
+
+	/* ─── full screen ───────────────────────────────────────────────────────
+	   The field was sharing a phone with a form, and it is the one thing here
+	   that cannot afford to: fifteen seconds of thumb-tracking is the input the
+	   whole feature rests on, and it was happening on a 358px-wide picture.
+
+	   In portrait this buys back the form's padding. The real gain is LANDSCAPE,
+	   where the field goes from 358px to most of an 844px viewport and the rail
+	   moves alongside it — which is why the side-rail breakpoint below is in rem
+	   and lands on a phone turned sideways. */
+	.shell.full {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		background: var(--bg-page);
+		padding: var(--space-3);
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		/* The recorder is the only thing on screen; nothing behind it should
+		   scroll under a thumb that misses the field. */
+		overflow: hidden;
+	}
+	.shell.full .rec {
+		flex: 1;
+		min-height: 0;
+		/* stretch, not start. The side-rail breakpoint below sets `align-items:
+		   start`, which leaves the stage shrink-to-content tall — so `max-height:
+		   100%` on the SVG resolved against `auto` and never bound, and the field
+		   rendered 524px tall inside a 390px viewport. */
+		align-items: stretch;
+	}
+	.shell.full .stage {
+		min-height: 0;
+		min-width: 0;
+		display: grid;
+		place-items: center;
+	}
+	/* The SVG owns `width: 100%; height: auto` for the in-form case. Here it has
+	   to fit a box in BOTH axes instead, so it is capped on both and left to
+	   size itself — preserveAspectRatio does the rest. Reaching in with
+	   :global() scoped under this component's own class is the same thing Table
+	   does to the rows a page hands it. */
+	.shell.full .stage :global(svg.field) {
+		width: auto;
+		height: auto;
+		max-width: 100%;
+		max-height: 100%;
+	}
+	.shell.full .controls {
+		flex: none;
+		margin-top: 0;
+	}
+
+	/* ─── landscape full screen: the controls go BESIDE the field ────────────
+	   The field wants an aspect of 1.55 and a phone on its side is 2.16, so
+	   height is what binds — and a row of controls under it costs the field its
+	   whole width. Stacked, full screen rendered a SMALLER field than the form
+	   did: 449px against 472px, which is the opposite of the point.
+
+	   Beside, the field gets the full height and about 600px of width. */
+	@media (orientation: landscape) {
+		.shell.full {
+			flex-direction: row;
+			align-items: stretch;
+		}
+		.shell.full .rec {
+			flex: 1;
+			min-width: 0;
+		}
+		.shell.full .controls {
+			width: 11rem;
+			flex: none;
+			overflow-y: auto;
+			align-content: start;
+		}
+		.shell.full .controls .row {
+			flex-direction: column;
+			align-items: stretch;
+		}
 	}
 
 	.rail {
@@ -340,6 +529,11 @@
 	}
 
 	.act {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
 		min-height: calc(var(--tap-min) * 1.4);
 		border: 2px solid var(--border-strong);
 		border-radius: var(--radius-md);
@@ -360,6 +554,24 @@
 		background: var(--accent);
 		color: var(--on-accent);
 		border-color: var(--accent);
+	}
+	/* The key is shown ON the control rather than explained beside it — the
+	   readers build robots and a legend is one more thing between them and the
+	   match. Hidden where there is no keyboard to press it. */
+	.act kbd {
+		font: inherit;
+		font-size: var(--fs-xs);
+		font-weight: 400;
+		opacity: 0.65;
+		border: 1px solid currentColor;
+		border-radius: var(--radius-sm);
+		padding: 0 var(--space-1);
+		line-height: 1.4;
+	}
+	@media (pointer: coarse) {
+		.act kbd {
+			display: none;
+		}
 	}
 	.act.fault.on {
 		background: var(--warning);

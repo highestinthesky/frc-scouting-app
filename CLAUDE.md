@@ -311,6 +311,13 @@ A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — se
   `performance.now()` rather than counting `setInterval` ticks: a backgrounded
   tab throttles the interval, and the first version recorded 52 seconds and would
   have decoded as 15 seconds of motion at three times the true speed.
+- **Every view transform is a ROTATION, never a mirror**, and `toScreen` /
+  `fromScreen` in `field.js` own them. Turning the field around moves the
+  alliance wall to the other side *and* keeps Left on the scout's left; a mirror
+  would move the wall and reverse the labels while still looking deliberate. A
+  quarter turn stands the field on end for a portrait phone — 2.5× the area.
+  `fromScreen` is written out rather than reusing `toScreen`, because a quarter
+  turn is not self-inverse.
 - **Coordinates are fractions of the FULL field**, never the drawn (cut) region
   and never alliance-relative. `field.js` holds the season geometry and derives
   the alliance-relative answers — start zone, orientation — at display time.

@@ -299,6 +299,16 @@ before submitting.**
 4. **Targets are thumb-sized.** The three action buttons are `--tap-min` at
    minimum and sit under the thumb of whichever hand holds the phone, which is
    why the plan makes the rail side-swappable.
+5. **Recording takes the whole screen.** The field cannot share a phone with a
+   form: fifteen seconds of thumb-tracking is the input everything else rests on,
+   and inline it was happening on a 358px picture. Full screen is entered
+   automatically when recording starts rather than offered as a setting, because
+   a scout about to watch a match will not go looking for one.
+6. **And there are keys, for the half of the team on a laptop.** A/S/D under the
+   resting left hand while the right drags. `keydown` repeats are guarded — a held
+   key fires over and over, and each one would open an interval the single
+   `keyup` cannot close — and a window blur closes everything still held, because
+   a key held when focus leaves never sends its release.
 
 **The correction pass and the manager's replay are the same renderer.** That is
 not a coincidence to exploit later; it is the reason both can be in one release.
@@ -308,9 +318,30 @@ the eagle's-eye view needs.
 ## Decision 7 — Orientation and handedness are display state
 
 The plan asks for two toggles: alliance side on the left or the right, and the
-action rail on the left or the right. Both are **device preferences**, stored
-where the theme is, and neither touches a stored coordinate — that is what
-Decision 1's field-absolute storage buys.
+action rail on the left or the right. Both are **device preferences**, and
+neither touches a stored coordinate — that is what Decision 1's field-absolute
+storage buys.
+
+**Turning the view around is a ROTATION, not a mirror**, and that distinction is
+load-bearing. The first implementation mirrored the across-field axis, which
+swapped the Left and Right bands and left the alliance wall exactly where it
+was: the wrong axis, applied consistently, so every layer agreed with every
+other and none of it was what the scout asked for. Mirroring the long axis
+instead would move the wall and *reverse* the scout's left and right, because a
+reflection changes handedness — worse, because the labels would still look
+deliberate. Turning 180° moves the wall and keeps Left on the left, which is
+what physically happens when you walk to the other end of the field.
+
+**A quarter turn is a third view state, and it is about the device rather than
+the field.** The field is half again as wide as it is tall, so on a phone held
+upright the picture is width-bound and most of the screen is empty. Standing it
+on end puts the field's long axis down the phone's long axis. Measured: 2.5× the
+area to aim a thumb at.
+
+`toScreen`/`fromScreen` in `field.js` own all three, and `fromScreen` is written
+out rather than reusing `toScreen` — a quarter turn is **not** self-inverse, and
+assuming it was would land the robot a quarter of the field from the thumb in the
+one mode that exists to make the thumb more accurate.
 
 The same applies to **start position classification.** "Behind the hub is Middle"
 is stated from the perspective of a member of that team, so the classifier is

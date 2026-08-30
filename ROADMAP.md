@@ -244,6 +244,15 @@ gets pushed, and gets used before the recorder is written.
    is the one surface here that will be trusted more than it deserves.
 9. **`SCHEMA_VERSION` 3 → 4**, and the field geometry plus its legal-region mask
    join the January ritual in *Retuning metrics each season* below.
+10. **Recording takes the whole screen, and the field turns to fit the device.**
+    Reported from use: the field was too small, and the two orientation toggles
+    did not do what they claimed. Full screen is entered automatically at the
+    start of a recording; in portrait the field stands on end (2.5× the area),
+    and in landscape the controls move beside it rather than under it — stacked,
+    full screen rendered a *smaller* field than the form did, 449px against 472.
+11. **A / S / D hold the three actions on a keyboard**, shown on the controls
+    rather than explained beside them, and hidden where the pointer is coarse.
+    Enter starts a recording, Escape stops one.
 
 **The field is the real 2026 REBUILT field**, built in `field.js` from FIRST's
 published dimensions — 651.2in × 317.7in, two 47in HUBs each 158.6in from their

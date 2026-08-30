@@ -333,14 +333,69 @@ export function fromDrawn(u, v) {
 export const DRAWN_ASPECT = ((DRAWN.x1 - DRAWN.x0) * FIELD_ASPECT) / (DRAWN.y1 - DRAWN.y0);
 
 /**
- * Mirror a position for display when the scout has put their alliance on the
- * right instead of the left.
+ * Drawn-box coordinates to screen coordinates.
  *
- * A display transform and nothing else — the plan asks for the toggle, and
- * Decision 1 is what makes it one subtraction rather than a second stored
- * format. Stored coordinates never change.
+ * Two independent transforms, both purely about how the picture is presented.
+ * Neither touches a stored coordinate — Decision 1's field-absolute storage is
+ * what makes both of them one line instead of a second saved format.
+ *
+ * ─── `flipped`: which end the alliance wall is at ───────────────────────────
+ *
+ * The plan asks for it: "whether the on-screen field has the alliance field to
+ * the left or right, for their positioning."
+ *
+ * It is a ROTATION, not a mirror, and that distinction is the whole thing. The
+ * first version mirrored v — the axis ACROSS the field — which swapped the Left
+ * and Right bands and left the alliance wall exactly where it was: the wrong
+ * axis, applied consistently, so everything agreed and none of it was what the
+ * scout wanted. Mirroring u instead would move the wall and REVERSE the scout's
+ * left and right, because a reflection changes handedness — worse, because the
+ * labels would still look deliberate. Turning 180° moves the wall AND keeps
+ * Left on the left, which is what physically happens when you walk to the other
+ * end of the field.
+ *
+ * ─── `rotated`: the field's long axis runs down a portrait screen ──────────
+ *
+ * The field is half again as wide as it is tall, so on a phone held upright it
+ * is width-bound and most of the screen is empty: full screen bought 2% and
+ * left 607px of unused height. Turning the picture a quarter turn puts the long
+ * axis down the long axis of the phone, which is the difference between a
+ * 366px field and a 390x605 one — about seven times the area to aim a thumb at.
+ *
+ * Clockwise, so the alliance wall ends up at the TOP. A scout looking down at
+ * their own end is the same view they have standing behind the driver station.
+ *
+ * ─── and it happens in DRAWN space, not field space ─────────────────────────
+ *
+ * The drawn region is cut at 0.756, so `x -> 1 - x` in field coordinates would
+ * slide the visible window off to the far end and show the opponent's half. All
+ * of this is about the centre of the PICTURE.
+ *
+ * @param {number} u  0..1 across the drawn box
+ * @param {number} v  0..1 down the drawn box
+ * @param {{flipped?: boolean, rotated?: boolean}} [view]
+ * @returns {{u: number, v: number}} 0..1 across and down the SCREEN box
  */
-export function orient(pos, flipped) {
-	if (!flipped) return pos;
-	return { x: pos.x, y: 1 - pos.y };
+export function toScreen(u, v, view = {}) {
+	const a = view.flipped ? 1 - u : u;
+	const b = view.flipped ? 1 - v : v;
+	return view.rotated ? { u: 1 - b, v: a } : { u: a, v: b };
+}
+
+/**
+ * Screen coordinates back to the drawn box.
+ *
+ * Written as its own function rather than reusing toScreen, because it is only
+ * self-inverse when `rotated` is false — a quarter turn is not. Assuming
+ * otherwise puts the robot a quarter of the field from the thumb, in the one
+ * mode that exists to make the thumb more accurate.
+ *
+ * @param {number} su
+ * @param {number} sv
+ * @param {{flipped?: boolean, rotated?: boolean}} [view]
+ */
+export function fromScreen(su, sv, view = {}) {
+	const a = view.rotated ? sv : su;
+	const b = view.rotated ? 1 - su : sv;
+	return view.flipped ? { u: 1 - a, v: 1 - b } : { u: a, v: b };
 }

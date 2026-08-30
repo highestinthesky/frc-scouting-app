@@ -24,7 +24,8 @@ import {
 	clampToField,
 	toDrawn,
 	fromDrawn,
-	orient
+	toScreen,
+	fromScreen
 } from './field.js';
 
 let pass = 0;
@@ -188,13 +189,55 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 	ok('the centre line is right of the picture centre', toDrawn({ x: 0.5, y: 0.5 }).u > 0.5);
 }
 
-// ─── orientation is display only ───────────────────────────────────────────
+// ─── presentation: turning the view around, and standing it on end ─────────
+//
+// The plan asks for the alliance wall to be movable to either side of the
+// screen. The first implementation mirrored v — the axis ACROSS the field —
+// which swapped Left and Right and left the wall where it was: the wrong axis,
+// applied consistently, so nothing disagreed and none of it was what was asked.
 {
-	const p = { x: 0.3, y: 0.25 };
-	ok('unflipped is identity', orient(p, false).y === 0.25);
-	ok('flipped mirrors across the long axis', near(orient(p, true).y, 0.75));
-	ok('flipping twice is identity', near(orient(orient(p, true), true).y, 0.25));
-	ok('and x never moves — the alliance walls do not swap', orient(p, true).x === 0.3);
+	const id = toScreen(0.3, 0.25, {});
+	ok('no view options is identity', id.u === 0.3 && id.v === 0.25);
+
+	// Both axes, because a rotation is both. Mirroring u alone would move the
+	// wall and REVERSE the scout's left and right — worse than the original bug,
+	// because the labels would still look deliberate.
+	const f = toScreen(0.3, 0.25, { flipped: true });
+	ok('flipping moves the alliance wall to the other side', near(f.u, 0.7));
+	ok('and the across-field axis turns with it', near(f.v, 0.75));
+
+	// Handedness is what makes the labels honest. Under a rotation two bands swap
+	// places on screen but stay on the same side of each other, so "Left" still
+	// names the strip physically on the scout's left.
+	ok('flipping preserves the order of the bands',
+		toScreen(0.1, 0.2, { flipped: true }).v > toScreen(0.1, 0.8, { flipped: true }).v);
+
+	// A quarter turn puts the long axis down a portrait phone. Clockwise, so the
+	// alliance wall ends up at the top — the view a scout has behind their own
+	// driver station.
+	const r = toScreen(0, 0, { rotated: true });
+	ok('rotating puts the near-wall corner at the top right', near(r.u, 1) && near(r.v, 0));
+	ok('and the far end of the picture runs down the screen',
+		near(toScreen(1, 0, { rotated: true }).v, 1));
+
+	// The inverse is the assertion that matters: it is what puts the robot under
+	// the thumb. A quarter turn is NOT self-inverse, and assuming it was would
+	// land the robot a quarter of the field away in the one mode that exists to
+	// make the thumb more accurate.
+	for (const view of [{}, { flipped: true }, { rotated: true }, { flipped: true, rotated: true }]) {
+		const name = JSON.stringify(view);
+		for (const [u, v] of [[0.25, 0.3], [0, 0], [1, 1], [0.5, 0.5], [0.9, 0.1]]) {
+			const sc = toScreen(u, v, view);
+			const back = fromScreen(sc.u, sc.v, view);
+			ok(`${name} round-trips (${u},${v})`, near(back.u, u, 1e-9) && near(back.v, v, 1e-9));
+		}
+	}
+
+	// The centre of the picture is every transform's fixed point.
+	for (const view of [{ flipped: true }, { rotated: true }, { flipped: true, rotated: true }]) {
+		const c = toScreen(0.5, 0.5, view);
+		ok(`${JSON.stringify(view)} leaves the centre alone`, near(c.u, 0.5) && near(c.v, 0.5));
+	}
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

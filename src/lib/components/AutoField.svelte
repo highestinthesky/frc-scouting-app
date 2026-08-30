@@ -32,7 +32,8 @@
 		clampToField,
 		toDrawn,
 		fromDrawn,
-		orient
+		toScreen,
+		fromScreen
 	} from '$lib/field.js';
 	import { positionAt, actionsAt, trackDuration } from '$lib/auto-track.js';
 
@@ -44,6 +45,7 @@
 	 *   trail?: Array<{x:number,y:number}>,
 	 *   t?: number,
 	 *   flipped?: boolean,
+	 *   rotated?: boolean,
 	 *   active?: string[],
 	 *   onmove?: (pos: {x:number,y:number}) => void
 	 * }}
@@ -55,6 +57,7 @@
 		trail = [],
 		t = 0,
 		flipped = false,
+		rotated = false,
 		active = [],
 		onmove
 	} = $props();
@@ -62,14 +65,34 @@
 	// The viewBox is in DRAWN units scaled to the picture's own aspect, so every
 	// coordinate below is a straight multiply and nothing has to remember which
 	// space it is in.
-	const VB_W = 1000;
-	const VB_H = Math.round(VB_W / DRAWN_ASPECT);
+	const LONG = 1000;
+	const SHORT = Math.round(LONG / DRAWN_ASPECT);
+	// A quarter turn swaps the box, so every coordinate below is still a straight
+	// multiply and nothing has to remember which way up it is.
+	const VB_W = $derived(rotated ? SHORT : LONG);
+	const VB_H = $derived(rotated ? LONG : SHORT);
+	const view = $derived({ flipped, rotated });
 
-	/** Full-field position to a point in the viewBox, honouring the flip. */
+	/**
+	 * Full-field position to a point in the viewBox, honouring the flip.
+	 *
+	 * The rotation is applied in DRAWN space, after toDrawn — the drawn region is
+	 * cut, so rotating in field coordinates would slide the window onto the
+	 * opponent's half. Everything on the field goes through here, which is what
+	 * makes "the whole picture turns together" true by construction rather than
+	 * by remembering to flip each layer.
+	 */
 	function place(pos) {
 		if (!pos) return null;
-		const d = toDrawn(orient(pos, flipped));
-		return { cx: d.u * VB_W, cy: d.v * VB_H };
+		const d = toDrawn(pos);
+		const o = toScreen(d.u, d.v, view);
+		return { cx: o.u * VB_W, cy: o.v * VB_H };
+	}
+
+	/** The same, for a point already in drawn coordinates. */
+	function placeDrawn(u, v) {
+		const o = toScreen(u, v, view);
+		return { cx: o.u * VB_W, cy: o.v * VB_H };
 	}
 
 	/**
@@ -82,27 +105,39 @@
 	 */
 	function box(o) {
 		const c = place({ x: o.x, y: o.y });
-		const w = (o.w / (DRAWN.x1 - DRAWN.x0)) * VB_W;
-		const h = (o.h / (DRAWN.y1 - DRAWN.y0)) * VB_H;
+		// Extents are measured along the DRAWN axes, so a quarter turn swaps which
+		// screen axis each one lands on. Getting this wrong draws the hub as a
+		// long thin slab and nothing errors.
+		const along = (o.w / (DRAWN.x1 - DRAWN.x0)) * LONG;
+		const across = (o.h / (DRAWN.y1 - DRAWN.y0)) * SHORT;
+		const w = rotated ? across : along;
+		const h = rotated ? along : across;
 		return { x: c.cx - w / 2, y: c.cy - h / 2, w, h, label: o.label };
 	}
 
 	const solids = $derived(OBSTACLES.filter((o) => o.kind === 'rect').map(box));
 	const marks = $derived(FEATURES.filter((f) => f.kind === 'rect').map(box));
 	const lines = $derived(
-		FEATURES.filter((f) => f.kind === 'line').map((f) => ({
-			x: place({ x: f.x, y: 0.5 }).cx,
-			label: f.label
-		}))
+		FEATURES.filter((f) => f.kind === 'line').map((f) => {
+			const u = toDrawn({ x: f.x, y: 0 }).u;
+			return { ...segment(u, 0, u, 1), label: f.label };
+		})
 	);
 
 	// Band lines are drawn from the SAME numbers the classifier reads, so a
 	// renamed or moved band cannot disagree with the label a manager is shown.
+	// Lines are drawn between two PLACED endpoints rather than as a constant on
+	// one axis. That is what makes them turn with everything else: a band edge is
+	// horizontal in one orientation and vertical in the other, and there is no
+	// branch here that has to know which.
+	const segment = (u0, v0, u1, v1) => {
+		const a = placeDrawn(u0, v0);
+		const b = placeDrawn(u1, v1);
+		return { x1: a.cx, y1: a.cy, x2: b.cx, y2: b.cy };
+	};
+
 	const bands = $derived(
-		START_BANDS.slice(0, -1).map((b) => {
-			const y = flipped ? 1 - b.upTo : b.upTo;
-			return { y: y * VB_H, label: b.label };
-		})
+		START_BANDS.slice(0, -1).map((b) => ({ ...segment(0, b.upTo, 1, b.upTo), label: b.label }))
 	);
 
 	// Band labels start clear of whatever is against the near wall.
@@ -113,20 +148,31 @@
 	// that comes back the moment a band moves. So they clear the wall furniture
 	// HORIZONTALLY instead, computed from the widest thing touching x = 0 rather
 	// than from a number that happens to work today.
-	const labelX = $derived(
-		Math.max(
-			14,
-			...OBSTACLES.filter((o) => o.kind === 'rect' && o.x - o.w / 2 <= DRAWN.x0 + 1e-9).map(
-				(o) => ((o.x + o.w / 2) / (DRAWN.x1 - DRAWN.x0)) * VB_W + 16
-			)
+	// How far along the drawn box the labels sit: clear of whatever is against the
+	// near wall. Expressed as a DRAWN fraction rather than a pixel offset, so it
+	// survives the box being turned on its side.
+	const labelAlong = Math.max(
+		0.02,
+		...OBSTACLES.filter((o) => o.kind === 'rect' && o.x - o.w / 2 <= DRAWN.x0 + 1e-9).map(
+			(o) => (o.x + o.w / 2) / (DRAWN.x1 - DRAWN.x0) + 0.02
 		)
 	);
+	// Anchored away from the wall, whichever side the wall ended up on. Rotated,
+	// the wall is at the top and the labels read across, so they centre instead.
+	const labelAnchor = $derived(rotated ? 'middle' : flipped ? 'end' : 'start');
 
+	// The NAME never changes under a rotation — that is the point of using one.
+	// "Left" is still the scout's left; it is drawn at the other side of the
+	// picture, next to the alliance wall, which has also moved.
+	// The NAME never changes under any of these transforms — that is the point of
+	// using rotations rather than mirrors. "Left" is still the scout's left; it is
+	// simply drawn somewhere else, next to the alliance wall, which has moved too.
 	const bandLabels = $derived(
 		START_BANDS.map((b, i) => {
 			const lo = i === 0 ? 0 : START_BANDS[i - 1].upTo;
 			const mid = (lo + b.upTo) / 2;
-			return { y: (flipped ? 1 - mid : mid) * VB_H, label: b.label };
+			const p = placeDrawn(labelAlong, mid);
+			return { x: p.cx, y: p.cy, label: b.label };
 		})
 	);
 
@@ -171,9 +217,15 @@
 		// pane is hidden, and dividing by it produces Infinity, which clamps to a
 		// field corner — a robot that teleports for no visible reason.
 		if (r.width < 1 || r.height < 1) return null;
-		const u = (ev.clientX - r.left) / r.width;
-		const v = (ev.clientY - r.top) / r.height;
-		return clampToField(orient(fromDrawn(u, v), flipped));
+		// fromScreen, not toScreen: a quarter turn is not its own inverse, and
+		// assuming it was would land the robot a quarter of the field from the
+		// thumb in the one mode that exists to make the thumb more accurate.
+		const o = fromScreen(
+			(ev.clientX - r.left) / r.width,
+			(ev.clientY - r.top) / r.height,
+			view
+		);
+		return clampToField(fromDrawn(o.u, o.v));
 	}
 
 	function down(ev) {
@@ -222,8 +274,15 @@
 		];
 		if (!d) return;
 		ev.preventDefault();
-		const dir = flipped ? -1 : 1;
-		onmove?.(clampToField({ x: position.x + d[0], y: position.y + d[1] * dir }));
+		// The nudge is expressed in SCREEN terms — ArrowRight moves the robot
+		// right on the screen — so it goes through the same inverse the pointer
+		// does rather than through a hand-written sign flip. That sign flip
+		// already shipped wrong once: it inverted only y, so ArrowRight walked
+		// the robot left across a flipped field.
+		const here = toDrawn(position);
+		const sc = toScreen(here.u, here.v, view);
+		const moved = fromScreen(sc.u + d[0] * step, sc.v + d[1] * step, view);
+		onmove?.(clampToField(fromDrawn(moved.u, moved.v)));
 	}
 </script>
 
@@ -246,10 +305,10 @@
 	<rect x="0" y="0" width={VB_W} height={VB_H} class="carpet" />
 
 	{#each bandLabels as b}
-		<text x={labelX} y={b.y} class="band-label" dominant-baseline="middle">{b.label}</text>
+		<text x={b.x} y={b.y} class="band-label" text-anchor={labelAnchor} dominant-baseline="middle">{b.label}</text>
 	{/each}
 	{#each bands as b}
-		<line x1="0" y1={b.y} x2={VB_W} y2={b.y} class="band-line" />
+		<line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} class="band-line" />
 	{/each}
 
 	<!-- Driven over and driven under: landmarks a scout steers by, and paths
@@ -259,11 +318,14 @@
 	{/each}
 
 	{#each lines as l}
-		<line x1={l.x} y1="0" x2={l.x} y2={VB_H} class="mark-line {l.label.split(' ')[0]}" />
+		<line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} class="mark-line {l.label.split(' ')[0]}" />
 	{/each}
 
-	<!-- The cut edge. The picture stops here; the coordinate space does not. -->
-	<line x1={VB_W - 1} y1="0" x2={VB_W - 1} y2={VB_H} class="cut" />
+	<!-- The cut edge. The picture stops here; the coordinate space does not. It is
+	     the far end from the alliance wall, so it changes sides with the flip. -->
+	{#each [segment(1, 0, 1, 1)] as c}
+		<line x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} class="cut" />
+	{/each}
 
 	<!-- Solid: a robot cannot be here. Both HUBs and the DEPOT. The far HUB
 	     straddles the cut, so it renders as a half square on the right edge. -->
