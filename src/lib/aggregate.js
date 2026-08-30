@@ -5,6 +5,8 @@ import { rowScout } from './scout-identity.js';
 import { listEntries } from './db.js';
 import { allMetricStats, hasAnyMetrics } from './metrics.js';
 import { normalizeCode, sameSeason, seasonOf } from './event-rules.js';
+import { readTrack, cycleStats, clusterRoutes } from './auto-track.js';
+import { startZone } from './field.js';
 
 /**
  * "Did the robot break down on this entry?"
@@ -274,7 +276,12 @@ export function teamProfile(entries, teamNumber, eventCode) {
 		season: seasonOf(code),
 		event: oneTeam(atEvent),
 		seasonWide: oneTeam(inSeason),
-		byEvent
+		byEvent,
+		// Scoped the same two ways, for the same reason: "where does 254 line up"
+		// is a different question here and across the season, and a team that
+		// changed its auto between events is exactly what a manager wants to spot.
+		auto: autoSummary(atEvent),
+		autoSeason: autoSummary(inSeason)
 	};
 }
 
@@ -368,5 +375,83 @@ export function matchReport(entries, eventCode, matchNumber, lineup = {}) {
 		teamsCovered: scheduled.filter((s) => s.covered).length,
 		teamsScheduled: scheduled.length,
 		scouts: [...new Map(mine.map((e) => [rowScout(e).key, rowScout(e)])).values()]
+	};
+}
+
+// ─── what the recordings add up to ─────────────────────────────────────────
+//
+// ADR-002 Decision 9: "Recording paths is worthless until they answer a question
+// a manager asks." Four, in the order they get asked:
+//
+//   where does this team line up      a histogram over start positions
+//   what does its auto cost           cycle counts and seconds, from intervals
+//   does it do the same thing twice   route signatures, clustered
+//   where does it score               left for the heat map, which needs the
+//                                     real field image to be worth drawing
+//
+// The first three need no geometry beyond the start position, which is why they
+// are here and the heat map is not: a heat map on placeholder field geometry
+// would be a picture of nothing, drawn convincingly.
+
+/**
+ * Everything the auto recordings say about one team.
+ *
+ * Blank stays blank, per piece and per entry (Decision 4). An entry recorded
+ * before v0.81, or by a scout who did not have time, contributes NOTHING here
+ * rather than contributing an empty path — so `n` is the number of entries with
+ * a track, never the number of entries.
+ *
+ * @param {any[]} entries  already scoped by the caller
+ * @returns {{n: number, ofEntries: number, zones: Array<{zone: string, count: number}>,
+ *            routes: Array<object>, cycles: object|null}}
+ */
+export function autoSummary(entries) {
+	const list = Array.isArray(entries) ? entries : [];
+	const rows = [];
+	for (const e of list) {
+		const track = readTrack(e);
+		if (!track) continue;
+		rows.push({ entry: e, track, zone: startZone(track.start, e?.allianceColor) });
+	}
+
+	const byZone = new Map();
+	for (const r of rows) {
+		if (!r.zone) continue;
+		byZone.set(r.zone, (byZone.get(r.zone) ?? 0) + 1);
+	}
+
+	// Sums, then means at the end. Averaging per-entry averages would weight a
+	// match with one interval the same as one with six.
+	let cycles = null;
+	if (rows.length) {
+		const totals = { cycles: 0, msScoring: 0, msCollecting: 0, faults: 0, n: 0 };
+		for (const r of rows) {
+			const c = cycleStats(r.track);
+			if (!c) continue;
+			totals.cycles += c.cycles;
+			totals.msScoring += c.msScoring;
+			totals.msCollecting += c.msCollecting;
+			totals.faults += c.faultCount;
+			totals.n += 1;
+		}
+		if (totals.n) {
+			cycles = {
+				n: totals.n,
+				meanCycles: totals.cycles / totals.n,
+				meanScoringMs: totals.msScoring / totals.n,
+				meanCollectingMs: totals.msCollecting / totals.n,
+				faultRate: totals.faults / totals.n
+			};
+		}
+	}
+
+	return {
+		n: rows.length,
+		ofEntries: list.length,
+		zones: [...byZone.entries()]
+			.map(([zone, count]) => ({ zone, count }))
+			.sort((a, b) => b.count - a.count || a.zone.localeCompare(b.zone)),
+		routes: clusterRoutes(rows),
+		cycles
 	};
 }

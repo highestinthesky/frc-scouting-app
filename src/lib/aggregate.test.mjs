@@ -12,7 +12,8 @@
 // looks like one thing and is another — so the assertions here are mostly about
 // what must NOT be pooled.
 
-import { scopeEntries, summarizeEntries, teamProfile, matchReport } from './aggregate.js';
+import { scopeEntries, summarizeEntries, teamProfile, matchReport, autoSummary } from './aggregate.js';
+import { encodeTrack } from './auto-track.js';
 
 let pass = 0;
 let fail = 0;
@@ -186,6 +187,76 @@ function entry(eventCode, matchNumber, teamNumber, extra = {}) {
 	ok('with no lineup there are no seats', r.hasLineup === false);
 	ok('but the entries are still reachable', r.stray.length === 1);
 	ok('and counted', r.entryCount === 1);
+}
+
+// ─── what the auto recordings add up to ────────────────────────────────────
+//
+// The assertion that matters most here is the one about entries with NO track.
+// An entry recorded before v0.81, or by a scout who ran out of time, must
+// contribute nothing — a start-position histogram that silently counts fifty
+// blank entries as a zone looks exactly like real data.
+{
+	const withTrack = (eventCode, teamNumber, allianceColor, y, acts) =>
+		entry(eventCode, 1, teamNumber, {
+			allianceColor,
+			observations: {
+				autoTrack: encodeTrack({
+					start: { x: 0.08, y },
+					samples: [{ x: 0.08, y }, { x: 0.4, y }],
+					intervals: acts.map((a, i) => ({ a, t0: i * 1000, t1: i * 1000 + 600 }))
+				})
+			}
+		});
+
+	const rows = [
+		withTrack('2026onsum', 254, 'red', 0.5, ['collect', 'score']),
+		withTrack('2026onsum', 254, 'red', 0.5, ['collect', 'score']),
+		withTrack('2026onsum', 254, 'red', 0.1, ['score']),
+		entry('2026onsum', 4, 254),                       // no track at all
+		entry('2026onsum', 5, 254, { observations: { autoPathing: 'middle three piece' } })
+	];
+
+	const a = autoSummary(rows);
+	ok('only entries with a track are counted', a.n === 3);
+	ok('but the entry total is still reported', a.ofEntries === 5);
+
+	ok('start zones are histogrammed', a.zones.length === 2);
+	ok('commonest zone first', a.zones[0].zone === 'Middle' && a.zones[0].count === 2);
+
+	ok('identical routes cluster', a.routes[0].count === 2);
+	ok('a different start zone is a different route', a.routes.length === 2);
+
+	ok('cycles are averaged over entries WITH tracks', a.cycles.n === 3);
+	// Two entries with one cycle each, one with none: 2/3.
+	ok('and the mean is over that n', Math.abs(a.cycles.meanCycles - 2 / 3) < 1e-9);
+
+	// Nothing recorded must produce nothing, not a zero.
+	const none = autoSummary([entry('2026onsum', 1, 999)]);
+	ok('no tracks means n = 0', none.n === 0);
+	ok('and no cycle figures at all, rather than zeroes', none.cycles === null);
+	ok('and an empty histogram', none.zones.length === 0);
+	ok('junk is safe', autoSummary(null).n === 0);
+
+	// The alliance perspective has to survive the aggregation: the same field
+	// position is a different zone to each alliance.
+	const mirrored = autoSummary([
+		withTrack('2026onsum', 7, 'red', 0.05, []),
+		withTrack('2026onsum', 7, 'blue', 0.05, [])
+	]);
+	ok('one field position is two zones to two alliances', mirrored.zones.length === 2);
+}
+
+// teamProfile carries the auto view, scoped the same two ways as everything else.
+{
+	const t = (eventCode, y) =>
+		entry(eventCode, 1, 254, {
+			allianceColor: 'red',
+			observations: { autoTrack: encodeTrack({ start: { x: 0.08, y } }) }
+		});
+	const p = teamProfile([t('2026onsum', 0.5), t('2026onto', 0.1), t('2025onsum', 0.9)], 254, '2026onsum');
+	ok('the event auto view sees this event only', p.auto.n === 1);
+	ok('the season auto view crosses events in the year', p.autoSeason.n === 2);
+	ok('and never crosses a year', p.autoSeason.n !== 3);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

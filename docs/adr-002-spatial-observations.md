@@ -33,7 +33,7 @@ reasoning was wrong on the facts**, not merely outvoted:
   Route clustering and "seconds spent scoring" are both unanswerable from four
   tapped points, and those are the two questions the feature exists to answer.
 - *"Storing enough to animate the robot is a different data volume."* It is about
-  **500 bytes** — see Decision 2. A fully covered 24-match event is roughly 70 KB.
+  **600 bytes** — see Decision 2. A fully covered 24-match event is roughly 84 KB.
   The volume argument does not survive the arithmetic.
 
 The third — recording during auto — was a real objection and is answered rather
@@ -147,10 +147,20 @@ January and a free-text action would be unaggregatable within one event.
 
 > *"I worry about the database size limitations."*
 
-150 samples × 2 bytes = **300 bytes** of position, plus a start pair and maybe
-ten intervals at ~24 bytes of JSON each. Call it **500 bytes** encoded, per robot
-per match. A fully covered 24-match offseason — 144 tracks — is **about 70 KB.**
-Supabase's free tier is 500 MB.
+150 samples × 2 bytes = **300 bytes** of position, which base64 carries as 400
+characters, plus a start pair and the intervals.
+
+**Measured rather than estimated, because the estimate was 20% light.** A full
+15-second track with four action intervals is **598 bytes** of JSON; a real one
+recorded through the UI with two intervals came out at **533**. A fully covered
+24-match offseason — 144 tracks — is **about 84 KB.** Supabase's free tier is
+500 MB. `auto-track.test.mjs` asserts both numbers, because this is the figure the
+replay was readmitted to the design on and a claim a release rests on should fail
+loudly when it stops being true.
+
+The start pair is stored to four decimals rather than at full float precision:
+`0.12156862745098039` is nineteen characters to express one of 256 values, twice
+on every record, and one quantisation step is 0.0039.
 
 Even the lazy encoding, 60 Hz of unquantised JSON floats, is 27 KB per track and
 3.9 MB per event, which is still not a problem. The concern is reasonable and

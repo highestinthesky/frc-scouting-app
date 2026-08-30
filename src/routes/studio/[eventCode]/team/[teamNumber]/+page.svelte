@@ -44,6 +44,16 @@
 	// number, and printing it twice invites reading it as corroboration.
 	const seasonAdds = $derived(profile.byEvent.length > 1);
 
+	// Which metrics have a reading at all, in either scope. Without this the
+	// Metrics panel renders a header row over an empty body for a team that was
+	// only ever recorded with an auto track and no counts — a table promising
+	// numbers that are not there.
+	const metricRows = $derived(
+		METRIC_FIELDS.filter(
+			(f) => (here?.metrics?.[f.key]?.n ?? 0) > 0 || (season?.metrics?.[f.key]?.n ?? 0) > 0
+		)
+	);
+
 	async function refresh() {
 		entries = await listEntries();
 	}
@@ -109,6 +119,7 @@
 			/>
 		{/if}
 
+		{#if metricRows.length}
 		<Panel
 			title="Metrics"
 			hint={seasonAdds
@@ -124,10 +135,9 @@
 						{#if seasonAdds}<th data-num>This season</th>{/if}
 					</tr>
 				{/snippet}
-				{#each METRIC_FIELDS as f}
+				{#each metricRows as f}
 					{@const e = here?.metrics?.[f.key]}
 					{@const s = season?.metrics?.[f.key]}
-					{#if (e?.n ?? 0) > 0 || (s?.n ?? 0) > 0}
 						<tr>
 							<th scope="row">{f.label}</th>
 							<td data-num>
@@ -149,10 +159,10 @@
 								</td>
 							{/if}
 						</tr>
-					{/if}
 				{/each}
 			</Table>
 		</Panel>
+		{/if}
 
 		{#if seasonAdds}
 			<Panel
@@ -185,6 +195,67 @@
 					{/each}
 				</Table>
 			</Panel>
+		{/if}
+
+		{#if profile.auto.n || profile.autoSeason.n}
+			{@const a = profile.auto.n ? profile.auto : profile.autoSeason}
+			{@const scope = profile.auto.n ? 'at this event' : 'this season'}
+			<Panel
+				title="Auto"
+				hint="From {a.n} of {a.ofEntries} {a.ofEntries === 1 ? 'entry' : 'entries'} {scope}. An entry with no recording contributes nothing here — it is not a robot that did not move."
+				flush
+			>
+				<Table>
+					{#snippet head()}
+						<tr>
+							<th>Starts from</th>
+							<th data-num>Matches</th>
+						</tr>
+					{/snippet}
+					{#each a.zones as z}
+						<tr>
+							<th scope="row">{z.zone}</th>
+							<td data-num>{z.count}</td>
+						</tr>
+					{/each}
+				</Table>
+			</Panel>
+
+			{#if a.routes.length}
+				<Panel
+					title="Routes"
+					hint="A route is where it started and what it did, in order. A robot knocked off its path ran the same route, so a disruption does not split a cluster."
+					flush
+				>
+					<Table>
+						{#snippet head()}
+							<tr>
+								<th>Route</th>
+								<th data-num>Times</th>
+							</tr>
+						{/snippet}
+						{#each a.routes as r}
+							<tr>
+								<th scope="row">{r.signature}</th>
+								<td data-num>{r.count}</td>
+							</tr>
+						{/each}
+					</Table>
+				</Panel>
+			{/if}
+
+			{#if a.cycles}
+				<Stats>
+					<Stat label="Auto cycles" value={a.cycles.meanCycles.toFixed(1)} note="mean of {a.cycles.n}" />
+					<Stat label="Seconds scoring" value={(a.cycles.meanScoringMs / 1000).toFixed(1)} note="per match" />
+					<Stat
+						label="Disrupted"
+						value={a.cycles.faultRate.toFixed(2)}
+						note="per match"
+						tone={a.cycles.faultRate >= 0.5 ? 'warn' : 'default'}
+					/>
+				</Stats>
+			{/if}
 		{/if}
 
 		{#if here?.entries?.length}

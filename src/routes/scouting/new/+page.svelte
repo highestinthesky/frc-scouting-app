@@ -17,6 +17,7 @@
 		ALL_FIELDS
 	} from '$lib/form-config.js';
 	import Field from '$lib/components/Field.svelte';
+	import AutoRecorder from '$lib/components/AutoRecorder.svelte';
 	import {
 		getCachedSchedule,
 		qualMatches,
@@ -87,6 +88,15 @@
 		for (const f of ALL_FIELDS) {
 			v[f.key] = f.type === 'boolean' ? false : '';
 		}
+		// The auto track is deliberately NOT in ALL_FIELDS: it is not a <Field>,
+		// it has no `type` the Field component understands, and putting it there
+		// would send it through the CSV export and the edit loop as a string.
+		//
+		// It lives in `values` anyway so the draft carries it for free — a scout
+		// who records fifteen seconds and then backgrounds the app must not lose
+		// them. null rather than '' because blank is not zero and an empty string
+		// is a value: an entry with no track must have no `autoTrack` key at all.
+		v.autoTrack = null;
 		return v;
 	}
 
@@ -278,6 +288,10 @@
 		try {
 			const observations = {};
 			for (const f of OBSERVATION_FIELDS) observations[f.key] = values[f.key] ?? '';
+			// Only when there is one. An absent key is what readTrack() reports as
+			// "not recorded", and it is what keeps a skipped recording out of the
+			// aggregates instead of in them as an empty path.
+			if (values.autoTrack) observations.autoTrack = $state.snapshot(values.autoTrack);
 
 			await addEntry({
 				eventCode: session.eventCode,
@@ -388,6 +402,15 @@
 					<strong>Schedule check:</strong> {scheduleCheck.reason}
 				</p>
 			{/if}
+		</section>
+
+		<section>
+			<h2>Auto</h2>
+			<AutoRecorder
+				value={values.autoTrack}
+				allianceColor={values.allianceColor}
+				onchange={(t) => (values.autoTrack = t)}
+			/>
 		</section>
 
 		<section>

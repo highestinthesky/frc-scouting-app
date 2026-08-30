@@ -27,6 +27,9 @@
 	import Panel from '$lib/components/studio/Panel.svelte';
 	import Stat from '$lib/components/studio/Stat.svelte';
 	import Stats from '$lib/components/studio/Stats.svelte';
+	import AutoReplay from '$lib/components/studio/AutoReplay.svelte';
+	import { readTrack, cycleStats } from '$lib/auto-track.js';
+	import { startZone } from '$lib/field.js';
 
 	const eventCode = $derived(String(page.params.eventCode ?? '').toLowerCase());
 	const matchNumber = $derived(Number(page.params.matchNumber));
@@ -64,6 +67,20 @@
 
 	function scoutLabel(s) {
 		return s?.name || s?.key || 'Unknown';
+	}
+
+	const seats = $derived([...report.red, ...report.blue]);
+	const withTracks = $derived(seats.filter((s) => s.entries.some((e) => readTrack(e))));
+
+	/** The auto summary for one seat, or null when nobody recorded a track. */
+	function autoOf(seat) {
+		const e = seat.entries.find((x) => readTrack(x));
+		if (!e) return null;
+		const track = readTrack(e);
+		return {
+			zone: startZone(track.start, seat.allianceColor),
+			stats: cycleStats(track)
+		};
 	}
 </script>
 
@@ -122,6 +139,15 @@
 			/>
 		{/if}
 
+		{#if withTracks.length}
+			<Panel
+				title="Auto replay"
+				hint="{withTracks.length} of {report.teamsScheduled} robots were tracked."
+			>
+				<AutoReplay {seats} />
+			</Panel>
+		{/if}
+
 		{#each [{ colour: 'red', seats: report.red }, { colour: 'blue', seats: report.blue }] as side}
 			{#if side.seats.length}
 				<Panel title="{side.colour === 'red' ? 'Red' : 'Blue'} alliance">
@@ -151,6 +177,16 @@
 											{/if}
 										{/each}
 									</dl>
+									{#if autoOf(seat)}
+										{@const a = autoOf(seat)}
+										<p class="auto">
+											Auto{a.zone ? ` from ${a.zone}` : ''}{a.stats.cycles
+												? ` · ${a.stats.cycles} ${a.stats.cycles === 1 ? 'cycle' : 'cycles'}`
+												: ''}{a.stats.msScoring
+												? ` · ${(a.stats.msScoring / 1000).toFixed(1)}s scoring`
+												: ''}
+										</p>
+									{/if}
 									{#each seat.entries as e}
 										{#if e.observations?.comments?.trim() || e.observations?.strengths?.trim()}
 											<blockquote>
@@ -343,5 +379,11 @@
 
 	blockquote p {
 		margin: 0 0 var(--space-1);
+	}
+
+	.auto {
+		margin: var(--space-2) 0 0;
+		font-size: var(--fs-xs);
+		color: var(--text-muted);
 	}
 </style>

@@ -255,7 +255,19 @@ Each of these produced a confident wrong answer before being caught:
   test passed while `syncState.eventCode` was null the whole time — it was
   measuring "never started", not "offline".
 - **A screenshot at a zero-width viewport proves nothing.** Confirm the viewport
-  is what you asked for before reading the picture.
+  is what you asked for before reading the picture. This one fires constantly —
+  three separate times in one session — so assert `document.documentElement
+  .clientWidth !== 0` before reading any geometry rather than remembering to look.
+- **Toggling `data-theme` with `setAttribute` does not re-resolve a TRANSITIONED
+  property.** `Button`'s `.ghost` transitions `color`, and flipping the attribute
+  from the console left it computing the light `--accent` on a dark ground —
+  a convincing 2.08 contrast failure that does not exist. Set the theme through
+  `theme.set()` and reload. Untransitioned properties are fine either way, which
+  is why this hid: every other reading on the same page was correct.
+- **`setInterval` is not a clock.** A hidden tab throttles it and stops
+  `requestAnimationFrame` outright — measured at zero rAF ticks in 500 ms. Code
+  that counts ticks to measure time is wrong; ask `performance.now()` how much
+  time has passed and fill forward to it.
 
 ## Working agreements
 
@@ -289,6 +301,27 @@ the next match, *this season* says whether that is normal — and `seasonOf()` i
 `event-rules.js` derives the year from the code's `2026` prefix. It refuses two
 nulls, so an undated event pools with nothing else; the event itself is unioned
 back in, because it plainly contains its own entries.
+
+**The auto recording is `observations.autoTrack`, and `auto-track.js` owns it.**
+A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — see
+`docs/adr-002-spatial-observations.md`. Three things make it work:
+
+- **`t` is derived from a sample's INDEX**, so evenly-spaced samples are the one
+  thing the encoding rests on. The recorder therefore fills forward to
+  `performance.now()` rather than counting `setInterval` ticks: a backgrounded
+  tab throttles the interval, and the first version recorded 52 seconds and would
+  have decoded as 15 seconds of motion at three times the true speed.
+- **Coordinates are fractions of the FULL field**, never the drawn (cut) region
+  and never alliance-relative. `field.js` holds the season geometry and derives
+  the alliance-relative answers — start zone, orientation — at display time.
+- **`decodeTrack` refuses a version it does not know.** A future layout decoded
+  as this one draws a plausible path in the wrong places, which is worse than a
+  gap because a gap is visible.
+
+`SCHEMA_VERSION` is 4. The track carries its own `v` for the byte layout, so the
+sample rate can change without pretending the whole form did. `autoTrack` is
+deliberately not `autoPathing` — that is an older free-text field rendered on two
+pages, and two concepts must not share a name.
 
 **Blank is not zero.** Blank means *not recorded*; `0` means *recorded and it
 was zero*. `readMetric()` in `src/lib/metrics.js` enforces it and eight tests

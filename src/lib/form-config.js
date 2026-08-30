@@ -165,6 +165,13 @@ export const ALL_FIELDS = [...IDENTITY_FIELDS, ...OBSERVATION_FIELDS];
 export const METRIC_KEYS = METRIC_FIELDS.map((f) => f.key);
 
 /**
+ * 4: added `observations.autoTrack` — the interactive auto recording. Rides the
+ *    existing JSON blob, so there is no migration and no new RLS policy
+ *    (ADR-002 Decision 3). An entry on 3 has no track, which is NOT "the robot
+ *    did not move": readTrack() returns null and every spatial aggregate counts
+ *    its own sample size. The track carries its own `v` for the byte layout,
+ *    separately from this, so the sample rate can change without pretending the
+ *    whole form did.
  * 3: added METRIC_FIELDS (numeric counters).
  * 2: replaced the free-text `failures` textarea with a boolean `brokeDown`
  *    toggle plus a separate `comments` textarea.
@@ -173,4 +180,4 @@ export const METRIC_KEYS = METRIC_FIELDS.map((f) => f.key);
  * read path treats a missing key as "not recorded" rather than 0, so old data
  * stays valid — it just doesn't contribute to metric averages.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;

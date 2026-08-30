@@ -16,6 +16,7 @@
 		ALL_FIELDS
 	} from '$lib/form-config.js';
 	import Field from '$lib/components/Field.svelte';
+	import AutoRecorder from '$lib/components/AutoRecorder.svelte';
 
 	// Edit form state. `entry` is the existing row we loaded; `values` mirrors
 	// it field-by-field so the form binds without mutating the loaded record.
@@ -35,6 +36,8 @@
 	function blank() {
 		const v = {};
 		for (const f of ALL_FIELDS) v[f.key] = f.type === 'boolean' ? false : '';
+		// Not an ALL_FIELDS entry. See the new-entry page's blank() for why.
+		v.autoTrack = null;
 		return v;
 	}
 
@@ -48,6 +51,10 @@
 			if (f.type === 'boolean') v[f.key] = obs[f.key] === true;
 			else v[f.key] = obs[f.key] ?? '';
 		}
+		// Not an OBSERVATION_FIELD — see blank() on the new-entry page. Carried
+		// through so opening an entry to fix a count does not silently drop the
+		// recording attached to it.
+		v.autoTrack = obs.autoTrack ?? null;
 		return v;
 	}
 
@@ -95,6 +102,7 @@
 		try {
 			const observations = {};
 			for (const f of OBSERVATION_FIELDS) observations[f.key] = values[f.key] ?? '';
+			if (values.autoTrack) observations.autoTrack = $state.snapshot(values.autoTrack);
 
 			// Patch only the user-editable fields. createdAt, eventCode, scoutName,
 			// clientId and remoteId stay as they were so dedupe and sync continue
@@ -164,6 +172,15 @@
 				{#each IDENTITY_FIELDS as f (f.key)}
 					<Field field={f} bind:value={values[f.key]} />
 				{/each}
+			</section>
+
+			<section>
+				<h2>Auto</h2>
+				<AutoRecorder
+					value={values.autoTrack}
+					allianceColor={values.allianceColor}
+					onchange={(t) => (values.autoTrack = t)}
+				/>
 			</section>
 
 			<section>

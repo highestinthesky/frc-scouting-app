@@ -27,7 +27,7 @@ Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
 | Studio | Shipped in v0.73–v0.74 — Event, Schedule, Coverage, Insights, Accounts, with its own two palettes |
 | What a scout sees at an event | Shipped in v0.76 — but the event's full schedule is still missing (v0.84) |
 | What is on the screen | Reported broken in places: black on black, clipping buttons (v0.80) |
-| Interactive auto scouting | Planned in `docs/auto-scouting-plan.md`, designed in ADR-002, not built (v0.81) |
+| Interactive auto scouting | Shipped in v0.81 — record, correct, replay, and route clustering. Field geometry is a placeholder |
 | What happened in one match | No route for it at all; the replay needs one (v0.81 step 1) |
 | Pre-match view | Not built — moved into v0.81's match page |
 | Pit scouting and the team profile | Not built (v0.83) |
@@ -227,7 +227,7 @@ back cannot be verified — the only feedback is a base64 blob, and "the track
 looks right" is not a judgement anyone can make about that. Step 1 ships,
 gets pushed, and gets used before the recorder is written.
 
-#### Step 2 — the recorder and the replay
+#### Step 2 — the recorder and the replay ✅ shipped 2026-08-29
 
 5. **Record live, correct after** (ADR Decision 6). The drag runs during the
    fifteen seconds; the scrub-and-fix pass runs after, with no clock on it. The
@@ -242,8 +242,39 @@ gets pushed, and gets used before the recorder is written.
    recording at six different moments and there is no shared clock, so tracks are
    aligned on first movement with a manual nudge — and labelled, because a replay
    is the one surface here that will be trusted more than it deserves.
-9. **`SCHEMA_VERSION` 3 → 4**, and the field SVG plus its legal-region mask join
-   the January ritual in *Retuning metrics each season* below.
+9. **`SCHEMA_VERSION` 3 → 4**, and the field geometry plus its legal-region mask
+   join the January ritual in *Retuning metrics each season* below.
+
+**The field geometry is a placeholder and is meant to be replaced.** `field.js`
+is a schematic drawn from measurements, correct in the things the recorder
+depends on — aspect ratio, a cut auto-legal region, a central obstacle, three
+start bands — and a guess about where the lines actually are. Replacing it is
+editing numbers. The heat map (ADR Decision 9) is deliberately **not** built for
+this reason: a heat map on placeholder geometry is a picture of nothing, drawn
+convincingly. Start-zone frequency, cycle statistics and route clustering shipped,
+because none of them needs geometry beyond the start position.
+
+**What the build found that the suite did not**, again all by driving the app:
+
+- **A 15-second recording came out as 52.2 seconds.** The sampler counted
+  `setInterval` ticks, and a backgrounded tab throttles them. Worse than a wrong
+  duration: `t` is derived from the sample index, so 150 samples over 52 real
+  seconds decode as 15 seconds of motion at three times the speed, and nothing
+  about the result looks wrong. The sampler now fills forward to
+  `performance.now()`.
+- **`requestAnimationFrame` stops entirely while a tab is hidden** — zero ticks in
+  500 ms — so the first frame after a manager switches back carried the whole gap
+  and the replay jumped to the end. The frame delta is clamped.
+- **A `.ghost` class collided with `Button`'s `ghost` variant.** Svelte's scoping
+  keeps them apart, so this was a trap rather than a bug; the SVG robots are `.bot`
+  now.
+- **`Panel` and `Table` both needed the fixes v0.81 step 1 made**, which is what
+  made this release's UI cheap.
+
+And one finding that was **not** a bug: a 2.08 contrast failure on two ghost
+buttons in dark mode turned out to be the measurement. See the new trap in
+`CLAUDE.md` — toggling `data-theme` from the console does not re-resolve a
+transitioned property.
 
 **A per-scout page is not a prerequisite** and is not in this release. The plan
 lists it beside the match page, but coverage already carries the by-scout counts,
