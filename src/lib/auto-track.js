@@ -45,7 +45,21 @@ export const SAMPLE_HZ = 10;
  * not called `broke` — the form already has a `brokeDown` boolean and these are
  * not the same claim: a robot can be knocked off its route and finish fine.
  */
-export const ACTIONS = Object.freeze(['collect', 'score', 'fault']);
+export const ACTIONS = Object.freeze(['collect', 'score', 'fault', 'climb']);
+
+/**
+ * How high a robot got on the TOWER, as the rungs are actually built.
+ *
+ * Three RUNGs at 27, 45 and 63 inches. Stored as the level rather than the
+ * height, because the level is what a manager says and the heights are season
+ * data that moves every January — the same reason a start ZONE is derived and
+ * not stored.
+ *
+ * A `climb` interval carries `lvl`. It is optional: a scout who saw a robot get
+ * on the tower but could not tell which rung has recorded something true, and
+ * forcing a guess would turn it into something false.
+ */
+export const CLIMB_LEVELS = Object.freeze([1, 2, 3]);
 
 /** Fraction of the field a robot must move before it counts as having started. */
 const MOVEMENT_EPSILON = 0.01;
@@ -112,11 +126,21 @@ export function encodeTrack(input) {
 	const samples = Array.isArray(input?.samples) ? input.samples : [];
 	const intervals = (Array.isArray(input?.intervals) ? input.intervals : [])
 		.filter((iv) => ACTIONS.includes(iv?.a))
-		.map((iv) => ({
-			a: iv.a,
-			t0: Math.max(0, Math.round(Number(iv.t0) || 0)),
-			t1: Math.max(0, Math.round(Number(iv.t1) || 0))
-		}))
+		.map((iv) => {
+			const out = {
+				a: iv.a,
+				t0: Math.max(0, Math.round(Number(iv.t0) || 0)),
+				t1: Math.max(0, Math.round(Number(iv.t1) || 0))
+			};
+			// Only on a climb, and only when it is one of the rungs that exists.
+			// An absent level is "got up, could not tell how far", which is a real
+			// observation; a zero would be "did not climb", which is a different
+			// claim and would be a lie in the same shape.
+			if (iv.a === 'climb' && CLIMB_LEVELS.includes(Number(iv.lvl))) {
+				out.lvl = Number(iv.lvl);
+			}
+			return out;
+		})
 		// A zero-length interval is a mis-tap, not an action. A button held for
 		// under a tenth of a second is below the sample rate and cannot be placed
 		// on the track anyway.
@@ -195,7 +219,11 @@ export function decodeTrack(raw) {
 
 	const intervals = (Array.isArray(raw.s) ? raw.s : [])
 		.filter((iv) => ACTIONS.includes(iv?.a) && Number.isFinite(Number(iv?.t0)))
-		.map((iv) => ({ a: iv.a, t0: Number(iv.t0), t1: Number(iv.t1) }))
+		.map((iv) => {
+			const out = { a: iv.a, t0: Number(iv.t0), t1: Number(iv.t1) };
+			if (iv.a === 'climb' && CLIMB_LEVELS.includes(Number(iv.lvl))) out.lvl = Number(iv.lvl);
+			return out;
+		})
 		.sort((a, b) => a.t0 - b.t0);
 
 	if (!start && samples.length === 0 && intervals.length === 0) return null;
@@ -304,8 +332,8 @@ export function actionsAt(track, t) {
  */
 export function cycleStats(track) {
 	if (!track) return null;
-	const byAction = { collect: 0, score: 0, fault: 0 };
-	const counts = { collect: 0, score: 0, fault: 0 };
+	const byAction = { collect: 0, score: 0, fault: 0, climb: 0 };
+	const counts = { collect: 0, score: 0, fault: 0, climb: 0 };
 	for (const iv of track.intervals) {
 		byAction[iv.a] += iv.t1 - iv.t0;
 		counts[iv.a] += 1;
@@ -322,13 +350,25 @@ export function cycleStats(track) {
 		}
 	}
 
+	// The BEST rung reached, not the last and not a mean. A robot that slipped to
+	// a lower rung and then got back up did reach the higher one, and averaging
+	// two attempts would describe a climb that never happened.
+	const climbs = track.intervals.filter((iv) => iv.a === 'climb');
+	const levels = climbs.map((iv) => iv.lvl).filter((n) => Number.isFinite(n));
+
 	return {
 		msCollecting: byAction.collect,
 		msScoring: byAction.score,
 		msFaulted: byAction.fault,
+		msClimbing: byAction.climb,
 		collectCount: counts.collect,
 		scoreCount: counts.score,
 		faultCount: counts.fault,
+		climbCount: counts.climb,
+		// null, not 0. "Climbed, rung unknown" and "did not climb" are different
+		// facts and must not collapse into the same number.
+		climbLevel: levels.length ? Math.max(...levels) : null,
+		climbed: climbs.length > 0,
 		cycles,
 		duration: trackDuration(track)
 	};
@@ -357,6 +397,9 @@ export function cycleStats(track) {
  */
 export function routeSignature(track, zone) {
 	if (!track) return null;
+	// A climb is in the signature without its level: "they climb" is a route, and
+	// splitting one team's eleven identical autos across three rungs would bury
+	// the route under the variation.
 	const seq = track.intervals.filter((iv) => iv.a !== 'fault').map((iv) => iv.a);
 	if (!zone && seq.length === 0) return null;
 	return `${zone ?? '?'} → ${seq.length ? seq.join(' → ') : 'no actions'}`;

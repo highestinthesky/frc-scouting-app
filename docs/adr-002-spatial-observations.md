@@ -263,11 +263,32 @@ is a recording aid and not a validation rule — it keeps a thumb from parking t
 robot somewhere impossible, which is a different thing from rejecting a scout's
 input.
 
-The cut is the opponent's ALLIANCE ZONE, which a robot may not enter in auto:
-the picture runs from the near wall through the whole NEUTRAL ZONE and stops
-158.6in short of the far wall. The opponent's HUB is centred on that line, so it
-renders as a half square against the right edge and is still collided with — the
-reachable half is reachable.
+**The whole field is drawn, and the plan was wrong about this.**
+`docs/auto-scouting-plan.md` says robots "can only enter neutral and alliance
+regions during auto" and this shipped cut on that basis. There is no such rule in
+2026: the only thing AUTO restricts about driving is **G403**, and that restricts
+*contact* past the CENTER LINE, not territory. A cut field is not a convenience,
+it is a hole — a scout watching a robot that crossed would have had nowhere to
+put it, and the path would have flattened against the edge as though the robot
+had parked there. Recording something false is worse than recording nothing, and
+it would have done it silently.
+
+**A start position is constrained, and by the rule rather than by the zone.**
+**G303-D**: *"its BUMPERS overlap their ROBOT STARTING LINE."* Not anywhere in
+the alliance zone and not anywhere on the field — straddling one line. The start
+is the most-asked question of the whole feature, so it is constrained at the
+input rather than corrected in the reading. G303-E (*"not contacting the BUMP"*)
+is deliberately **not** enforced: the lateral BUMP extents are derived from a
+width that sums rather than measured off a drawing, and hard-blocking on an
+inferred number would fight a scout who watched a robot start somewhere the file
+is wrong about. The BUMPs are drawn; a scout can see them.
+
+**The robot is drawn at its real size.** R104 gives 110in of FRAME PERIMETER, so
+a square robot is 27.5in a side and bumpers add about 3.25in per side — 34in of
+carpet. BUMPERS are what the rules measure, so they are what this measures. The
+icon was a fixed 48 units through two changes of picture width, which made it
+about 70% of a robot; a scout judging whether one fits between the HUB and a BUMP
+is reading that square.
 
 Because coordinates are normalised to the full field, **a new image does not
 invalidate old data** — last season's paths still plot, on last season's image,

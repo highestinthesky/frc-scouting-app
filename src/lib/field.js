@@ -43,7 +43,7 @@
 // the picture. It is not a property of the data.
 
 /** Bump when the geometry moves. Dates the picture; stored on nothing. */
-export const FIELD_VERSION = 2;
+export const FIELD_VERSION = 3;
 
 /** The season this geometry is. Retuned every January, like METRIC_FIELDS. */
 export const FIELD_SEASON = 2026;
@@ -54,7 +54,7 @@ export const FIELD_SEASON = 2026;
 // anyone holding the drawings, and "0.2435" cannot be checked against a manual.
 
 /** Carpet, alliance wall to alliance wall. */
-const FIELD_LENGTH_IN = 651.2;
+export const FIELD_LENGTH_IN = 651.2;
 /** Carpet, guardrail to guardrail. */
 const FIELD_WIDTH_IN = 317.7;
 
@@ -75,8 +75,21 @@ const TRENCH_DEPTH_IN = 47;
 const DEPOT_WIDTH_IN = 42;
 const DEPOT_DEPTH_IN = 27;
 
-/** Half a robot, for keeping a dragged centre off the walls and the HUB. */
-const HALF_ROBOT_IN = 17.7;
+// ─── the robot ─────────────────────────────────────────────────────────────
+//
+// R104: FRAME PERIMETER at most 110in, STARTING CONFIGURATION at most 30in tall.
+// A square robot at the limit is 27.5in a side. Bumpers add roughly 3.25in per
+// side — a 3/4in backing, a pool noodle, and fabric — so the thing that actually
+// occupies carpet is about 34in across.
+//
+// That is what everything here measures, because BUMPERS are what the rules
+// measure: G303 places a robot by where its BUMPERS are, and a robot cannot
+// drive its bumpers through a wall.
+const FRAME_PERIMETER_IN = 110;
+const BUMPER_THICKNESS_IN = 3.25;
+/** A square robot at the perimeter limit, with bumpers. 34in. */
+export const ROBOT_SIZE_IN = FRAME_PERIMETER_IN / 4 + 2 * BUMPER_THICKNESS_IN;
+const HALF_ROBOT_IN = ROBOT_SIZE_IN / 2;
 
 // ─── laterally ─────────────────────────────────────────────────────────────
 //
@@ -106,20 +119,28 @@ export const HALF_ROBOT_X = fx(HALF_ROBOT_IN);
 export const HALF_ROBOT_Y = fy(HALF_ROBOT_IN);
 
 /**
- * The portion drawn during auto.
+ * The portion drawn during auto: all of it.
  *
- * A robot may not enter the opponent's ALLIANCE ZONE in auto, so the picture
- * stops where that zone begins and the far half of the screen is not carpet a
- * thumb has to cross. Everything from the near wall through the whole NEUTRAL
- * ZONE is drawn, which includes the opponent's HUB — it straddles the boundary,
- * so half of it is reachable.
+ * ─── the plan was wrong about this, and the manual settles it ──────────────
+ *
+ * `docs/auto-scouting-plan.md` says "the field should be cut, as robots can only
+ * enter neutral and alliance regions during auto", and this was built cut at the
+ * opponent's ALLIANCE ZONE on that basis. **There is no such rule in 2026.** The
+ * only thing AUTO restricts about driving is G403 — a ROBOT whose BUMPERS are
+ * completely across the CENTER LINE may not CONTACT an opponent — which is a
+ * restriction on contact, not on territory.
+ *
+ * A cut field is therefore not a convenience, it is a hole: a scout watching a
+ * robot that crossed would have had nowhere on the picture to put it, and the
+ * path would have flattened against the edge as though the robot had parked
+ * there. Recording something false is worse than recording nothing, and this
+ * would have done it silently.
+ *
+ * The cost is a longer, thinner picture — 2.05 rather than 1.55 — which is worse
+ * on a laptop and BETTER on a phone stood on end, where the field's long axis
+ * now matches the screen's almost exactly.
  */
-export const DRAWN = Object.freeze({
-	x0: 0,
-	y0: 0,
-	x1: fx(FIELD_LENGTH_IN - ALLIANCE_ZONE_IN),
-	y1: 1
-});
+export const DRAWN = Object.freeze({ x0: 0, y0: 0, x1: 1, y1: 1 });
 
 /**
  * Where a robot cannot be.
@@ -132,19 +153,14 @@ export const DRAWN = Object.freeze({
  * line; the far one is centred on the opponent's, which is the cut edge, so it
  * appears as a half square against the right-hand boundary.
  */
-export const OBSTACLES = Object.freeze([
+const mirrorX = (o) => ({ ...o, x: 1 - o.x, label: `far ${o.label}` });
+
+/** One alliance's structures, measured from ITS OWN wall. */
+const nearSide = [
 	{
 		kind: 'rect',
 		label: 'hub',
 		x: fx(ALLIANCE_ZONE_IN),
-		y: 0.5,
-		w: fx(HUB_SIZE_IN),
-		h: fy(HUB_SIZE_IN)
-	},
-	{
-		kind: 'rect',
-		label: 'opponent hub',
-		x: fx(FIELD_LENGTH_IN - ALLIANCE_ZONE_IN),
 		y: 0.5,
 		w: fx(HUB_SIZE_IN),
 		h: fy(HUB_SIZE_IN)
@@ -157,17 +173,22 @@ export const OBSTACLES = Object.freeze([
 		w: fx(DEPOT_DEPTH_IN),
 		h: fy(DEPOT_WIDTH_IN)
 	}
-]);
+];
 
 /**
- * Drawn for orientation, driven straight through.
+ * Where a robot cannot be.
  *
- * These are the difference between a grey box and a field a scout recognises,
- * and keeping them OUT of OBSTACLES is the point: a BUMP is driven over and a
- * TRENCH is driven under, so a robot's path crosses both and a collision test
- * that stopped it there would be fighting the scout.
+ * A recording aid, not a validation rule: it keeps a thumb from parking the
+ * robot inside the HUB, which is a different thing from rejecting a scout's
+ * input. Rectangles in full-field fractions, `x`/`y` being the centre.
+ *
+ * Both ends, because the whole field is drawn — a robot that crossed the centre
+ * line in auto is doing something legal and has to be recordable where it went.
  */
-export const FEATURES = Object.freeze([
+export const OBSTACLES = Object.freeze([...nearSide, ...nearSide.map(mirrorX)]);
+
+/** One alliance's landmarks. Driven over, driven under, or painted on. */
+const nearMarks = [
 	{
 		kind: 'rect',
 		label: 'bump',
@@ -200,9 +221,53 @@ export const FEATURES = Object.freeze([
 		w: fx(TRENCH_DEPTH_IN),
 		h: fy(MID_W - BUMP_OUTER)
 	},
-	{ kind: 'line', label: 'starting line', x: fx(ALLIANCE_ZONE_IN) },
+	{ kind: 'line', label: 'starting line', x: fx(ALLIANCE_ZONE_IN) }
+];
+
+/**
+ * Drawn for orientation, driven straight through.
+ *
+ * These are the difference between a grey box and a field a scout recognises,
+ * and keeping them OUT of OBSTACLES is the point: a BUMP is driven over and a
+ * TRENCH is driven under, so a robot's path crosses both and a collision test
+ * that stopped it there would be fighting the scout.
+ */
+export const FEATURES = Object.freeze([
+	...nearMarks,
+	...nearMarks.map((m) => (m.kind === 'line' ? { ...m, x: 1 - m.x, label: 'far starting line' } : mirrorX(m))),
 	{ kind: 'line', label: 'centre line', x: 0.5 }
 ]);
+
+// ─── where a robot may start ───────────────────────────────────────────────
+//
+// G303 START YOUR ROBOTS, point D: "its BUMPERS overlap their ROBOT STARTING
+// LINE." Not anywhere in the alliance zone, and not anywhere on the field —
+// straddling one line. So the centre of a bumpered robot is within half a robot
+// of it, and everywhere else is a placement that could not have happened.
+//
+// Point E — "it's not contacting the BUMP" — is deliberately NOT enforced. The
+// lateral BUMP extents here are derived from a width that sums rather than
+// measured off a drawing, and hard-blocking a placement on an inferred number
+// would fight a scout who watched a robot start somewhere this file is wrong
+// about. The BUMPs are drawn; a scout can see them.
+
+/** Distance from the alliance wall to the ROBOT STARTING LINE, as a fraction. */
+export const STARTING_LINE = fx(ALLIANCE_ZONE_IN);
+
+/**
+ * Constrain a starting position to where G303-D allows one.
+ *
+ * @param {{x:number,y:number}} pos
+ * @param {string|null} allianceColor  which end this robot starts at
+ */
+export function clampToStart(pos, allianceColor) {
+	const line = allianceColor === 'blue' ? 1 - STARTING_LINE : STARTING_LINE;
+	const p = clampToField(pos);
+	return clampToField({
+		x: clamp(p.x, line - HALF_ROBOT_X, line + HALF_ROBOT_X),
+		y: p.y
+	});
+}
 
 /**
  * Start bands, named from the perspective of a member of that alliance.

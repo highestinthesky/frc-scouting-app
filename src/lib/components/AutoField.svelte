@@ -26,6 +26,8 @@
 	import {
 		DRAWN,
 		DRAWN_ASPECT,
+		ROBOT_SIZE_IN,
+		FIELD_LENGTH_IN,
 		OBSTACLES,
 		FEATURES,
 		START_BANDS,
@@ -72,6 +74,16 @@
 	const VB_W = $derived(rotated ? SHORT : LONG);
 	const VB_H = $derived(rotated ? LONG : SHORT);
 	const view = $derived({ flipped, rotated });
+
+	// The robot is drawn at its real size.
+	//
+	// It was a fixed 48 units against a picture that has changed width twice,
+	// which made it about 70% of a real robot on the cut field and would have
+	// been a different wrong size on this one. A scout judging whether a robot
+	// fits between the HUB and a BUMP is reading this square, so it has to be the
+	// square the rules describe: 110in of frame perimeter plus bumpers, 34in.
+	const ROBOT = (ROBOT_SIZE_IN / FIELD_LENGTH_IN) * LONG;
+	const HALF_BOT = ROBOT / 2;
 
 	/**
 	 * Full-field position to a point in the viewBox, honouring the flip.
@@ -337,16 +349,16 @@
 
 	{#each ghosts as g}
 		<g class="bot" class:done={g.done} class:doing={g.doing.length > 0}>
-			<rect x={g.cx - 22} y={g.cy - 22} width="44" height="44" rx="6" style={g.colour ? `--bot: ${g.colour}` : ''} />
+			<rect x={g.cx - HALF_BOT} y={g.cy - HALF_BOT} width={ROBOT} height={ROBOT} rx="6" style={g.colour ? `--bot: ${g.colour}` : ''} />
 			<text x={g.cx} y={g.cy + 1} dominant-baseline="middle" text-anchor="middle">{g.label}</text>
 		</g>
 	{/each}
 
 	{#if me}
 		<g class="me" class:acting={active.length > 0}>
-			<rect x={me.cx - 24} y={me.cy - 24} width="48" height="48" rx="6" />
+			<rect x={me.cx - HALF_BOT} y={me.cy - HALF_BOT} width={ROBOT} height={ROBOT} rx="6" />
 			{#if active.length}
-				<circle cx={me.cx} cy={me.cy} r="34" class="pulse" />
+				<circle cx={me.cx} cy={me.cy} r={ROBOT * 0.75} class="pulse" />
 			{/if}
 		</g>
 	{/if}

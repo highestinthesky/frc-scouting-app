@@ -26,8 +26,17 @@
 	import { onDestroy } from 'svelte';
 	import AutoField from './AutoField.svelte';
 	import Button from './Button.svelte';
-	import { SAMPLE_HZ, ACTIONS, encodeTrack, decodeTrack, positionAt, trackDuration, cycleStats } from '$lib/auto-track.js';
-	import { startZone } from '$lib/field.js';
+	import {
+		SAMPLE_HZ,
+		ACTIONS,
+		CLIMB_LEVELS,
+		encodeTrack,
+		decodeTrack,
+		positionAt,
+		trackDuration,
+		cycleStats
+	} from '$lib/auto-track.js';
+	import { startZone, clampToStart } from '$lib/field.js';
 
 	/**
 	 * @type {{
@@ -57,6 +66,8 @@
 	let flipped = $state(false);
 	let full = $state(false);
 	let portrait = $state(false);
+	/** Index of the climb interval waiting for its rung, or null. */
+	let askLevelFor = $state(null);
 
 	// Full screen on a phone held upright is width-bound — the field is half
 	// again as wide as it is tall, so it bought 2% and left 607px of height
@@ -68,12 +79,31 @@
 	// screen to solve a problem that page does not have.
 	const rotated = $derived(full && portrait);
 
+	// Measured from the viewport rather than asked of a media query.
+	//
+	// `matchMedia('(orientation: portrait)')` only reports a change through an
+	// event, and that event did not fire when the viewport changed shape — CSS
+	// re-evaluated and this state did not, so the field stayed stood on end in
+	// landscape and rendered 180px wide. One source that is read on every resize
+	// cannot drift from the layout the same way.
+	//
+	// `h > w` is what `(orientation: portrait)` means in a browser anyway: it is
+	// the viewport's shape, not the device's.
 	$effect(() => {
-		const mq = window.matchMedia('(orientation: portrait)');
-		const read = () => (portrait = mq.matches);
+		// Read again whenever full screen is entered, not only on a resize event. A
+		// phone rotated while the app was backgrounded fires nothing a hidden page
+		// hears, and entering full screen is the moment the answer starts to
+		// matter — so the one user action that always precedes a recording is also
+		// a chance to re-measure.
+		full;
+		const read = () => (portrait = window.innerHeight > window.innerWidth);
 		read();
-		mq.addEventListener('change', read);
-		return () => mq.removeEventListener('change', read);
+		window.addEventListener('resize', read);
+		window.addEventListener('orientationchange', read);
+		return () => {
+			window.removeEventListener('resize', read);
+			window.removeEventListener('orientationchange', read);
+		};
 	});
 
 	let timer = null;
@@ -111,11 +141,19 @@
 	}
 
 	function place(pos) {
-		here = pos;
 		if (phase === 'place') {
-			start = pos;
+			// G303-D: "its BUMPERS overlap their ROBOT STARTING LINE." A start
+			// anywhere else is a placement that could not have happened, and a start
+			// position is the single most-asked question of this whole feature — so
+			// it is constrained at the input rather than corrected in the reading.
+			const p = clampToStart(pos, allianceColor);
+			here = p;
+			start = p;
 			emit();
-		} else if (phase === 'live') {
+			return;
+		}
+		here = pos;
+		if (phase === 'live') {
 			// Live drag only moves the robot; the sampler is what writes it down, at
 			// a fixed cadence. Recording on every pointer event instead would give a
 			// track whose density depends on how fast the scout's thumb moved, and
@@ -193,6 +231,10 @@
 		intervals = intervals;
 		phase = 'correct';
 		scrub = 0;
+		// A climb that ended at the whistle never got its question. It gets it now,
+		// where there is no clock on the answer.
+		const pending = intervals.findIndex((iv) => iv.a === 'climb' && iv.lvl == null);
+		askLevelFor = pending >= 0 ? pending : null;
 		emit();
 	}
 
@@ -210,7 +252,27 @@
 		if (t1 > t0) {
 			intervals.push({ a: action, t0: Math.min(t0, AUTO_MS), t1: Math.min(t1, AUTO_MS) });
 			intervals = intervals;
+			if (action === 'climb') askLevelFor = intervals.length - 1;
 		}
+	}
+
+	// ─── the rung ──────────────────────────────────────────────────────────────
+	//
+	// A climb has a level, and the level cannot be recorded while the robot is
+	// still climbing. So the button behaves like the others during the hold, and
+	// the question arrives when the hold ends — during the recording if there is
+	// time, and waiting in the correction pass if there is not.
+	//
+	// It is skippable. A scout who saw a robot get onto the TOWER but could not
+	// tell which rung has recorded something true; forcing a number would turn it
+	// into something false, which is Decision 4 pointed at the input.
+	function setLevel(i, lvl) {
+		if (i == null || !intervals[i]) return;
+		if (lvl == null) delete intervals[i].lvl;
+		else intervals[i].lvl = lvl;
+		intervals = intervals;
+		askLevelFor = null;
+		emit();
 	}
 
 	function dropInterval(i) {
@@ -241,7 +303,7 @@
 	// Bound on the window rather than the component: the pointer is captured by
 	// the SVG during a drag, so a listener on the recorder would only fire when
 	// focus happened to be inside it — which, mid-drag, it is not.
-	const KEYS = { a: 'collect', s: 'score', d: 'fault' };
+	const KEYS = { a: 'collect', s: 'score', d: 'fault', f: 'climb' };
 
 	function isTyping(t) {
 		return t instanceof HTMLElement && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
@@ -310,8 +372,13 @@
 
 	const remaining = $derived(Math.max(0, Math.ceil((AUTO_MS - elapsed) / 1000)));
 	const activeNow = $derived(Object.keys(held));
-	const LABELS = { collect: 'Collecting', score: 'Scoring', fault: 'Disrupted' };
-	const KEY_FOR = { collect: 'A', score: 'S', fault: 'D' };
+	// Short enough to survive a quarter of a phone's width. "Disrupted" truncated
+	// to "Disrup…" on the rail, and a control whose label is cut off is a control
+	// a scout has to remember rather than read. "Off path" is also closer to what
+	// the plan actually describes — "disrupted from its original path" — than a
+	// word that sounds like the robot's fault.
+	const LABELS = { collect: 'Collect', score: 'Score', fault: 'Off path', climb: 'Climb' };
+	const KEY_FOR = { collect: 'A', score: 'S', fault: 'D', climb: 'F' };
 </script>
 
 <div class="shell" class:full>
@@ -349,12 +416,36 @@
 </div>
 
 <div class="controls">
+	{#if askLevelFor != null}
+		<!-- Three RUNGs at 27, 45 and 63 inches. Skippable: a scout who saw a robot
+		     get onto the TOWER but could not tell which rung has recorded
+		     something true, and forcing a number would make it false. -->
+		<div class="rungs" role="group" aria-label="Which rung?">
+			<span class="say">Rung</span>
+			{#each CLIMB_LEVELS as lvl}
+				<button
+					type="button"
+					class="rung"
+					class:on={intervals[askLevelFor]?.lvl === lvl}
+					onclick={() => setLevel(askLevelFor, lvl)}
+				>
+					{lvl}
+				</button>
+			{/each}
+			<button type="button" class="rung skip" onclick={() => setLevel(askLevelFor, null)}>
+				Not sure
+			</button>
+		</div>
+	{/if}
+
 	{#if phase === 'place'}
 		<p class="say">
 			{#if start}Starting {zone ?? 'position'} set.{:else}Drag the robot to where it starts.{/if}
 		</p>
 		<div class="row">
-			<Button variant="primary" disabled={!start} onclick={begin}>Start recording</Button>
+			<Button variant="primary" disabled={!start} onclick={begin}>
+				Start recording<kbd class="on-btn">↵</kbd>
+			</Button>
 			<Button variant="ghost" onclick={() => (flipped = !flipped)}>
 				Wall {flipped ? 'left' : 'right'}
 			</Button>
@@ -365,7 +456,7 @@
 	{:else if phase === 'live'}
 		<p class="say live" aria-live="polite">{remaining}s</p>
 		<div class="row">
-			<Button variant="ghost" onclick={finish}>Stop early</Button>
+			<Button variant="ghost" onclick={finish}>Stop<kbd class="on-btn">esc</kbd></Button>
 			<Button variant="ghost" onclick={() => (handed = handed === 'right' ? 'left' : 'right')}>
 				Buttons {handed === 'right' ? 'left' : 'right'}
 			</Button>
@@ -397,11 +488,15 @@
 			<ul class="ivs">
 				{#each intervals as iv, i}
 					<li>
-						<span class="what {iv.a}">{LABELS[iv.a]}</span>
+						<span class="what {iv.a}">{LABELS[iv.a]}{#if iv.a === 'climb' && iv.lvl}
+								<span class="lvl">L{iv.lvl}</span>{/if}</span>
 						<span class="when">{(iv.t0 / 1000).toFixed(1)}–{(iv.t1 / 1000).toFixed(1)}s</span>
-						<button type="button" class="drop" onclick={() => dropInterval(i)}>
-							Remove
-						</button>
+						{#if iv.a === 'climb'}
+							<button type="button" class="drop" onclick={() => (askLevelFor = i)}>
+								{iv.lvl ? 'Change rung' : 'Set rung'}
+							</button>
+						{/if}
+						<button type="button" class="drop" onclick={() => dropInterval(i)}>Remove</button>
 					</li>
 				{/each}
 			</ul>
@@ -481,9 +576,17 @@
 		max-width: 100%;
 		max-height: 100%;
 	}
+	/* The controls own a share of the screen and scroll inside it. Before this
+	   they were `flex: none` with no bound, so in full screen a recording with
+	   several intervals pushed the row of buttons past the bottom edge with
+	   nothing to scroll — the field had taken the space and `overflow: hidden` on
+	   the shell did the rest. */
 	.shell.full .controls {
-		flex: none;
+		flex: 0 1 auto;
+		min-height: 0;
+		overflow-y: auto;
 		margin-top: 0;
+		padding-bottom: env(safe-area-inset-bottom, 0);
 	}
 
 	/* ─── landscape full screen: the controls go BESIDE the field ────────────
@@ -519,6 +622,9 @@
 		gap: var(--space-2);
 		grid-auto-flow: column;
 		grid-auto-columns: minmax(0, 1fr);
+		/* Four actions now. Without this the rail is as wide as its widest label
+		   times four and overflows a phone rather than sharing the width. */
+		min-width: 0;
 	}
 
 	/* The plan asks for the rail to swap sides for whichever hand holds the phone.
@@ -528,13 +634,19 @@
 		direction: rtl;
 	}
 
+	/* The label and its key on one line, centred, with the text allowed to shrink.
+	   Stacked they made a tall lozenge whose height changed with whether the key
+	   hint was showing, so the rail's rows were different sizes on a laptop and a
+	   phone. `min-width: 0` is what stops "Disrupted" from forcing the button
+	   wider than its grid track and pushing the rail off a full-screen edge. */
 	.act {
 		display: flex;
-		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 2px;
-		min-height: calc(var(--tap-min) * 1.4);
+		gap: var(--space-2);
+		min-width: 0;
+		min-height: calc(var(--tap-min) * 1.25);
+		padding: 0 var(--space-2);
 		border: 2px solid var(--border-strong);
 		border-radius: var(--radius-md);
 		background: var(--bg-card);
@@ -545,6 +657,12 @@
 		   interval never closes. */
 		touch-action: none;
 		user-select: none;
+	}
+	.act .what {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.act:focus-visible {
 		outline: 2px solid var(--accent);
@@ -623,6 +741,62 @@
 		text-align: right;
 	}
 
+	.rungs {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+	}
+	.rung {
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
+		border: 2px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--text-primary);
+		font: inherit;
+		font-weight: 600;
+	}
+	.rung:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.rung.on {
+		background: var(--accent);
+		color: var(--on-accent);
+		border-color: var(--accent);
+	}
+	.rung.skip {
+		font-weight: 400;
+		color: var(--text-muted);
+	}
+
+	.lvl {
+		margin-left: var(--space-1);
+		color: var(--text-muted);
+		font-weight: 400;
+	}
+
+	/* A key badge sitting inside a Button. It is authored HERE, as Button's
+	   children, so it already carries this component's scope hash — no :global()
+	   is needed and Svelte will not scope a selector written after one anyway. */
+	kbd.on-btn {
+		font: inherit;
+		font-size: var(--fs-xs);
+		font-weight: 400;
+		margin-left: var(--space-2);
+		opacity: 0.75;
+		border: 1px solid currentColor;
+		border-radius: var(--radius-sm);
+		padding: 0 var(--space-1);
+	}
+	@media (pointer: coarse) {
+		kbd.on-btn {
+			display: none;
+		}
+	}
+
 	.ivs {
 		list-style: none;
 		margin: 0;
@@ -678,7 +852,11 @@
 		.rail {
 			grid-auto-flow: row;
 			grid-auto-columns: auto;
-			min-width: 9rem;
+			/* A floor, not a fixed width: the rail sits beside the field and a fixed
+			   width takes room the field needs on a phone turned sideways. */
+			min-width: 7rem;
+			max-width: 11rem;
+			align-content: center;
 		}
 	}
 </style>

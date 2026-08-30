@@ -250,9 +250,20 @@ gets pushed, and gets used before the recorder is written.
     start of a recording; in portrait the field stands on end (2.5× the area),
     and in landscape the controls move beside it rather than under it — stacked,
     full screen rendered a *smaller* field than the form did, 449px against 472.
-11. **A / S / D hold the three actions on a keyboard**, shown on the controls
-    rather than explained beside them, and hidden where the pointer is coarse.
-    Enter starts a recording, Escape stops one.
+11. **A / S / D / F hold the four actions on a keyboard**, Enter starts and
+    Escape stops, each shown on its own control rather than explained beside it
+    and hidden where the pointer is coarse.
+12. **A climb button that asks which rung.** The TOWER has three, and the level
+    is optional — a scout who saw a robot get up but could not tell how far has
+    recorded something true.
+13. **The whole field, and a constrained start.** Researched against the manual
+    rather than the plan: there is no rule confining a robot to its own half in
+    auto (G403 restricts *contact* past the centre line), so a cut field would
+    have had nowhere to put a robot that crossed and its path would have
+    flattened against the edge as though it had parked. What IS constrained is
+    the start — G303-D, bumpers overlapping the ROBOT STARTING LINE — and the
+    robot is now drawn at the 34in R104 allows rather than a fixed 48 units that
+    had been about 70% of a robot.
 
 **The field is the real 2026 REBUILT field**, built in `field.js` from FIRST's
 published dimensions — 651.2in × 317.7in, two 47in HUBs each 158.6in from their

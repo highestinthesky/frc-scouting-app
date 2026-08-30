@@ -21,6 +21,9 @@ import {
 	HALF_ROBOT_Y,
 	START_BANDS,
 	startZone,
+	clampToStart,
+	STARTING_LINE,
+	ROBOT_SIZE_IN,
 	clampToField,
 	toDrawn,
 	fromDrawn,
@@ -45,9 +48,18 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 	// 651.2in by 317.7in.
 	ok('the field is 651.2 by 317.7 inches', near(FIELD_ASPECT, 651.2 / 317.7, 1e-9));
 
-	// A robot may not enter the opponent's ALLIANCE ZONE in auto, and that zone is
-	// 158.6in deep, so the picture stops 158.6in short of the far wall.
-	ok('the cut is the opponent alliance zone', near(DRAWN.x1, (651.2 - 158.6) / 651.2, 1e-9));
+	// The whole field is drawn. `docs/auto-scouting-plan.md` assumed robots are
+	// confined to their own half in auto and this was built cut on that basis;
+	// the 2026 manual has no such rule. G403 restricts CONTACT past the centre
+	// line, not territory. A cut field would have had nowhere to put a robot that
+	// crossed, and its path would have flattened against the edge as though it
+	// had parked there — recording something false rather than nothing.
+	ok('the whole field is drawn', DRAWN.x1 === 1 && DRAWN.y1 === 1);
+
+	// R104: 110in frame perimeter, so a square robot is 27.5in a side; bumpers add
+	// about 3.25in per side. BUMPERS are what the rules measure — G303 places a
+	// robot by where its bumpers are — so that is what this measures too.
+	ok('a robot is 34in across, bumpers included', near(ROBOT_SIZE_IN, 34, 1e-9));
 
 	const hubs = OBSTACLES.filter((o) => o.label.includes('hub'));
 	ok('there are two HUBs, not one', hubs.length === 2);
@@ -60,10 +72,11 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 	// 47in square.
 	ok('a HUB is a 47in square', near(hubs[0].w, 47 / 651.2, 1e-9) && near(hubs[0].h, 47 / 317.7, 1e-9));
 
-	// The far HUB straddles the cut, so half of it is reachable and it must be
-	// drawn and collided with rather than clipped away.
-	ok('the far HUB straddles the cut edge',
-		hubs[1].x - hubs[1].w / 2 < DRAWN.x1 && hubs[1].x + hubs[1].w / 2 > DRAWN.x1);
+	// Both ends are furnished, because both ends are reachable.
+	ok('the opponent end has its structures too',
+		OBSTACLES.filter((o) => o.label.startsWith('far')).length === 2);
+	ok('and they mirror the near ones',
+		near(hubs[0].x, 1 - hubs[1].x, 1e-9));
 }
 
 // ─── BUMPs and TRENCHes are landmarks, not walls ───────────────────────────
@@ -128,7 +141,8 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 
 	const far = clampToField({ x: 5, y: 5 });
 	ok('and off the far corner', far.x <= DRAWN.x1 && far.y <= DRAWN.y1);
-	ok('the cut is the boundary, not the full field', far.x < 1);
+	ok('and it can reach the opponent wall, because auto allows that',
+		far.x > 0.9);
 }
 
 // ─── a robot cannot be inside a HUB, or the DEPOT ──────────────────────────
@@ -181,12 +195,12 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 	ok('the drawn box left edge is u=0', near(toDrawn({ x: DRAWN.x0, y: 0 }).u, 0));
 	ok('the drawn box right edge is u=1', near(toDrawn({ x: DRAWN.x1, y: 0 }).u, 1));
 
-	// The cut is 76% of the field, so the middle of the PICTURE is not the middle
-	// of the FIELD. Confusing the two is the bug this separation exists to stop.
-	ok('the centre of the picture is not the centre of the field',
-		!near(fromDrawn(0.5, 0.5).x, 0.5, 0.01));
-	// And specifically: the centre line sits past the middle of the picture.
-	ok('the centre line is right of the picture centre', toDrawn({ x: 0.5, y: 0.5 }).u > 0.5);
+	// The picture is the whole field today, so these agree. The separation stays
+	// because a season that cuts the drawn region again must not rescale a single
+	// stored path — the cut is a property of the picture, not of the data.
+	ok('the picture currently spans the whole field',
+		near(fromDrawn(0.5, 0.5).x, 0.5, 1e-9));
+	ok('the far wall is the far edge', near(toDrawn({ x: 1, y: 0 }).u, 1, 1e-9));
 }
 
 // ─── presentation: turning the view around, and standing it on end ─────────
@@ -238,6 +252,44 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 		const c = toScreen(0.5, 0.5, view);
 		ok(`${JSON.stringify(view)} leaves the centre alone`, near(c.u, 0.5) && near(c.v, 0.5));
 	}
+}
+
+// ─── where a robot may start ───────────────────────────────────────────────
+//
+// G303-D: "its BUMPERS overlap their ROBOT STARTING LINE." Not anywhere in the
+// alliance zone and not anywhere on the field — straddling one line. Anything
+// else is a placement that could not have happened, and a start position is the
+// single most-asked question of this whole feature.
+{
+	const halfRobot = HALF_ROBOT_X;
+
+	// Dragged to the middle of the field, a red robot comes back to the line.
+	const red = clampToStart({ x: 0.5, y: 0.3 }, 'red');
+	ok('a red start is pulled back to its starting line',
+		Math.abs(red.x - STARTING_LINE) <= halfRobot + 1e-9);
+	ok('and only its bumpers may overlap, not its centre',
+		near(red.x, STARTING_LINE + halfRobot, 1e-6));
+
+	// Blue starts at the other end, and the constraint mirrors with it.
+	const blue = clampToStart({ x: 0.5, y: 0.3 }, 'blue');
+	ok('a blue start is pulled to the far line',
+		Math.abs(blue.x - (1 - STARTING_LINE)) <= halfRobot + 1e-9);
+	ok('red and blue start lines mirror', near(red.x, 1 - blue.x, 1e-9));
+
+	// Across the field is unconstrained — the rule is about one line, not a box.
+	ok('the across-field position is left alone', near(clampToStart({ x: 0.5, y: 0.12 }, 'red').y, 0.12));
+
+	// A legal start is untouched.
+	const legal = { x: STARTING_LINE, y: 0.15 };
+	ok('a legal start is not moved',
+		near(clampToStart(legal, 'red').x, legal.x, 1e-6));
+
+	// And it still cannot end up inside a structure.
+	const intoHub = clampToStart({ x: STARTING_LINE, y: 0.5 }, 'red');
+	const hub = OBSTACLES.find((o) => o.label === 'hub');
+	ok('a start cannot be inside the HUB',
+		Math.abs(intoHub.x - hub.x) >= hub.w / 2 + HALF_ROBOT_X - 1e-9 ||
+			Math.abs(intoHub.y - hub.y) >= hub.h / 2 + HALF_ROBOT_Y - 1e-9);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

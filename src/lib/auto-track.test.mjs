@@ -9,6 +9,7 @@
 
 import {
 	TRACK_VERSION,
+	CLIMB_LEVELS,
 	SAMPLE_HZ,
 	ACTIONS,
 	encodeTrack,
@@ -155,7 +156,8 @@ function synth(n = 150) {
 	const d = decodeTrack(t);
 	ok('coordinates are clamped to the field', d.samples[0].x === 0 && d.samples[0].y === 1);
 	ok('only real actions survive', d.intervals.length === 1 && d.intervals[0].a === 'fault');
-	ok('the action set is closed', ACTIONS.length === 3 && ACTIONS.includes('fault'));
+	ok('the action set is closed',
+		ACTIONS.length === 4 && ACTIONS.includes('fault') && ACTIONS.includes('climb'));
 }
 
 // ─── first movement, which is how six recordings line up ───────────────────
@@ -264,6 +266,57 @@ function synth(n = 150) {
 	// Two concepts must not share a name.
 	ok('the free-text autoPathing field is not mistaken for one',
 		readTrack({ observations: { autoPathing: 'three piece middle' } }) === null);
+}
+
+// ─── the climb, and its rung ───────────────────────────────────────────────
+//
+// The TOWER has three RUNGs. The level rides on the interval rather than being a
+// fourth thing to store, and it is OPTIONAL — a scout who saw a robot get up but
+// could not tell which rung has recorded something true, and forcing a guess
+// would turn it into something false.
+{
+	const climb = (lvl) =>
+		decodeTrack(encodeTrack({ intervals: [{ a: 'climb', t0: 1000, t1: 4000, lvl }] }));
+
+	ok('there are three rungs', CLIMB_LEVELS.length === 3);
+	ok('a level survives the round trip', climb(2).intervals[0].lvl === 2);
+	ok('and is reported', cycleStats(climb(3)).climbLevel === 3);
+
+	// null, not 0. "Climbed, rung unknown" and "did not climb" are different
+	// facts and collapsing them into one number is the blank-is-not-zero bug.
+	const unknown = climb(undefined);
+	ok('a climb with no level still counts as a climb', cycleStats(unknown).climbed === true);
+	ok('and its level is null, not zero', cycleStats(unknown).climbLevel === null);
+	ok('a track with no climb reports neither',
+		cycleStats(decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] }))).climbed === false);
+
+	// A rung that does not exist is not a rung.
+	ok('an invalid level is dropped, not stored', climb(9).intervals[0].lvl === undefined);
+	ok('and zero is not a level', climb(0).intervals[0].lvl === undefined);
+
+	// Best rung, not last and not mean: a robot that slipped and got back up did
+	// reach the higher one.
+	const twice = decodeTrack(
+		encodeTrack({
+			intervals: [
+				{ a: 'climb', t0: 1000, t1: 2000, lvl: 3 },
+				{ a: 'climb', t0: 3000, t1: 4000, lvl: 1 }
+			]
+		})
+	);
+	ok('the best rung is reported, not the last', cycleStats(twice).climbLevel === 3);
+	ok('time climbing is summed across attempts', cycleStats(twice).msClimbing === 2000);
+
+	// A level only means something on a climb.
+	const scored = decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500, lvl: 2 }] }));
+	ok('a level on a non-climb is dropped', scored.intervals[0].lvl === undefined);
+
+	// In the signature without the level: "they climb" is a route, and splitting
+	// eleven identical autos across three rungs buries it under the variation.
+	ok('a climb is in the route signature',
+		routeSignature(climb(2), 'Middle') === 'Middle → climb');
+	ok('and two different rungs are the same route',
+		routeSignature(climb(1), 'Middle') === routeSignature(climb(3), 'Middle'));
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

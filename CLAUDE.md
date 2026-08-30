@@ -321,6 +321,11 @@ A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — se
 - **Coordinates are fractions of the FULL field**, never the drawn (cut) region
   and never alliance-relative. `field.js` holds the season geometry and derives
   the alliance-relative answers — start zone, orientation — at display time.
+  The **whole** field is drawn: the plan assumed robots are confined to their own
+  half in auto and there is no such rule (G403 restricts *contact* past the
+  centre line, not territory), so a cut field would have had nowhere to put a
+  robot that crossed. A **start** position is constrained instead, by G303-D —
+  bumpers must overlap the ROBOT STARTING LINE.
   It is the real 2026 REBUILT field, kept in **inches as FIRST publishes them**
   and converted once, because `0.2435` cannot be checked against a game manual
   and `158.6` can. The picture and the collision test read the same numbers, so
