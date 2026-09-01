@@ -17,7 +17,9 @@
 	import { onDestroy } from 'svelte';
 	import AutoField from '$lib/components/AutoField.svelte';
 	import Button from '$lib/components/Button.svelte';
-	import { firstMovementAt, trackDuration, readTrack } from '$lib/auto-track.js';
+	import { firstMovementAt, trackDuration, readTrack, flipTrack } from '$lib/auto-track.js';
+	import { correctEntryTrack } from '$lib/sync.svelte.js';
+	import { auth } from '$lib/auth.svelte.js';
 
 	/** @type {{ seats?: Array<{teamNumber:number, allianceColor:string, entries:any[]}> }} */
 	let { seats = [] } = $props();
@@ -26,6 +28,8 @@
 	let playing = $state(false);
 	let flipped = $state(false);
 	let nudges = $state({});
+	/** teamNumber -> message, while a correction is in flight or has failed. */
+	let fixing = $state({});
 	let raf = null;
 	let last = 0;
 
@@ -44,6 +48,7 @@
 				if (!withTrack) return null;
 				const track = readTrack(withTrack);
 				return {
+					entry: withTrack,
 					teamNumber: s.teamNumber,
 					colour: s.allianceColor === 'blue' ? 'var(--alliance-blue)' : 'var(--alliance-red)',
 					track,
@@ -71,6 +76,7 @@
 			colour: r.colour,
 			track: r.track,
 			teamNumber: r.teamNumber,
+			entry: r.entry,
 			scout: r.scout,
 			offset:
 				(r.firstMove == null || reference === Infinity ? 0 : reference - r.firstMove) +
@@ -125,6 +131,30 @@
 		nudges = { ...nudges, [teamNumber]: (nudges[teamNumber] ?? 0) + ms };
 	}
 
+	/**
+	 * Turn one scout's recording end for end, and keep it.
+	 *
+	 * A robot at the wrong end of the field is the thing this page makes obvious
+	 * and nothing else does — six tracks side by side, one of them plainly
+	 * mirrored. The scout who made it may be three matches away, so the fix
+	 * belongs here rather than in a message to them.
+	 *
+	 * Through correct_entry_track() (0025), which merges the one key server-side:
+	 * a direct write would send this device's whole observations blob, and that
+	 * copy can be behind an edit the scout made a moment ago.
+	 */
+	async function flipOne(row) {
+		const next = flipTrack(row.entry?.observations?.autoTrack);
+		if (!next) {
+			fixing = { ...fixing, [row.teamNumber]: 'That recording cannot be read.' };
+			return;
+		}
+		fixing = { ...fixing, [row.teamNumber]: 'Flipping…' };
+		const res = await correctEntryTrack(row.entry, next);
+		const { [row.teamNumber]: _done, ...rest } = fixing;
+		fixing = res.ok ? rest : { ...rest, [row.teamNumber]: res.message };
+	}
+
 	onDestroy(() => {
 		playing = false;
 		if (raf) cancelAnimationFrame(raf);
@@ -171,7 +201,16 @@
 					<span class="nudge">
 						<button type="button" onclick={() => nudge(r.teamNumber, -250)} aria-label="Shift {r.teamNumber} earlier">−</button>
 						<button type="button" onclick={() => nudge(r.teamNumber, 250)} aria-label="Shift {r.teamNumber} later">+</button>
+						{#if auth.canManage}
+							<button
+								type="button"
+								class="flip"
+								onclick={() => flipOne(r)}
+								aria-label="Turn {r.teamNumber}'s recording end for end"
+							>Flip</button>
+						{/if}
 					</span>
+					{#if fixing[r.teamNumber]}<span class="fixing">{fixing[r.teamNumber]}</span>{/if}
 				</li>
 			{/each}
 		</ul>
@@ -251,6 +290,15 @@
 		display: flex;
 		gap: var(--space-1);
 		flex: none;
+	}
+	.fixing {
+		flex-basis: 100%;
+		color: var(--text-muted);
+		font-size: var(--fs-xs);
+	}
+	.nudge button.flip {
+		min-width: auto;
+		padding: 0 var(--space-2);
 	}
 	.nudge button {
 		min-width: var(--tap-min);

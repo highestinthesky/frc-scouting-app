@@ -29,7 +29,8 @@ import {
 	// before withdrawEntry could reach it — and the tombstone branch only runs
 	// once a withdrawal has succeeded somewhere, which that same bug prevented.
 	// One bug hid two.
-	deleteEntry
+	deleteEntry,
+	updateEntry
 } from './db.js';
 import { SCHEMA_VERSION } from './form-config.js';
 import { pullScheduleIfStale } from './tba.js';
@@ -493,6 +494,66 @@ export async function withdrawEntry(entry) {
 		}
 	}
 	await deleteEntry(entry.id);
+	return { ok: true };
+}
+
+/**
+ * Turn a scout's recording end for end, from a manager surface.
+ *
+ * The manager watching six recordings side by side is who notices that one is
+ * mirrored, and the scout who made it may be three matches away.
+ *
+ * ─── why the RPC rather than an ordinary update ────────────────────────────
+ *
+ * Not permission — `entries_evt_update` has permitted `manages_event(event_id)`
+ * since 0019, so a manager could write this row directly. It is that a direct
+ * write has to send the WHOLE observations blob from this device's copy, and
+ * that copy can be stale: sync is a watermark on updated_at, so an edit the
+ * scout made a moment ago may not have arrived, and writing the blob back would
+ * silently revert it. `correct_entry_track()` merges one key server-side.
+ *
+ * The local row is updated too, so the manager sees the fix immediately rather
+ * than on the next tick.
+ *
+ * @param {{id: number, remoteId?: string|null, eventCode: string, observations?: object}} entry
+ * @param {object|null} track  the corrected track, or null to remove it
+ */
+export async function correctEntryTrack(entry, track) {
+	if (!entry?.remoteId) {
+		return {
+			ok: false,
+			message: 'This entry has not synced yet, so it can only be corrected on the device that recorded it.'
+		};
+	}
+	const sid = await eventIdForCode(entry.eventCode);
+	if (!sid) {
+		return { ok: false, message: 'Not connected to this event.' };
+	}
+	const { error } = await clientFor(sid).rpc('correct_entry_track', {
+		p_id: entry.remoteId,
+		p_track: track ?? null
+	});
+	if (error) {
+		// 42501 covers TWO cases and the function refuses to say which: a caller
+		// who does not manage this event, and an entry that is not there. That is
+		// deliberate — "which entry ids exist at an event I am not on" is not a
+		// question it answers — so the message must not claim one of them.
+		//
+		// The first version said "Only a manager of this event can correct a
+		// recording", and the first time it fired the real cause was a row that had
+		// been deleted server-side. A confident wrong reason sends someone to check
+		// their permissions for an hour.
+		if (error.code === '42501' || /permission|policy/i.test(error.message)) {
+			return { ok: false, message: 'That entry could not be corrected from here.' };
+		}
+		return { ok: false, message: error.message };
+	}
+	// Merge locally in the same shape the function used, so the two cannot
+	// disagree until the next pull confirms it.
+	const next = { ...(entry.observations ?? {}) };
+	if (track) next.autoTrack = track;
+	else delete next.autoTrack;
+	await updateEntry(entry.id, { observations: next });
 	return { ok: true };
 }
 

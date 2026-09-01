@@ -1128,19 +1128,44 @@ const scout2B = await clientFor(scout2, EVENT_B);
 	// mid-match. Needs an entry the scout actually owns — entries_evt_update keys
 	// on submitted_by, so a fixture row attributed to nobody would be refused for
 	// the wrong reason and this would pass without meaning anything.
-	const [own] = await sql(
-		`insert into public.entries
-		   (event_id, event_code, match_number, team_number, alliance_color,
-		    scout_name, schema_version, created_at, submitted_by)
-		 values ($1, $2, 87, 3419, 'red', $3, 3, now(), $4)
-		 returning id`,
-		[EVENT_A.id, EVENT_A.code, `${MARK}_scout`, scout.id]
+	//
+	// Inserted BY THE SCOUT rather than with raw SQL, and asserted by the row
+	// CHANGING. Both halves were wrong and the assertion tested nothing:
+	//
+	//   * `stamp_submitted_by` is a BEFORE INSERT trigger that overwrites the
+	//     column unconditionally with auth.uid(). A raw insert carries no JWT, so
+	//     `submitted_by` landed null however explicitly it was passed — the row
+	//     was attributed to nobody and the scout never owned it.
+	//   * A PostgREST UPDATE that matches no rows reports SUCCESS, so `!error` is
+	//     true for a scout who was refused as well as one who was allowed.
+	//
+	// Found by mutation testing while adding 0025: denying every scout UPDATE left
+	// this green. The comment above about needing a row the scout actually owns
+	// was right; the code under it did not achieve it.
+	const { data: own } = await scoutA
+		.from('entries')
+		.insert(entryRow(EVENT_A, { match_number: 87, scout_name: `${MARK}_scout` }))
+		.select('id')
+		.single();
+	const [{ owner: ownOwner }] = await sql(
+		'select submitted_by as owner from public.entries where id = $1',
+		[own.id]
 	);
+	ok('the fixture entry is attributed to the scout', ownOwner === scout.id, `submitted_by=${ownOwner}`);
+
 	const { error: scoutEdit } = await scoutA
 		.from('entries')
 		.update({ team_number: 9999 })
 		.eq('id', own.id);
-	ok('a scout can still correct their own entry', !scoutEdit, scoutEdit?.message);
+	const [{ moved }] = await sql(
+		'select (team_number = 9999) as moved from public.entries where id = $1',
+		[own.id]
+	);
+	ok(
+		'a scout can still correct their own entry',
+		!scoutEdit && moved === true,
+		scoutEdit?.message ?? 'no error, but nothing changed'
+	);
 
 	const { error: mgrKill } = await managerA.rpc('withdraw_entry', { p_id: target });
 	ok('a manager withdraws an entry', !mgrKill, mgrKill?.message);
@@ -1196,6 +1221,192 @@ const scout2B = await clientFor(scout2, EVENT_B);
 		reinserted === null,
 		reinserted?.code
 	);
+}
+
+// ─── correcting a scout's recording (0025) ──────────────────────────────────
+//
+// A scout who reads the field the wrong way round records a plausible auto at
+// the wrong end. They can fix their own entry — entries_evt_update keys on
+// submitted_by — but a manager watching six recordings side by side is who
+// NOTICES it, and a manager has no UPDATE on somebody else's row.
+//
+// The authority is deliberately narrower than "a manager may edit an entry": it
+// touches ONE key inside observations. So there are two things to prove and they
+// are separate holes, which is the lesson 0021 taught the hard way — who may
+// call it, and what it is able to reach when they do.
+{
+	// Inserted BY THE SCOUT, through PostgREST, and not with raw SQL.
+	//
+	// `stamp_submitted_by` is a BEFORE INSERT trigger that overwrites the column
+	// unconditionally with auth.uid(), so a raw insert — which carries no JWT —
+	// lands `submitted_by = null` however explicitly it is passed. The first
+	// version of this block did exactly that, and mutation testing caught it: an
+	// ownership check in place of manages_event() left every assertion here green,
+	// because the scout did not own the row and was refused for a reason the
+	// assertion was not named after.
+	const { data: victim, error: victimErr } = await scoutA
+		.from('entries')
+		.insert(
+			entryRow(EVENT_A, {
+				match_number: 91,
+				scout_name: `${MARK}_scout`,
+				schema_version: 4,
+				observations: { autoTrack: { v: 1, hz: 10 }, autoScored: 7, comments: 'theirs' }
+			})
+		)
+		.select('id')
+		.single();
+	ok('a fixture entry exists for the correction tests', !victimErr && !!victim, victimErr?.message);
+
+	// The guard. Everything below reads "the scout owns this row"; if the trigger
+	// or the fixture ever stops making that true, this says so instead of six
+	// assertions quietly becoming vacuous.
+	const [{ owner }] = await sql('select submitted_by as owner from public.entries where id = $1', [
+		victim.id
+	]);
+	ok('and it is actually attributed to the scout', owner === scout.id, `submitted_by=${owner}`);
+	const obs = async () =>
+		(await sql('select observations from public.entries where id = $1', [victim.id]))[0]
+			.observations;
+
+	const FIXED = { v: 1, hz: 10, start: { x: 0.72, y: 0.75 } };
+
+	// The GRANT, asserted directly — and this is not belt-and-braces.
+	//
+	// Mutation testing: granting EXECUTE to anon left the behavioural assertion
+	// below completely green, because manages_event() refuses anon anyway. The
+	// body's authority check and the ACL are separate holes and the body being
+	// right is exactly what makes the grant look fine. That is how 0021 shipped a
+	// column grant under a comment denying it existed.
+	//
+	// A function is EXECUTE-to-PUBLIC by default, and production's default ACL
+	// adds an explicit anon grant on top, so closing it takes both halves.
+	{
+		const fn = 'correct_entry_track(uuid,jsonb)';
+		const [{ anon_x, auth_x }] = await sql(
+			`select has_function_privilege('anon',          'public.${fn}', 'EXECUTE') as anon_x,
+			        has_function_privilege('authenticated', 'public.${fn}', 'EXECUTE') as auth_x`
+		);
+		ok(
+			'correct_entry_track is granted to authenticated alone',
+			!anon_x && auth_x,
+			`anon=${anon_x} auth=${auth_x}`
+		);
+	}
+
+	// And the behaviour, which speaks for the body rather than the ACL.
+	const { error: anonFix } = await anonA.rpc('correct_entry_track', {
+		p_id: victim.id,
+		p_track: FIXED
+	});
+	ok('anon cannot correct a recording', !!anonFix, anonFix ? `denied (${anonFix.code})` : 'allowed');
+
+	// A scout calling the RPC on their OWN entry is refused. This is the
+	// mutation-resistant one: the check is on managing the event, not on owning
+	// the row, and a version that tested ownership would pass every other
+	// assertion here. The scout keeps the ordinary UPDATE path, asserted below.
+	const { error: ownerRpc } = await scoutA.rpc('correct_entry_track', {
+		p_id: victim.id,
+		p_track: FIXED
+	});
+	ok(
+		'a scout cannot use the RPC even on their own entry',
+		!!ownerRpc && (await obs()).autoTrack.start === undefined,
+		ownerRpc ? `denied (${ownerRpc.code})` : 'allowed'
+	);
+
+	// ...and still has the path they actually use, or the narrowing above would
+	// have taken away the fix a scout makes for themselves.
+	//
+	// Asserted by the ROW CHANGING, not by the absence of an error: a PostgREST
+	// UPDATE that matches no rows reports success, so `!error` alone is true for a
+	// scout who was refused as well as one who was allowed.
+	const { error: ownerDirect } = await scoutA
+		.from('entries')
+		.update({ observations: { autoTrack: FIXED, autoScored: 7, comments: 'theirs' } })
+		.eq('id', victim.id);
+	ok(
+		'a scout still corrects their own entry directly',
+		!ownerDirect && (await obs()).autoTrack?.start?.x === 0.72,
+		ownerDirect?.message ?? 'no error, but nothing changed'
+	);
+
+	// A scout who does NOT own the row has neither path.
+	const { error: otherRpc } = await scout2A.rpc('correct_entry_track', {
+		p_id: victim.id,
+		p_track: { v: 1, hz: 10, start: { x: 0.1, y: 0.1 } }
+	});
+	const { error: otherDirect } = await scout2A
+		.from('entries')
+		.update({ observations: {} })
+		.eq('id', victim.id);
+	const afterOthers = await obs();
+	ok(
+		'another scout cannot correct it by either route',
+		!!otherRpc && afterOthers.autoScored === 7,
+		otherRpc ? `denied (${otherRpc.code})` : 'allowed'
+	);
+	ok('and the direct write is refused too', afterOthers.autoScored === 7, otherDirect?.code);
+
+	// The manager, who is the point of the migration.
+	const { error: mgrFix } = await managerA.rpc('correct_entry_track', {
+		p_id: victim.id,
+		p_track: FIXED
+	});
+	const fixed = await obs();
+	ok('a manager corrects a recording they did not submit', !mgrFix, mgrFix?.message);
+	ok('and the track is actually replaced', fixed.autoTrack?.start?.x === 0.72);
+
+	// The narrowing, asserted as its own fact. A version that replaced the whole
+	// observations blob would pass every assertion above and lose the scout's
+	// counts and notes without a word.
+	ok('every other observation survives untouched',
+		fixed.autoScored === 7 && fixed.comments === 'theirs');
+
+	// A manager of a DIFFERENT event. manages_event() is the predicate and this is
+	// what proves it is being consulted rather than "is a manager at all".
+	const [otherEntry] = await sql(
+		`insert into public.entries
+		   (event_id, event_code, match_number, team_number, alliance_color,
+		    scout_name, schema_version, created_at)
+		 values ($1, $2, 92, 3419, 'red', $3, 4, now())
+		 returning id`,
+		[EVENT_B.id, EVENT_B.code, `${MARK}_scout`]
+	);
+	const { error: crossEvent } = await managerA.rpc('correct_entry_track', {
+		p_id: otherEntry.id,
+		p_track: FIXED
+	});
+	ok(
+		'a manager cannot correct an entry at an event they do not manage',
+		!!crossEvent,
+		crossEvent ? `denied (${crossEvent.code})` : 'allowed'
+	);
+
+	// null removes the KEY rather than writing an empty value into it. Blank is
+	// not zero: readTrack() reports an absent key as "not recorded", and an
+	// `autoTrack: null` would still be a key with a value.
+	await managerA.rpc('correct_entry_track', { p_id: victim.id, p_track: null });
+	const cleared = await obs();
+	ok('null removes the recording', !('autoTrack' in cleared));
+	ok('and still leaves the rest alone', cleared.autoScored === 7);
+
+	// Junk is refused rather than stored. decodeTrack() would report a malformed
+	// payload as "no recording", which is safe — but storing it means the row now
+	// carries something no reader understands.
+	const { error: junk } = await managerA.rpc('correct_entry_track', {
+		p_id: victim.id,
+		p_track: 42
+	});
+	ok('a non-object recording is refused', !!junk, junk ? `denied (${junk.code})` : 'allowed');
+
+	// An id that does not exist reports the same as one out of reach. "Which
+	// entry ids exist at an event I am not on" is not a question this answers.
+	const { error: ghost } = await managerA.rpc('correct_entry_track', {
+		p_id: '00000000-0000-4000-8000-000000000000',
+		p_track: FIXED
+	});
+	ok('a missing entry is refused like an unreachable one', !!ghost, ghost?.code);
 }
 
 // ─── the invite carries the name (0023) ─────────────────────────────────────

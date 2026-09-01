@@ -298,6 +298,12 @@ answer.
 
 ## Where things stood
 
+**Production is at migration `0025`** (applied 2026-09-01), which is
+`correct_entry_track()` — a manager correcting a scout's recording. It grants
+nothing: `entries_evt_update` already permitted `manages_event()`. It NARROWS,
+by merging one key server-side instead of writing the whole observations blob
+from a possibly-stale copy.
+
 **v0.80 and v0.81 shipped and deployed, 2026-08-29.** Working tree clean, CI
 green, nothing unpushed. Production is at migration `0024`, `AUTH_ENFORCED` is
 true, and **no migration was needed for any of v0.81** — the auto recording rides
@@ -324,6 +330,28 @@ somewhere to be played back:
 
     /studio/<eventCode>/q<n>            one match, and the replay
     /studio/<eventCode>/team/<n>        one team, at this event and this season
+
+### Two lessons from adding 0025, both about tests that lie
+
+Mutation testing found both, and neither was visible any other way.
+
+- **`stamp_submitted_by` overwrites `submitted_by` on every INSERT** with
+  `auth.uid()`. A raw-SQL fixture carries no JWT, so the column lands **null**
+  however explicitly it is passed, and the row belongs to nobody. Two assertions
+  were built on such a fixture and neither tested what it was named after.
+  Insert fixtures **as the user**, through PostgREST.
+- **A PostgREST UPDATE that matches no rows reports SUCCESS.** So `!error` is
+  true for a caller who was refused as well as one who was allowed. Assert the
+  row **changed**, never the absence of an error.
+
+Both bugs were also present in the pre-existing withdraw block — "a scout can
+still correct their own entry" stayed green with every scout UPDATE denied — and
+are now repaired there too.
+
+The other half of the discipline: **assert the GRANT separately from the
+behaviour.** Granting EXECUTE on the new RPC to `anon` left the behavioural
+assertion completely green, because `manages_event()` refuses anon anyway. That
+is `0021` exactly — the body being right is what makes the grant look fine.
 
 ### The five things most likely to be broken by an innocent change
 

@@ -363,6 +363,16 @@ Access tokens last **four days**, not the Supabase default hour — see the sess
 settings below. That makes a refresh during an event unlikely rather than
 hourly, which is belt to this braces, not a replacement for it.
 
+**A manager may correct a recording, and that is a NARROWING not a grant.**
+`entries_evt_update` has permitted `manages_event(event_id)` since `0019`, so a
+manager could always write another scout's entry. `0025`'s
+`correct_entry_track()` exists because the ordinary UPDATE sends the *whole*
+`observations` blob from a device whose copy may be stale — sync is a watermark,
+so it can silently revert an edit the scout just made — and because fixing where
+a robot was *drawn* should not be able to change what it *scored*. The RPC merges
+one key server-side. Its first header claimed it granted a permission that
+already existed; that claim is the `0021` mistake in a new file.
+
 **`0011`, `0012` and `0013` live in `supabase/superseded/`, not `migrations/`.**
 None was ever applied to production. `0019` and `0020` replaced them and
 borrowed what was right: membership gating, role gating, the attribution trigger
