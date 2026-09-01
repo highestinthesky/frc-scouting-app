@@ -89,16 +89,6 @@ const HUB_OPENING_IN = 41.7;
 const TOWER_WIDTH_IN = 90;
 const TOWER_DEPTH_IN = 12;
 
-/**
- * Where FUEL is staged in the NEUTRAL ZONE.
- *
- * Read off the team's field image rather than a drawing — the manual excerpts to
- * hand do not give it — so it is a FEATURE and never an obstacle, and being a
- * few inches out costs nothing but a slightly wrong picture.
- */
-const STAGE_LENGTH_IN = 94;
-const STAGE_WIDTH_IN = 183;
-
 /** BUMP: driven OVER. 73in wide, 44.4in deep, 6.5in tall. Landmark, not wall. */
 const BUMP_WIDTH_IN = 73;
 const BUMP_DEPTH_IN = 44.4;
@@ -280,14 +270,9 @@ const nearMarks = [
 export const FEATURES = Object.freeze([
 	...nearMarks,
 	...nearMarks.map((m) => (m.kind === 'line' ? { ...m, x: 1 - m.x, label: 'far starting line' } : mirrorX(m))),
-	{
-		kind: 'rect',
-		label: 'stage',
-		x: 0.5,
-		y: 0.5,
-		w: fx(STAGE_LENGTH_IN),
-		h: fy(STAGE_WIDTH_IN)
-	},
+	// No FUEL staging area. It was read off the field image, it is not something a
+	// robot's position is ever measured against, and a large soft rectangle across
+	// the middle of the picture competes with the path being drawn over it.
 	{ kind: 'line', label: 'centre line', x: 0.5 }
 ]);
 

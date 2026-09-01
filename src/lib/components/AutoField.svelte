@@ -486,10 +486,6 @@
 		fill: var(--bg-elev);
 		opacity: 0.6;
 	}
-	.mark.stage {
-		fill: var(--warning);
-		opacity: 0.22;
-	}
 	.mark.tower {
 		fill: var(--border-strong);
 		opacity: 0.5;
