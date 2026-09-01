@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <title>Malfunction</title>
+  <path fill="#DC2626" d="M112.4 36.2C119.3 24.2 136.7 24.2 143.6 36.2L228.2 183C235.1 195 226.4 210 212.6 210H43.4C29.6 210 20.9 195 27.8 183L112.4 36.2Z"/>
+  <path stroke="#FFFFFF" stroke-width="18" stroke-linecap="round" d="M128 82V145"/>
+  <circle cx="128" cy="177" r="11" fill="#FFFFFF"/>
+</svg>

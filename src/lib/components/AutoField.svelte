@@ -41,7 +41,7 @@
 		toScreen,
 		fromScreen
 	} from '$lib/field.js';
-	import { ACTIONS, positionAt, actionsAt, trackDuration } from '$lib/auto-track.js';
+	import { ACTIONS, CLIMB_LEVELS, positionAt, marksAt, trackDuration } from '$lib/auto-track.js';
 
 	/**
 	 * @type {{
@@ -52,7 +52,7 @@
 	 *   t?: number,
 	 *   flipped?: boolean,
 	 *   rotated?: boolean,
-	 *   active?: string[],
+	 *   active?: Array<{a: string, lvl?: number, ok?: boolean}>,
 	 *   onmove?: (pos: {x:number,y:number}) => void
 	 * }}
 	 */
@@ -255,7 +255,7 @@
 							...place(pos),
 							label: row.label,
 							colour: row.colour ?? '',
-							doing: actionsAt(row.track, local),
+							doing: marksAt(row.track, local),
 							// Past its own end, a robot is drawn faded rather than removed:
 							// disappearing reads as "it left the field", which is a claim the
 							// recording does not make.
@@ -313,29 +313,98 @@
 	// already carrying its colour and its number.
 	const BADGE_R = 20;
 	const BADGE_GAP = 5;
+	/**
+	 * How much of the disc the glyph spans.
+	 *
+	 * The source icons already carry their own margin inside the 256 box — the
+	 * ladder runs 42..120 of 256 — so this is clear space on top of that, not
+	 * instead of it. 0.86 measured legible at the phone size; smaller and the
+	 * climb numerals close up.
+	 */
+	const GLYPH_FILL = 0.86;
 
 	/**
-	 * Glyphs in a local box of roughly +/-7 around the chip's centre.
+	 * The icons, in their own 256x256 space.
 	 *
-	 * Stroked, not filled, so they hold their weight when the whole picture is
-	 * scaled down to a phone. Both cycle actions share a baseline at the bottom —
-	 * the robot's own edge — and differ only in which way the arrow runs.
+	 * Taken verbatim from `icons/robot-action-icons/svg/` — the path data is the
+	 * designer's, and it is drawn at its native size and placed with a single
+	 * transform rather than re-traced into chip units. Re-tracing is how a set of
+	 * icons stops matching the file it came from.
+	 *
+	 * Two things are deliberately NOT verbatim. The colours are stripped: the
+	 * source hardcodes #111827, #DC2626 and white, which are three literals that
+	 * would be invisible in dark mode and outside every contrast guarantee this
+	 * app holds. They are re-applied from tokens in CSS below. And the geometry
+	 * is grouped by ROLE — outline, solid, warning, mark — so the stylesheet has
+	 * something to colour.
+	 *
+	 * The climb set is nine icons expressing two independent facts: a ladder or a
+	 * warning triangle for whether it came off, and a numeral for which rung. The
+	 * two cases the set does not cover are the ones where the rung is unknown,
+	 * which is a real answer here — so `LADDER` and the small warning are
+	 * composed for those rather than picking a numeral nobody recorded.
 	 */
-	const GLYPH = {
-		collect: 'M-7,8 H7 M0,-8 V4 M-4.5,-0.5 L0,4 L4.5,-0.5',
-		score: 'M-7,8 H7 M0,4 V-8 M-4.5,-3.5 L0,-8 L4.5,-3.5',
-		climb: 'M-6,8 L0,2 L6,8 M-6,1 L0,-5 L6,1',
-		// The bang's dot is a zero-length segment: with a round linecap it draws
-		// as a disc of exactly the stroke width, so it scales with the glyph
-		// instead of needing its own radius kept in step by hand.
-		fault: 'M0,-8 V2 M0,7 V7'
+	const ICON_BOX = 256;
+
+	/** The ladder, shared by every made climb. */
+	const LADDER = 'M58 44V212M104 44V212 M42 64H120M42 108H120M42 152H120M42 196H120';
+
+	/** The numerals, as the designer drew them. */
+	const RUNG = {
+		1: 'M172.8 188V91.2L149.2 105.4V80.6L174.9 64H200.7V188H172.8Z',
+		2: 'M146 188V166.5L184.2 127.2C192.5 118.6 196.7 110.9 196.7 104C196.7 97.7 193 93.4 186.4 93.4C179.4 93.4 175 98.2 174.5 108.1H146.5C147.1 78.7 162.9 62 188.1 62C212.2 62 225 77 225 101.1C225 116.8 217.4 129.9 202.2 145.4L184.8 163H226V188H146Z',
+		3: 'M145 148H172C172.6 159.5 177.2 165.6 186.7 165.6C195.1 165.6 199.8 160.5 199.8 152.8C199.8 143.5 194.2 139.6 182.2 139.6H174.6V117.7H182.8C193.2 117.7 198.2 113.5 198.2 105.7C198.2 98.3 193.8 93.8 186.4 93.8C178.2 93.8 173.8 99.2 173.2 109.2H146.4C147 79.8 163.6 62 187.4 62C211.5 62 225 77.1 225 98.8C225 113.4 218 123.4 207 128.4C220 133.3 227.4 144.2 227.4 158.6C227.4 180 211.6 191 187 191C160.8 191 145.6 175.5 145 148Z'
 	};
+	/** Rung 3 is drawn 3 units high in the source; keep its own nudge. */
+	const RUNG_SHIFT = { 1: 0, 2: 0, 3: -3 };
+
+	/**
+	 * Centring for the case the icon set does not draw.
+	 *
+	 * Every climb icon is a two-slot composition: the ladder or the warning
+	 * triangle on the left, the numeral on the right. With no rung recorded there
+	 * is nothing in the right slot, and the left one alone sits visibly off to one
+	 * side of the disc. The ladder spans 42..120 of 256 (centre 81) and the
+	 * triangle 19..141 (centre 80), so each is nudged to the box centre when it is
+	 * drawing alone.
+	 */
+	const SOLO_SHIFT = { ladder: 'translate(47 0)', warn: 'translate(48 8)' };
+
+	/** The small warning triangle that replaces the ladder on a failed climb. */
+	const WARN_SMALL = {
+		tri: 'M69.1 60C73.9 49.5 86.1 49.5 90.9 60L140.7 173.6C144.5 182.1 138.4 188 129.1 188H30.9C21.6 188 15.5 182.1 19.3 173.6L69.1 60Z',
+		bar: 'M80 91V139',
+		dot: { cx: 80, cy: 162, r: 7 },
+		barWidth: 12
+	};
+
+	/**
+	 * Which icon a mark draws.
+	 *
+	 * The climb is the only one with variants, and they are exactly the two
+	 * questions the recorder asks. `ok === false` is a failed climb; `ok`
+	 * absent is a climb nobody judged and draws as a plain one — NOT as a failed
+	 * one, which is the blank-is-not-zero line this file keeps.
+	 */
+	function iconFor(mark) {
+		if (mark?.a !== 'climb') return { kind: mark?.a ?? 'collect' };
+		const lvl = CLIMB_LEVELS.includes(Number(mark.lvl)) ? Number(mark.lvl) : null;
+		return { kind: 'climb', lvl, failed: mark.ok === false };
+	}
+
 	const GLYPH_LABEL = {
 		collect: 'Collecting',
 		score: 'Scoring',
-		climb: 'Climbing',
-		fault: 'Off path'
+		fault: 'Malfunction'
 	};
+
+	/** What a chip announces, including the rung and the outcome when known. */
+	function markLabel(mark) {
+		if (mark?.a !== 'climb') return GLYPH_LABEL[mark?.a] ?? '';
+		const lvl = CLIMB_LEVELS.includes(Number(mark.lvl)) ? ` level ${Number(mark.lvl)}` : '';
+		const out = mark.ok === true ? ', made it' : mark.ok === false ? ', failed' : '';
+		return `Climbing${lvl}${out}`;
+	}
 
 	/**
 	 * Lay a row of chips above a robot, centred on it.
@@ -345,7 +414,8 @@
 	 * every time and the row does not reshuffle between frames.
 	 */
 	function badges(doing, cx, cy) {
-		const list = ACTIONS.filter((a) => doing?.includes(a));
+		const marks = Array.isArray(doing) ? doing.filter((m) => ACTIONS.includes(m?.a)) : [];
+		const list = ACTIONS.map((a) => marks.find((m) => m.a === a)).filter(Boolean);
 		if (!list.length) return [];
 		const step = BADGE_R * 2 + BADGE_GAP;
 
@@ -365,7 +435,14 @@
 		const hi = VB_W - BADGE_R - half;
 		const mid = hi < lo ? cx : Math.min(Math.max(cx, lo), hi);
 
-		return list.map((a, i) => ({ a, cx: mid - half + i * step, cy: y }));
+		return list.map((m, i) => ({
+			mark: m,
+			a: m.a,
+			icon: iconFor(m),
+			label: markLabel(m),
+			cx: mid - half + i * step,
+			cy: y
+		}));
 	}
 
 	const me = $derived(place(position));
@@ -578,10 +655,72 @@
      tooltip AND the accessible name, it costs no space on a phone, and the
      field is already the densest picture in the app. -->
 {#snippet chip(b, faded)}
-	<g class="badge {b.a}" class:faded>
-		<title>{GLYPH_LABEL[b.a]}</title>
+	<g class="badge {b.a}" class:faded class:failed={b.icon.failed}>
+		<title>{b.label}</title>
 		<circle cx={b.cx} cy={b.cy} r={BADGE_R} />
-		<path d={GLYPH[b.a]} transform="translate({b.cx} {b.cy})" />
+		<!-- The icon draws in its own 256 space and one transform puts it on the
+		     chip, so the path data stays byte-identical to the source files. The
+		     glyph fills GLYPH_FILL of the disc; the rest is the ring of clear
+		     space that keeps it legible against a drawn field. -->
+		<g
+			transform="translate({b.cx} {b.cy}) scale({(BADGE_R * 2 * GLYPH_FILL) /
+				ICON_BOX}) translate({-ICON_BOX / 2} {-ICON_BOX / 2})"
+		>
+			{#if b.icon.kind === 'collect'}
+				<g class="g-line" stroke-width="18">
+					<path d="M64 54H96M64 54V202M64 202H96" />
+					<path d="M202 128H105" />
+					<path d="M137 92L101 128L137 164" />
+				</g>
+			{:else if b.icon.kind === 'score'}
+				<g class="g-line" stroke-width="12">
+					<path d="M61 151C82 145 101 128 119 105" />
+					<path d="M93 183C114 177 133 160 151 137" />
+					<path d="M125 215C146 209 165 192 183 169" />
+				</g>
+				<g class="g-fill">
+					<circle cx="144" cy="80" r="16" />
+					<circle cx="176" cy="112" r="16" />
+					<circle cx="208" cy="144" r="16" />
+				</g>
+			{:else if b.icon.kind === 'fault'}
+				<path
+					class="g-warn"
+					d="M112.4 36.2C119.3 24.2 136.7 24.2 143.6 36.2L228.2 183C235.1 195 226.4 210 212.6 210H43.4C29.6 210 20.9 195 27.8 183L112.4 36.2Z"
+				/>
+				<path class="g-mark" stroke-width="18" d="M128 82V145" />
+				<circle class="g-mark-fill" cx="128" cy="177" r="11" />
+			{:else if b.icon.kind === 'climb'}
+				<!-- Left slot: the ladder, or the warning triangle when it came off. -->
+				{#if b.icon.failed}
+					<g transform={b.icon.lvl ? '' : SOLO_SHIFT.warn}>
+						<path class="g-warn" d={WARN_SMALL.tri} />
+						<path class="g-mark" stroke-width={WARN_SMALL.barWidth} d={WARN_SMALL.bar} />
+						<circle
+							class="g-mark-fill"
+							cx={WARN_SMALL.dot.cx}
+							cy={WARN_SMALL.dot.cy}
+							r={WARN_SMALL.dot.r}
+						/>
+					</g>
+				{:else}
+					<g class="g-line" stroke-width="13" transform={b.icon.lvl ? '' : SOLO_SHIFT.ladder}>
+						<path d={LADDER} />
+					</g>
+				{/if}
+				<!-- Right slot: the rung, when one was recorded. A climb with no rung
+				     draws the left slot alone rather than borrowing a numeral nobody
+				     said — the icon set has no "unknown rung" variant because the
+				     answer is an absence, and an absence is drawn by leaving it out. -->
+				{#if b.icon.lvl}
+					<path
+						class="g-fill"
+						transform="translate(0 {RUNG_SHIFT[b.icon.lvl]})"
+						d={RUNG[b.icon.lvl]}
+					/>
+				{/if}
+			{/if}
+		</g>
 	</g>
 {/snippet}
 
@@ -745,24 +884,54 @@
 		stroke: var(--text-faint);
 		stroke-width: 1.5;
 	}
-	.badge path {
+	/* ─── the icon's four roles ─────────────────────────────────────────────
+	   The source files hardcode #111827, #DC2626 and white. Those are three
+	   literals that would be invisible on a dark carpet and outside every
+	   contrast guarantee in check_contrast, so the shapes are kept and the
+	   colours are re-applied here from tokens.
+
+	   `--accent` for the ink, `--success` for the score — the other half of a
+	   cycle is the one hue change that earns its place — and `--danger` for the
+	   warning, which is what the designer's #DC2626 means and what a failed
+	   climb is. Every one of these is already pinned against `--bg-card` at 4.5
+	   in all four palettes, which is why the disc is neutral and the ink is
+	   coloured rather than the other way round. */
+	.badge .g-line {
 		fill: none;
 		stroke: var(--accent);
-		stroke-width: 3;
 		stroke-linecap: round;
 		stroke-linejoin: round;
+		/* The strokes are authored in a 256 box and scaled down with everything
+		   else, so no vector-effect: the whole icon shrinks together, which is
+		   what keeps it the designer's drawing rather than a thicker relative of
+		   it. */
 	}
-	/* Scoring is the other half of a cycle, so it gets the one hue change that
-	   earns its place. Collecting and climbing stay on the accent: their glyphs
-	   are an arrow and a pair of chevrons, which cannot be mistaken for each
-	   other at any size a phone will draw them. */
-	.badge.score path {
+	.badge .g-fill {
+		fill: var(--accent);
+		stroke: none;
+	}
+	.badge.score .g-line {
 		stroke: var(--success);
 	}
-	/* Matches `.act.fault.on` in the recorder's rail, so the scout learns one
-	   colour for this and not two. */
-	.badge.fault path {
-		stroke: var(--warning);
+	.badge.score .g-fill {
+		fill: var(--success);
+	}
+	/* The warning triangle is a FILL, and the mark inside it is cut back to the
+	   disc's own colour rather than to white. White is only right on one of the
+	   two themes; the disc colour is right on both by construction, and it reads
+	   as the triangle being punched through. */
+	.badge .g-warn {
+		fill: var(--danger);
+		stroke: none;
+	}
+	.badge .g-mark {
+		fill: none;
+		stroke: var(--bg-card);
+		stroke-linecap: round;
+	}
+	.badge .g-mark-fill {
+		fill: var(--bg-card);
+		stroke: none;
 	}
 	/* Past the end of its own recording, a robot's chips fade with it. */
 	.badge.faded {

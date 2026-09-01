@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <title>Climbing level 2 warning</title>
+  <path fill="#DC2626" d="M69.1 60C73.9 49.5 86.1 49.5 90.9 60L140.7 173.6C144.5 182.1 138.4 188 129.1 188H30.9C21.6 188 15.5 182.1 19.3 173.6L69.1 60Z"/>
+  <path stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" d="M80 91V139"/>
+  <circle cx="80" cy="162" r="7" fill="#FFFFFF"/>
+  <path fill="#111827" d="M146 188V166.5L184.2 127.2C192.5 118.6 196.7 110.9 196.7 104C196.7 97.7 193 93.4 186.4 93.4C179.4 93.4 175 98.2 174.5 108.1H146.5C147.1 78.7 162.9 62 188.1 62C212.2 62 225 77 225 101.1C225 116.8 217.4 129.9 202.2 145.4L184.8 163H226V188H146Z"/>
+</svg>

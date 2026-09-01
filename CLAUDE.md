@@ -390,7 +390,14 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   as this one draws a plausible path in the wrong places, which is worse than a
   gap because a gap is visible.
 - **What a robot is DOING is drawn on the robot**, as a chip above it —
-  `badges()` and `GLYPH` in `AutoField`. The field used to say only *that*
+  `badges()` and the icon block in `AutoField`. The artwork is the team's, in
+  `icons/robot-action-icons/`, inlined as path data and drawn in its native 256
+  space with one transform — not re-traced, because a re-traced icon stops
+  matching the file it came from. Its three hardcoded colours are dropped and
+  re-applied from tokens; the shapes are untouched. **The climb icons are two
+  slots** — ladder or warning triangle, then the rung — so a climb with no rung
+  draws the left slot alone and centred rather than borrowing a numeral nobody
+  reported. The field used to say only *that*
   something was happening (a stroke in replay, a pulse while recording), which
   is the half of the question nobody asks. Colour is the second signal and never
   the first: collect and score are a mirrored pair of arrows because at fifteen

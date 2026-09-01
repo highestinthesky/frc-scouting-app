@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <title>Climbing level 2</title>
+  <g stroke="#111827" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M58 44V212M104 44V212"/>
+    <path d="M42 64H120M42 108H120M42 152H120M42 196H120"/>
+  </g>
+  <path fill="#111827" d="M146 188V166.5L184.2 127.2C192.5 118.6 196.7 110.9 196.7 104C196.7 97.7 193 93.4 186.4 93.4C179.4 93.4 175 98.2 174.5 108.1H146.5C147.1 78.7 162.9 62 188.1 62C212.2 62 225 77 225 101.1C225 116.8 217.4 129.9 202.2 145.4L184.8 163H226V188H146Z"/>
+</svg>

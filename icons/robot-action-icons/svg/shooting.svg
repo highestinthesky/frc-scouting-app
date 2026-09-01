@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <title>Shooting</title>
+  <g stroke="#111827" stroke-width="12" stroke-linecap="round">
+    <path d="M61 151C82 145 101 128 119 105"/>
+    <path d="M93 183C114 177 133 160 151 137"/>
+    <path d="M125 215C146 209 165 192 183 169"/>
+  </g>
+  <g fill="#111827">
+    <circle cx="144" cy="80" r="16"/>
+    <circle cx="176" cy="112" r="16"/>
+    <circle cx="208" cy="144" r="16"/>
+  </g>
+</svg>

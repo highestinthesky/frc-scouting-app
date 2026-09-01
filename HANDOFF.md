@@ -443,10 +443,27 @@ are in the v0.81.4 commit message; the two worth carrying forward:
   apart never fade, and an 8s track among 14.5s ones still fades — at 9.6s, not
   8.0s.
 
-**The action glyphs are about to be replaced.** They are a single `GLYPH` map of
-SVG path strings in `AutoField`, drawn in a local box of roughly +/-8 around the
-chip's centre, stroked not filled. Swapping them is a one-place change; keep the
-stroke widths, since they are what makes the glyph legible at 25px on a phone.
+**The action glyphs were replaced with the team's own**, in
+`icons/robot-action-icons/` — nine icons at 256x256. They are inlined as path
+data in `AutoField` and drawn in their native space with a single transform, so
+the geometry stays byte-identical to the source files.
+
+Three things worth knowing before touching them:
+
+- **The colours are not the designer's.** `#111827`, `#DC2626` and white are
+  dropped and re-applied from tokens, because three literals would be invisible
+  on a dark carpet and outside every floor `check_contrast` holds. Measured
+  after: 5.39 to 8.08 in light, 5.12 to 11.56 in dark.
+- **The white mark on the warning triangle needed no new assertion.** It is
+  `--bg-card` on `--danger`, which is the inverse of a pair already pinned at
+  4.5 — and contrast is symmetric, so all four palettes were already covered.
+- **The set has nine icons and the app has ten states.** A climb whose rung was
+  not recorded has no icon, because the set encodes the rung as a numeral and an
+  unknown rung is an absence. Every climb icon is two slots — ladder or warning
+  triangle on the left, numeral on the right — so the missing cases are composed
+  by drawing the left slot alone and nudging it to centre (`SOLO_SHIFT`).
+  Reaching for `climbing-1` instead would assert a rung nobody reported, which
+  is blank-is-not-zero in a picture.
 
 ---
 

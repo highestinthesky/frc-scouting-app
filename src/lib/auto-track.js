@@ -329,8 +329,20 @@ export function positionAt(track, t) {
 
 /** Which actions were happening at a moment. */
 export function actionsAt(track, t) {
+	return marksAt(track, t).map((iv) => iv.a);
+}
+
+/**
+ * The same, as the intervals themselves.
+ *
+ * The field draws a different climb icon for each rung and a different one again
+ * for a climb that came off — so what it needs is the mark, not the name of the
+ * action. `actionsAt` stays because "which actions" is still a question worth
+ * asking on its own, and it is now one line over this.
+ */
+export function marksAt(track, t) {
 	if (!track) return [];
-	return track.intervals.filter((iv) => t >= iv.t0 && t <= iv.t1).map((iv) => iv.a);
+	return track.intervals.filter((iv) => t >= iv.t0 && t <= iv.t1);
 }
 
 /**

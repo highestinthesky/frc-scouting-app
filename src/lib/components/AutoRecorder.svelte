@@ -456,7 +456,21 @@
 	});
 
 	const remaining = $derived(Math.max(0, Math.ceil((AUTO_MS - elapsed) / 1000)));
-	const activeNow = $derived(Object.keys(held));
+	// Marks, not names: the field draws a different climb icon per rung and a
+	// different one again for a climb that came off, so it needs the answers and
+	// not just "a climb is happening". During the recording those answers live in
+	// `pendingClimb` — the mark itself does not exist until the whistle.
+	const activeNow = $derived(
+		Object.keys(held).map((a) =>
+			a === 'climb'
+				? {
+						a,
+						...(pendingClimb.lvl != null ? { lvl: pendingClimb.lvl } : {}),
+						...(typeof pendingClimb.ok === 'boolean' ? { ok: pendingClimb.ok } : {})
+					}
+				: { a }
+		)
+	);
 	// Short enough to survive a quarter of a phone's width. "Disrupted" truncated
 	// to "Disrup…" on the rail, and a control whose label is cut off is a control
 	// a scout has to remember rather than read. "Off path" is also closer to what

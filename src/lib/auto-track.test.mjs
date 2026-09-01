@@ -19,6 +19,7 @@ import {
 	firstMovementAt,
 	positionAt,
 	actionsAt,
+	marksAt,
 	cycleStats,
 	routeSignature,
 	clusterRoutes,
@@ -208,6 +209,12 @@ function synth(n = 150) {
 	ok('time scoring is summed', c.msScoring === 1100);
 	ok('actions happening at a moment are reported', actionsAt(d, 1700).join() === 'score');
 	ok('and none between them', actionsAt(d, 2500).length === 0);
+	// marksAt is the same question answered with the mark rather than its name,
+	// because the field needs the rung and the outcome to pick a climb icon.
+	ok('marksAt returns the interval, not just the name',
+		marksAt(d, 1700)[0]?.a === 'score' && typeof marksAt(d, 1700)[0]?.t0 === 'number');
+	ok('and agrees with actionsAt',
+		marksAt(d, 1700).map((iv) => iv.a).join() === actionsAt(d, 1700).join());
 
 	// A preload is the one game piece every team scores, so counting score marks
 	// alone would count the thing that tells you nothing.
