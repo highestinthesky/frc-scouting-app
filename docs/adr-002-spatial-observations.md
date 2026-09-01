@@ -308,10 +308,11 @@ before submitting.**
    task, which people are reasonably good at, and it is a different task from
    filling in a form. It will lag by a couple of hundred milliseconds and it will
    be approximate. Decision 2's sample rate already assumes that.
-2. **The correction pass is where accuracy is bought.** Auto ends, the recording
-   stops, and the scout can scrub the track, drag a misplaced segment, or trim an
-   action interval that started late. This is the part that runs with no clock
-   pressure, and it is the part the original objection was actually asking for.
+2. **The pass afterwards runs with no clock, and it does not touch the path.**
+   Auto ends, the recording stops, and the scout can scrub through what they drew,
+   trim an action interval that started late, set the rung on a climb, turn the
+   whole track end for end, or throw it away and record the next match. What they
+   cannot do is drag the robot. See the revision below.
 3. **Every mark is undoable and the whole thing is skippable.** A scout who could
    not track must be able to record nothing, or to record the start position
    alone — see Decision 4. A required field here would manufacture false data at
@@ -324,16 +325,45 @@ before submitting.**
    and inline it was happening on a 358px picture. Full screen is entered
    automatically when recording starts rather than offered as a setting, because
    a scout about to watch a match will not go looking for one.
-6. **And there are keys, for the half of the team on a laptop.** A/S/D under the
-   resting left hand while the right drags. `keydown` repeats are guarded — a held
-   key fires over and over, and each one would open an interval the single
-   `keyup` cannot close — and a window blur closes everything still held, because
-   a key held when focus leaves never sends its release.
+6. **And there are keys, for the half of the team on a laptop.** A/S/D/F under
+   the resting left hand while the right drags, and **space** to start — not
+   Enter, which is across the keyboard under the hand that is about to be on the
+   mouse. `keydown` repeats are guarded — a held key fires over and over, and each
+   one would open an interval the single `keyup` cannot close — and a window blur
+   closes everything still held, because a key held when focus leaves never sends
+   its release.
 
 **The correction pass and the manager's replay are the same renderer.** That is
 not a coincidence to exploit later; it is the reason both can be in one release.
 A track that can be scrubbed and played by its own scout is already the component
 the eagle's-eye view needs.
+
+### Revision — the path is not editable after the whistle
+
+Shipped, then withdrawn on the team's call. Point 2 above originally let the
+scout scrub back and drag the robot to where they remembered it being, and that
+was described as "where accuracy is bought". It is not: it is where accuracy
+becomes **unfalsifiable**.
+
+A position dragged in from memory ten seconds later is, once stored, byte-for-byte
+a position observed at 10 Hz. Nothing downstream can tell them apart — not the
+replay, not the route clustering, not a manager reading the picture in a gym.
+That is Decision 4's failure in a second costume, and the same one as
+blank-is-not-zero: a number that looks like one thing and is another.
+
+So `AutoField` accepts a drag in `record` mode only. The renderer's third mode is
+now `review` rather than `correct`, because it no longer corrects anything, and
+`draggable` is a single expression rather than a list of modes — the next mode
+added is read-only unless someone deliberately says otherwise.
+
+What the pass still offers is everything that does not invent a point: scrubbing
+(reading), trimming an interval and setting a rung (metadata the scout holds and
+the track never did), the end-for-end flip (a whole-track operation with a known
+cause — the scout read the field the wrong way round), and recording again.
+
+The manager's route is unchanged and was never a drag: `correct_entry_track()`
+(migration `0025`) flips a whole recording server-side, merging one key so a stale
+`observations` blob cannot revert what a scout has since edited.
 
 ## Decision 7 — Orientation and handedness are display state
 

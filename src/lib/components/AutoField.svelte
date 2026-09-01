@@ -2,8 +2,11 @@
 	// The field, the robots on it, and the three things you can do with them.
 	//
 	//   mode="record"   drag one robot for fifteen seconds
-	//   mode="correct"  scrub back through what you just drew and fix it
+	//   mode="review"   scrub back through what you just drew and look at it
 	//   mode="replay"   watch six recordings at once
+	//
+	// Only "record" accepts a drag, and that is a rule about who is allowed to
+	// invent a position. See `draggable` below.
 	//
 	// ─── why one component and not three ───────────────────────────────────────
 	//
@@ -42,7 +45,7 @@
 
 	/**
 	 * @type {{
-	 *   mode?: 'record'|'correct'|'replay',
+	 *   mode?: 'record'|'review'|'replay',
 	 *   tracks?: Array<{track: object, label: string, colour?: string, offset?: number}>,
 	 *   position?: {x:number,y:number}|null,
 	 *   trail?: Array<{x:number,y:number}>,
@@ -252,7 +255,20 @@
 	});
 
 	const me = $derived(place(position));
-	const draggable = $derived(mode === 'record' || mode === 'correct');
+	// A drag writes a position down. That is only ever allowed while the match is
+	// the thing being watched.
+	//
+	// "correct" used to be draggable too — the scout scrubbed back afterwards and
+	// nudged the robot to where they remembered it. The trouble is that a position
+	// recalled after the fact is indistinguishable, once stored, from one observed
+	// at 10 Hz, and it is the same failure as blank-is-not-zero: a number that
+	// looks like one thing and is another. A track is evidence of where a robot
+	// was, and evidence is not edited from memory.
+	//
+	// What the pass still does — scrub, trim an action, set a rung, turn the whole
+	// thing end for end, throw it away and record again — is all either reading or
+	// a whole-track operation with a known cause. None of them make up a point.
+	const draggable = $derived(mode === 'record');
 
 	let svg = $state(null);
 	let dragging = $state(false);
@@ -340,7 +356,9 @@
 	role={draggable ? 'application' : 'img'}
 	aria-label={draggable
 		? 'Field. Drag the robot, or use the arrow keys.'
-		: 'Field replay'}
+		: mode === 'review'
+			? 'Field, showing the recorded path'
+			: 'Field replay'}
 	tabindex={draggable ? 0 : -1}
 	onpointerdown={down}
 	onpointermove={move}
