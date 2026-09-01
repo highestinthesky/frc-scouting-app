@@ -927,5 +927,84 @@ for (const [label, file] of [
 	);
 }
 
+// ─── no control is shorter than a thumb, anywhere ──────────────────────────
+//
+// The tap-floor assertions above name their components one at a time, which is
+// only as good as the list. `.sp-edit` in SchedulePreview was never on it and
+// shipped at `min-height: 1.85rem` — 32px measured on a 375px phone, on a button
+// a manager presses at a competition, 12px under the floor design.md calls
+// non-negotiable. Nothing in `npm test` had an opinion about it.
+//
+// So this one sweeps instead of listing. For every component it collects the
+// class names that actually appear on an interactive tag in the markup, then
+// reads the emitted CSS for a height on one of them written as a LITERAL below
+// the floor.
+//
+// Two things keep it from firing falsely, which matters more here than reach:
+//
+//   - It only looks at rules that set a height at all. An inline text link in a
+//     sentence has no min-height and is never flagged — the rule is "if you give
+//     a control a floor, do not put it under the tap floor", not "every control
+//     must be 44px tall", which would be wrong for a link inside prose.
+//   - It only reads literals. `var(--tap-min)`, `calc()`, `auto`, `%` and
+//     `fit-content` are all passed over, because their value is not knowable
+//     here and guessing is how a checker starts costing more than it catches.
+//
+// Run across the whole of src/ it finds exactly one thing, which is the one this
+// was written for. A second hit is a real finding.
+{
+	const TAP_FLOOR_PX = 44;
+	const INTERACTIVE_TAG = /<(button|a|input|select|textarea)\b[^>]*>/gi;
+	const CLASS_ATTR = /class(?:Name)?\s*=\s*"([^"]*)"/i;
+
+	/** A CSS length in px, or null if it is not a plain literal. */
+	const lengthPx = (v) => {
+		const m = /^([\d.]+)(rem|px|em)$/.exec(v.trim());
+		if (!m) return null;
+		return m[2] === 'px' ? Number(m[1]) : Number(m[1]) * 16;
+	};
+
+	const short = [];
+	for (const file of readdirRecursive(path.join(root, 'src')).filter((f) => f.endsWith('.svelte'))) {
+		const rel = path.relative(root, file);
+		const src = readFileSync(file, 'utf8');
+
+		// Which classes sit on something you can press, in THIS file.
+		const interactive = new Set();
+		for (const tag of src.matchAll(INTERACTIVE_TAG)) {
+			const attr = CLASS_ATTR.exec(tag[0]);
+			if (!attr) continue;
+			for (const raw of attr[1].split(/\s+/)) {
+				// Drop anything with an expression in it; a computed class name is
+				// not something this can resolve, and a half-resolved one would
+				// match the wrong rule.
+				const name = raw.replace(/\{.*\}/, '').trim();
+				if (/^[a-z][\w-]*$/i.test(name)) interactive.add(name);
+			}
+		}
+		if (interactive.size === 0) continue;
+
+		for (const rule of rules(rel)) {
+			const sel = unscoped(rule.selector);
+			for (const prop of ['min-height', 'height']) {
+				const raw = valueOf(rule.body, prop);
+				if (!raw) continue;
+				const value = lengthPx(raw);
+				if (value === null || value >= TAP_FLOOR_PX) continue;
+				if ([...interactive].some((c) => usesClass(sel, c))) {
+					short.push(`${rel} — ${sel} { ${prop}: ${raw} } = ${value}px`);
+					break;
+				}
+			}
+		}
+	}
+
+	ok(
+		'no interactive class sets a height under the tap floor',
+		short.length === 0,
+		short.join('\n        ')
+	);
+}
+
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

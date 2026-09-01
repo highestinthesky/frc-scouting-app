@@ -194,7 +194,7 @@
 		font-size: var(--fs-xs);
 		font-weight: 600;
 		line-height: 1.2;
-		padding: var(--space-2) var(--space-3);
+		padding: 0 var(--space-3);
 		border-radius: var(--radius-md);
 		cursor: pointer;
 		align-self: center;
@@ -204,7 +204,13 @@
 		justify-content: center;
 		gap: var(--space-1);
 		white-space: nowrap;
-		min-height: 1.85rem;
+		/* The tap floor, not a literal a little under it.
+		   This was 1.85rem and measured 32px on a phone — a control a manager
+		   presses at a competition, 12px short of the floor design.md calls
+		   non-negotiable. The vertical padding goes with it: the button already
+		   centres its label with flex, so `min-height` alone lands it on exactly
+		   44px instead of 44 plus two paddings in a content-box layout. */
+		min-height: var(--tap-min);
 	}
 	.sp-edit:hover { color: var(--accent); border-color: var(--accent); }
 	.ov-pill {
