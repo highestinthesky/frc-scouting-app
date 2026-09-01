@@ -368,12 +368,23 @@ is used at an event by someone standing in a gym.
 - **Leaked-password protection is still OFF** in the Supabase dashboard. Worth
   doing before more accounts are handed out.
 - **The field geometry should be checked against the real drawings** before
-  scouts practise on it. It is built from published dimensions rather than
-  traced, and the one number that is inferred rather than quoted is the lateral
-  TRENCH width — 62.35in derived against 65.65in stated, which is a
-  which-face-is-measured difference. Everything in `field.js` is in inches for
-  exactly this reason: `158.6` can be checked against a manual and `0.2435`
-  cannot.
+  scouts practise on it. Two numbers in `field.js` are DERIVED rather than
+  quoted, and both are flagged in place:
+
+  - **The alliance zone depth is 184in, not the 158.6in the manual states.** The
+    manual gives 158.6 twice — as the zone depth and as the wall-to-HUB-centre
+    distance — and its own figures then sum to `158.6 + 283 + 158.6 = 600.2`
+    against a 651in field, leaving 51 inches nowhere. `(651 - 283) / 2 = 184`
+    tiles the field exactly and matches where the HUB bands sit on the team's own
+    field image, about 0.282 of the length. If someone works out what the 158.6
+    actually measures, `ALLIANCE_ZONE_IN` is the single line to change.
+  - **The lateral TRENCH width is 61in derived against 65.65in stated**, which is
+    a which-face-is-measured difference. The derived value is used because the
+    lateral elements then sum to the field width exactly, and that sum is the
+    check that the layout was read correctly.
+
+  Everything in `field.js` is in inches for this reason: `184` can be checked
+  against a drawing and `0.2826` cannot.
 
 `docs/adr-003-boards.md` is REJECTED and kept for its decisions.
 `docs/auto-scouting-plan.md` is the team's own source document for auto scouting

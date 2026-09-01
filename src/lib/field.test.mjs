@@ -45,8 +45,8 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 // ─── the published numbers ─────────────────────────────────────────────────
 {
 	ok('this is the 2026 field', FIELD_SEASON === 2026);
-	// 651.2in by 317.7in.
-	ok('the field is 651.2 by 317.7 inches', near(FIELD_ASPECT, 651.2 / 317.7, 1e-9));
+	// 54 ft 3 in by 26 ft 3 in.
+	ok('the field is 54ft 3in by 26ft 3in', near(FIELD_ASPECT, 651 / 315, 1e-9));
 
 	// The whole field is drawn. `docs/auto-scouting-plan.md` assumed robots are
 	// confined to their own half in auto and this was built cut on that basis;
@@ -56,21 +56,32 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 	// had parked there — recording something false rather than nothing.
 	ok('the whole field is drawn', DRAWN.x1 === 1 && DRAWN.y1 === 1);
 
-	// R104: 110in frame perimeter, so a square robot is 27.5in a side; bumpers add
-	// about 3.25in per side. BUMPERS are what the rules measure — G303 places a
-	// robot by where its bumpers are — so that is what this measures too.
-	ok('a robot is 34in across, bumpers included', near(ROBOT_SIZE_IN, 34, 1e-9));
+	// 120in frame perimeter, so a square robot is 30in a side; bumpers add about
+	// 3.25in per side. BUMPERS are what the rules measure — G303 places a robot by
+	// where its bumpers are — so that is what this measures too.
+	ok('a robot is 36.5in across, bumpers included', near(ROBOT_SIZE_IN, 36.5, 1e-9));
 
 	const hubs = OBSTACLES.filter((o) => o.label.includes('hub'));
 	ok('there are two HUBs, not one', hubs.length === 2);
-	// Each is centred 158.6in from ITS OWN alliance wall. Nothing is at the
-	// centre line — the placeholder that preceded this put one obstacle there.
-	ok('the near HUB is 158.6in from this wall', near(hubs[0].x, 158.6 / 651.2, 1e-9));
-	ok('the far HUB is 158.6in from the far wall', near(hubs[1].x, (651.2 - 158.6) / 651.2, 1e-9));
+	// Each is centred one ALLIANCE ZONE from its OWN wall, and that depth is
+	// DERIVED so the three zones tile the field: (651 - 283) / 2 = 184.
+	//
+	// The manual quotes 158.6 for this, twice, and its own numbers contradict it —
+	// 158.6 + 283 + 158.6 = 600.2 against a 651in field, leaving 51in nowhere. The
+	// derived figure also matches where the HUB bands sit on the team's field
+	// image, at about 0.282 of the field length. Two signals against one, so the
+	// quoted number is the one not used.
+	ok('the alliance zone tiles the field with the neutral zone',
+		near(hubs[0].x * 651, (651 - 283) / 2, 1e-6));
+	ok('the near HUB is 184in from this wall', near(hubs[0].x, 184 / 651, 1e-9));
+	ok('the far HUB is 184in from the far wall', near(hubs[1].x, (651 - 184) / 651, 1e-9));
+	ok('and the quoted 158.6 is NOT what is used', !near(hubs[0].x, 158.6 / 651, 1e-3));
 	ok('nothing sits on the centre line',
 		!OBSTACLES.some((o) => Math.abs(o.x - 0.5) < o.w / 2));
-	// 47in square.
-	ok('a HUB is a 47in square', near(hubs[0].w, 47 / 651.2, 1e-9) && near(hubs[0].h, 47 / 317.7, 1e-9));
+	// 47in square footprint, with a 41.7in hexagonal opening the drawing shows.
+	ok('a HUB is a 47in square', near(hubs[0].w, 47 / 651, 1e-9) && near(hubs[0].h, 47 / 315, 1e-9));
+	ok('and it carries its opening for the drawing',
+		near(hubs[0].opening, 41.7 / 315, 1e-9));
 
 	// Both ends are furnished, because both ends are reachable.
 	ok('the opponent end has its structures too',

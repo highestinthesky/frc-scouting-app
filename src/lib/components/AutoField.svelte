@@ -30,6 +30,7 @@
 		FIELD_LENGTH_IN,
 		OBSTACLES,
 		FEATURES,
+		ALLIANCE_BANDS,
 		START_BANDS,
 		clampToField,
 		toDrawn,
@@ -48,6 +49,7 @@
 	 *   t?: number,
 	 *   flipped?: boolean,
 	 *   rotated?: boolean,
+	 *   allianceColor?: string|null,
 	 *   active?: string[],
 	 *   onmove?: (pos: {x:number,y:number}) => void
 	 * }}
@@ -60,6 +62,7 @@
 		t = 0,
 		flipped = false,
 		rotated = false,
+		allianceColor = null,
 		active = [],
 		onmove
 	} = $props();
@@ -127,7 +130,38 @@
 		return { x: c.cx - w / 2, y: c.cy - h / 2, w, h, label: o.label };
 	}
 
-	const solids = $derived(OBSTACLES.filter((o) => o.kind === 'rect').map(box));
+	const solids = $derived(
+		OBSTACLES.filter((o) => o.kind === 'rect').map((o) => {
+			const b = box(o);
+			// The HUB's hexagonal opening, drawn inside its square footprint —
+			// which is what the field actually looks like from above, and what makes
+			// it recognisable rather than just another rectangle.
+			if (!o.opening) return b;
+			const r = (o.opening / (DRAWN.y1 - DRAWN.y0)) * SHORT / 2;
+			const c = place({ x: o.x, y: o.y });
+			const pts = [];
+			for (let i = 0; i < 6; i += 1) {
+				const a = (Math.PI / 3) * i - Math.PI / 6;
+				pts.push(`${(c.cx + r * Math.cos(a)).toFixed(1)},${(c.cy + r * Math.sin(a)).toFixed(1)}`);
+			}
+			return { ...b, hex: pts.join(' ') };
+		})
+	);
+
+	// The alliance's own end, tinted. The team's field image does this and it is
+	// the one thing that says which end is yours without a label.
+	const bands = $derived.by(() => {
+		const mine = allianceColor === 'blue' ? 'far' : 'near';
+		return ALLIANCE_BANDS.map((b) => {
+			const r = box({ x: b.x, y: 0.5, w: b.w, h: 1 });
+			return {
+				...r,
+				// With no alliance recorded yet, neither end is claimed — colouring one
+				// would be a guess a scout would read as a fact.
+				tone: allianceColor ? (b.end === mine ? 'own' : 'opp') : 'none'
+			};
+		});
+	});
 	const marks = $derived(FEATURES.filter((f) => f.kind === 'rect').map(box));
 	const lines = $derived(
 		FEATURES.filter((f) => f.kind === 'line').map((f) => {
@@ -148,7 +182,7 @@
 		return { x1: a.cx, y1: a.cy, x2: b.cx, y2: b.cy };
 	};
 
-	const bands = $derived(
+	const bandLines = $derived(
 		START_BANDS.slice(0, -1).map((b) => ({ ...segment(0, b.upTo, 1, b.upTo), label: b.label }))
 	);
 
@@ -316,10 +350,17 @@
 >
 	<rect x="0" y="0" width={VB_W} height={VB_H} class="carpet" />
 
+	<!-- Alliance ends, tinted, under everything. -->
+	{#each bands as b}
+		{#if b.tone !== 'none'}
+			<rect x={b.x} y={b.y} width={b.w} height={b.h} class="alliance {b.tone}" />
+		{/if}
+	{/each}
+
 	{#each bandLabels as b}
 		<text x={b.x} y={b.y} class="band-label" text-anchor={labelAnchor} dominant-baseline="middle">{b.label}</text>
 	{/each}
-	{#each bands as b}
+	{#each bandLines as b}
 		<line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} class="band-line" />
 	{/each}
 
@@ -343,6 +384,7 @@
 	     straddles the cut, so it renders as a half square on the right edge. -->
 	{#each solids as o}
 		<rect x={o.x} y={o.y} width={o.w} height={o.h} rx="4" class="solid" />
+		{#if o.hex}<polygon points={o.hex} class="opening" />{/if}
 	{/each}
 
 	{#if path}<path d={path} class="trail" />{/if}
@@ -419,6 +461,22 @@
 	   at on a phone in a gym: the HUB and the BUMP beside it are adjacent
 	   rectangles of similar size, and if they read alike the scout learns a field
 	   where the hub is passable. */
+	/* Tint, not fill: the band sits under the BUMPs and TRENCHes and has to let
+	   them read through it. */
+	.alliance.own {
+		fill: var(--alliance-red);
+		opacity: 0.16;
+	}
+	.alliance.opp {
+		fill: var(--alliance-blue);
+		opacity: 0.16;
+	}
+
+	.opening {
+		fill: var(--bg-page);
+		stroke: var(--text-faint);
+		stroke-width: 3;
+	}
 	.solid {
 		fill: var(--bg-card);
 		stroke: var(--text-faint);
@@ -427,6 +485,14 @@
 	.mark {
 		fill: var(--bg-elev);
 		opacity: 0.6;
+	}
+	.mark.stage {
+		fill: var(--warning);
+		opacity: 0.22;
+	}
+	.mark.tower {
+		fill: var(--border-strong);
+		opacity: 0.5;
 	}
 	.mark.trench {
 		fill: none;

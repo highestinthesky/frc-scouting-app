@@ -409,6 +409,7 @@
 			trail={phase === 'place' ? [] : samples}
 			{flipped}
 			{rotated}
+			{allianceColor}
 			active={activeNow}
 			onmove={place}
 		/>

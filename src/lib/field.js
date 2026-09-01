@@ -43,7 +43,7 @@
 // the picture. It is not a property of the data.
 
 /** Bump when the geometry moves. Dates the picture; stored on nothing. */
-export const FIELD_VERSION = 3;
+export const FIELD_VERSION = 4;
 
 /** The season this geometry is. Retuned every January, like METRIC_FIELDS. */
 export const FIELD_SEASON = 2026;
@@ -53,16 +53,51 @@ export const FIELD_SEASON = 2026;
 // Kept in inches and converted once, at the bottom. Fractions are unreadable to
 // anyone holding the drawings, and "0.2435" cannot be checked against a manual.
 
-/** Carpet, alliance wall to alliance wall. */
-export const FIELD_LENGTH_IN = 651.2;
-/** Carpet, guardrail to guardrail. */
-const FIELD_WIDTH_IN = 317.7;
+/** Carpet, alliance wall to alliance wall. 54 ft 3 in. */
+export const FIELD_LENGTH_IN = 54 * 12 + 3;
+/** Carpet, guardrail to guardrail. 26 ft 3 in. */
+const FIELD_WIDTH_IN = 26 * 12 + 3;
 
-/** Alliance wall to the ROBOT STARTING LINE, which is the ALLIANCE ZONE edge. */
-const ALLIANCE_ZONE_IN = 158.6;
+/** NEUTRAL ZONE depth, between the two ROBOT STARTING LINES. */
+const NEUTRAL_ZONE_IN = 283;
+
+// ─── the alliance zone is DERIVED, and that is deliberate ──────────────────
+//
+// The manual states 158.6in twice — once as the ALLIANCE ZONE depth and once as
+// the distance from an ALLIANCE WALL to that alliance's HUB centre. Its own
+// numbers contradict it:
+//
+//     158.6 + 283 + 158.6 = 600.2,  and the field is 651
+//
+// Fifty-one inches unaccounted for. Deriving the depth instead makes the three
+// zones tile the field exactly, and lands on 184.0in — which is where the HUB
+// bands sit on the team's own field image, measured at about 0.282 of the field
+// length. Two independent signals agree and the quoted figure is the outlier, so
+// the quoted figure is the one not used.
+//
+// If 158.6 turns out to measure something real — a face rather than a centre,
+// or a zone that excludes the BUMP band — this is the line to change, and
+// nothing else moves with it.
+const ALLIANCE_ZONE_IN = (FIELD_LENGTH_IN - NEUTRAL_ZONE_IN) / 2;
 
 /** The HUB: a 47in square, centred on the starting line, one per alliance. */
 const HUB_SIZE_IN = 47;
+/** Its opening, which is what a top-down view of the field actually shows. */
+const HUB_OPENING_IN = 41.7;
+
+/** TOWER: in the ALLIANCE WALL between the driver stations. RUNGs at 27/45/63in. */
+const TOWER_WIDTH_IN = 90;
+const TOWER_DEPTH_IN = 12;
+
+/**
+ * Where FUEL is staged in the NEUTRAL ZONE.
+ *
+ * Read off the team's field image rather than a drawing — the manual excerpts to
+ * hand do not give it — so it is a FEATURE and never an obstacle, and being a
+ * few inches out costs nothing but a slightly wrong picture.
+ */
+const STAGE_LENGTH_IN = 94;
+const STAGE_WIDTH_IN = 183;
 
 /** BUMP: driven OVER. 73in wide, 44.4in deep, 6.5in tall. Landmark, not wall. */
 const BUMP_WIDTH_IN = 73;
@@ -77,17 +112,17 @@ const DEPOT_DEPTH_IN = 27;
 
 // ─── the robot ─────────────────────────────────────────────────────────────
 //
-// R104: FRAME PERIMETER at most 110in, STARTING CONFIGURATION at most 30in tall.
-// A square robot at the limit is 27.5in a side. Bumpers add roughly 3.25in per
-// side — a 3/4in backing, a pool noodle, and fabric — so the thing that actually
-// occupies carpet is about 34in across.
+// FRAME PERIMETER at most 120in, STARTING CONFIGURATION at most 30in tall. A
+// square robot at the limit is 30in a side. Bumpers add roughly 3.25in per side
+// — a 3/4in backing, a pool noodle, and fabric — so the thing that actually
+// occupies carpet is about 36.5in across.
 //
 // That is what everything here measures, because BUMPERS are what the rules
 // measure: G303 places a robot by where its BUMPERS are, and a robot cannot
 // drive its bumpers through a wall.
-const FRAME_PERIMETER_IN = 110;
+const FRAME_PERIMETER_IN = 120;
 const BUMPER_THICKNESS_IN = 3.25;
-/** A square robot at the perimeter limit, with bumpers. 34in. */
+/** A square robot at the perimeter limit, with bumpers. 36.5in. */
 export const ROBOT_SIZE_IN = FRAME_PERIMETER_IN / 4 + 2 * BUMPER_THICKNESS_IN;
 const HALF_ROBOT_IN = ROBOT_SIZE_IN / 2;
 
@@ -163,7 +198,9 @@ const nearSide = [
 		x: fx(ALLIANCE_ZONE_IN),
 		y: 0.5,
 		w: fx(HUB_SIZE_IN),
-		h: fy(HUB_SIZE_IN)
+		h: fy(HUB_SIZE_IN),
+		// The opening is what a top-down view shows inside the square footprint.
+		opening: fy(HUB_OPENING_IN)
 	},
 	{
 		kind: 'rect',
@@ -221,6 +258,14 @@ const nearMarks = [
 		w: fx(TRENCH_DEPTH_IN),
 		h: fy(MID_W - BUMP_OUTER)
 	},
+	{
+		kind: 'rect',
+		label: 'tower',
+		x: fx(TOWER_DEPTH_IN / 2),
+		y: 0.5,
+		w: fx(TOWER_DEPTH_IN),
+		h: fy(TOWER_WIDTH_IN)
+	},
 	{ kind: 'line', label: 'starting line', x: fx(ALLIANCE_ZONE_IN) }
 ];
 
@@ -235,7 +280,28 @@ const nearMarks = [
 export const FEATURES = Object.freeze([
 	...nearMarks,
 	...nearMarks.map((m) => (m.kind === 'line' ? { ...m, x: 1 - m.x, label: 'far starting line' } : mirrorX(m))),
+	{
+		kind: 'rect',
+		label: 'stage',
+		x: 0.5,
+		y: 0.5,
+		w: fx(STAGE_LENGTH_IN),
+		h: fy(STAGE_WIDTH_IN)
+	},
 	{ kind: 'line', label: 'centre line', x: 0.5 }
+]);
+
+/**
+ * Which end of the field belongs to an alliance, as a drawn band.
+ *
+ * The team's field image tints the whole BUMP-HUB-BUMP column in the alliance's
+ * colour, and it is the single thing that makes the picture readable at a
+ * glance: it says which end is yours without a label. Returned as drawn bounds
+ * so the renderer does not have to know the geometry.
+ */
+export const ALLIANCE_BANDS = Object.freeze([
+	{ end: 'near', x: fx(ALLIANCE_ZONE_IN), w: fx(BUMP_DEPTH_IN) },
+	{ end: 'far', x: 1 - fx(ALLIANCE_ZONE_IN), w: fx(BUMP_DEPTH_IN) }
 ]);
 
 // ─── where a robot may start ───────────────────────────────────────────────

@@ -326,9 +326,12 @@ A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — se
   centre line, not territory), so a cut field would have had nowhere to put a
   robot that crossed. A **start** position is constrained instead, by G303-D —
   bumpers must overlap the ROBOT STARTING LINE.
-  It is the real 2026 REBUILT field, kept in **inches as FIRST publishes them**
-  and converted once, because `0.2435` cannot be checked against a game manual
-  and `158.6` can. The picture and the collision test read the same numbers, so
+  It is the real 2026 REBUILT field — 54ft 3in by 26ft 3in, robots at a 120in
+  frame perimeter — kept in **inches** and converted once, because `0.2826`
+  cannot be checked against a game manual and `184` can. **The alliance zone
+  depth is DERIVED, not quoted**: the manual says 158.6in twice and its own
+  zones then sum to 600.2 of 651. `(651 - 283) / 2 = 184` tiles the field and
+  matches the team's field image. Two signals against one. The picture and the collision test read the same numbers, so
   they cannot drift — which is why it is built from dimensions rather than
   traced. **BUMPs and TRENCHes are landmarks, not obstacles**: a robot drives
   over one and under the other, and only the two HUBs and the DEPOT stop it.

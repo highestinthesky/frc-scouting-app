@@ -283,9 +283,8 @@ width that sums rather than measured off a drawing, and hard-blocking on an
 inferred number would fight a scout who watched a robot start somewhere the file
 is wrong about. The BUMPs are drawn; a scout can see them.
 
-**The robot is drawn at its real size.** R104 gives 110in of FRAME PERIMETER, so
-a square robot is 27.5in a side and bumpers add about 3.25in per side — 34in of
-carpet. BUMPERS are what the rules measure, so they are what this measures. The
+**The robot is drawn at its real size.** 120in of FRAME PERIMETER, so a square
+robot is 30in a side and bumpers add about 3.25in per side — 36.5in of carpet. BUMPERS are what the rules measure, so they are what this measures. The
 icon was a fixed 48 units through two changes of picture width, which made it
 about 70% of a robot; a scout judging whether one fits between the HUB and a BUMP
 is reading that square.
