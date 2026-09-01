@@ -21,7 +21,8 @@ import {
 	actionsAt,
 	cycleStats,
 	routeSignature,
-	clusterRoutes
+	clusterRoutes,
+	flipTrack
 } from './auto-track.js';
 
 let pass = 0;
@@ -317,6 +318,56 @@ function synth(n = 150) {
 		routeSignature(climb(2), 'Middle') === 'Middle → climb');
 	ok('and two different rungs are the same route',
 		routeSignature(climb(1), 'Middle') === routeSignature(climb(3), 'Middle'));
+}
+
+// ─── turning a recording end for end ───────────────────────────────────────
+//
+// The correction for a scout who read the field the wrong way round. Every
+// position ends up 180° from the truth, which produces a plausible auto at the
+// wrong end of the field and looks entirely fine — so there has to be a way to
+// fix it that is not "record it again", which is impossible after the match.
+{
+	const t = encodeTrack({
+		start: { x: 0.28, y: 0.25 },
+		samples: [{ x: 0.28, y: 0.25 }, { x: 0.6, y: 0.4 }],
+		intervals: [{ a: 'collect', t0: 100, t1: 600 }, { a: 'score', t0: 900, t1: 1500 }]
+	});
+	const f = decodeTrack(flipTrack(t));
+
+	ok('the start turns end for end', near(f.start.x, 0.72, 0.005) && near(f.start.y, 0.75, 0.005));
+	ok('and every sample with it', near(f.samples[1].x, 0.4, 0.005) && near(f.samples[1].y, 0.6, 0.005));
+
+	// Times do not mirror. This is the separation that matters: the entry says
+	// which alliance the robot was on, and the track says where on the carpet it
+	// went — fixing the second must not quietly rewrite the first.
+	ok('the intervals are untouched',
+		f.intervals.length === 2 && f.intervals[0].t0 === 100 && f.intervals[1].t1 === 1500);
+	ok('and their actions survive', f.intervals.map((iv) => iv.a).join() === 'collect,score');
+
+	// Its own inverse, within a quantisation step. A scout who flips by mistake
+	// flips back and is where they started, not one step off each time.
+	const back = decodeTrack(flipTrack(flipTrack(t)));
+	const orig = decodeTrack(t);
+	ok('flipping twice returns the original',
+		near(back.start.x, orig.start.x, 0.005) && near(back.start.y, orig.start.y, 0.005));
+	ok('for every sample too',
+		back.samples.every((p, i) => near(p.x, orig.samples[i].x, 0.005)));
+
+	// A rotation, not a reflection: a reflection would change handedness and a
+	// robot that went to its left would come back having gone to its right.
+	// Checked as an ordering that survives: two points on the same side stay on
+	// the same side of each other.
+	const two = decodeTrack(
+		flipTrack(encodeTrack({ samples: [{ x: 0.3, y: 0.2 }, { x: 0.3, y: 0.8 }] }))
+	);
+	ok('handedness survives the flip', two.samples[0].y > two.samples[1].y);
+
+	// Partial and absent records.
+	const startOnly = decodeTrack(flipTrack(encodeTrack({ start: { x: 0.1, y: 0.1 } })));
+	ok('a start-only record flips', near(startOnly.start.x, 0.9, 0.005));
+	ok('nothing readable flips to null', flipTrack(null) === null && flipTrack({}) === null);
+	ok('a future version is refused rather than half-flipped',
+		flipTrack({ v: 99, hz: 10, p: 'AAAA' }) === null);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

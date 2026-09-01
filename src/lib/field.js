@@ -449,6 +449,33 @@ export function fromDrawn(u, v) {
 export const DRAWN_ASPECT = ((DRAWN.x1 - DRAWN.x0) * FIELD_ASPECT) / (DRAWN.y1 - DRAWN.y0);
 
 /**
+ * Turn a recorded position end for end, about the centre of the FIELD.
+ *
+ * This is the display flip applied to the DATA, and it exists for one mistake:
+ * a scout who read the picture as though their alliance were at the other end
+ * records a whole track 180° from the truth. Every position is wrong, and
+ * nothing about the result looks wrong — it is a plausible auto, at the wrong
+ * end of the field.
+ *
+ * A rotation and not a mirror, for the same reason `toScreen` uses one: a
+ * reflection would change handedness, so a robot that went to its left would
+ * come back having gone to its right, and the correction would introduce a
+ * second error while fixing the first.
+ *
+ * In FIELD coordinates, deliberately. `toScreen` works in the drawn box, and
+ * the drawn box is the whole field today but has already been cut once. What is
+ * being corrected here is where the robot was, not how it was drawn.
+ *
+ * @param {{x:number,y:number}} pos
+ */
+export function mirrorPosition(pos) {
+	return {
+		x: 1 - clamp(Number(pos?.x) || 0, 0, 1),
+		y: 1 - clamp(Number(pos?.y) || 0, 0, 1)
+	};
+}
+
+/**
  * Drawn-box coordinates to screen coordinates.
  *
  * Two independent transforms, both purely about how the picture is presented.

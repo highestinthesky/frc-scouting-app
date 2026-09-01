@@ -23,6 +23,7 @@ import {
 	startZone,
 	clampToStart,
 	STARTING_LINE,
+	mirrorPosition,
 	ROBOT_SIZE_IN,
 	clampToField,
 	toDrawn,
@@ -294,6 +295,20 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 	const legal = { x: STARTING_LINE, y: 0.15 };
 	ok('a legal start is not moved',
 		near(clampToStart(legal, 'red').x, legal.x, 1e-6));
+
+	// Turning a recording end for end maps one alliance's starting line exactly
+	// onto the other's. That is what makes the flip the right correction for a
+	// recording made against the wrong alliance: fix the alliance, flip the
+	// track, and the start lands back on its own line rather than near it.
+	const onRedLine = { x: STARTING_LINE, y: 0.3 };
+	const flipped = mirrorPosition(onRedLine);
+	ok('a flip lands the start on the other alliance line',
+		near(flipped.x, 1 - STARTING_LINE, 1e-9));
+	ok('and clampToStart for that alliance leaves it alone',
+		near(clampToStart(flipped, 'blue').x, flipped.x, 1e-6));
+
+	// A rotation, so handedness survives and Left does not become Left again.
+	ok('the across-field axis turns too', near(flipped.y, 0.7, 1e-9));
 
 	// And it still cannot end up inside a structure.
 	const intoHub = clampToStart({ x: STARTING_LINE, y: 0.5 }, 'red');

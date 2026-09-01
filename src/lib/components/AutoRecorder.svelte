@@ -36,7 +36,7 @@
 		trackDuration,
 		cycleStats
 	} from '$lib/auto-track.js';
-	import { startZone, clampToStart } from '$lib/field.js';
+	import { startZone, clampToStart, mirrorPosition } from '$lib/field.js';
 
 	/**
 	 * @type {{
@@ -300,6 +300,23 @@
 		emit();
 	}
 
+	/**
+	 * Turn the whole recording end for end.
+	 *
+	 * For the scout who read the field the wrong way round — every position 180°
+	 * from the truth, which is a plausible auto at the wrong end and looks fine.
+	 * It cannot be re-recorded, because the match is over.
+	 *
+	 * Positions only. The alliance is a fact from the schedule and is not this
+	 * button's to change; that is why it says "flip" and not "switch alliance".
+	 */
+	function flipRecording() {
+		if (start) start = mirrorPosition(start);
+		samples = samples.map(mirrorPosition);
+		here = start;
+		emit();
+	}
+
 	function discard() {
 		start = null;
 		here = null;
@@ -524,6 +541,9 @@
 
 		<div class="row">
 			<Button variant="ghost" onclick={discard}>Record again</Button>
+			{#if start || samples.length}
+				<Button variant="ghost" onclick={flipRecording}>Flip recording</Button>
+			{/if}
 			<Button variant="ghost" onclick={() => (flipped = !flipped)}>
 				Wall {flipped ? 'left' : 'right'}
 			</Button>

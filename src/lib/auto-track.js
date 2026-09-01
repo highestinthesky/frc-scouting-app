@@ -30,6 +30,8 @@
 // per track, which would also have worked, and would have made entries.
 // observations a place where a 27 KB blob rides along on every sync tick.
 
+import { mirrorPosition } from './field.js';
+
 /** Bump when the byte layout or the sample rate changes. NOT SCHEMA_VERSION. */
 export const TRACK_VERSION = 1;
 
@@ -403,6 +405,36 @@ export function routeSignature(track, zone) {
 	const seq = track.intervals.filter((iv) => iv.a !== 'fault').map((iv) => iv.a);
 	if (!zone && seq.length === 0) return null;
 	return `${zone ?? '?'} → ${seq.length ? seq.join(' → ') : 'no actions'}`;
+}
+
+/**
+ * Turn a whole recording end for end.
+ *
+ * The correction for a scout who read the field the wrong way round — every
+ * position 180° from the truth, which produces a plausible auto at the wrong end
+ * and looks entirely fine.
+ *
+ * **Positions only.** The intervals are times and times do not mirror; the
+ * alliance is a fact from the schedule and is not this function's to touch. That
+ * separation is the whole point: the entry says which alliance the robot was on,
+ * and this says where on the carpet it went. Fixing the second must not quietly
+ * rewrite the first.
+ *
+ * Takes and returns the STORED shape, so it composes with what is on an entry.
+ * Returns null for anything unreadable rather than a half-flipped track.
+ *
+ * @param {unknown} raw
+ * @returns {object|null}
+ */
+export function flipTrack(raw) {
+	const d = decodeTrack(raw);
+	if (!d) return null;
+	return encodeTrack({
+		hz: d.hz,
+		start: d.start ? mirrorPosition(d.start) : null,
+		samples: d.samples.map(mirrorPosition),
+		intervals: d.intervals
+	});
 }
 
 /**

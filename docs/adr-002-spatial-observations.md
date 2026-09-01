@@ -358,6 +358,18 @@ upright the picture is width-bound and most of the screen is empty. Standing it
 on end puts the field's long axis down the phone's long axis. Measured: 2.5× the
 area to aim a thumb at.
 
+**And a recording can be turned end for end after the fact.** `flipTrack()` is
+the display flip applied to the *data*, for the scout who read the field the
+wrong way round: every position 180° from the truth, which is a plausible auto at
+the wrong end and looks entirely fine. It cannot be re-recorded, because the
+match is over.
+
+It moves **positions only**. The alliance is a fact from the schedule and is not
+this operation's to change — which is also why it composes exactly with fixing
+one: a flip maps one alliance's ROBOT STARTING LINE precisely onto the other's,
+so correcting the alliance and then flipping puts the start back on its own line
+rather than near it. `field.test.mjs` pins that.
+
 `toScreen`/`fromScreen` in `field.js` own all three, and `fromScreen` is written
 out rather than reusing `toScreen` — a quarter turn is **not** self-inverse, and
 assuming it was would land the robot a quarter of the field from the thumb in the

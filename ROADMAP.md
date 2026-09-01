@@ -264,7 +264,11 @@ gets pushed, and gets used before the recorder is written.
     straight line from there to the second sample. An extra line that was never
     driven. Correcting sample zero now moves the stored start with it, since
     nothing else kept the two agreeing.
-14. **The whole field, and a constrained start.** Researched against the manual
+14. **A recording can be turned end for end after the match.** `flipTrack()`,
+    offered in the correction pass. Positions only — the alliance is a fact from
+    the schedule — and it composes exactly with fixing one, because a flip maps
+    one alliance's starting line onto the other's.
+15. **The whole field, and a constrained start.** Researched against the manual
     rather than the plan: there is no rule confining a robot to its own half in
     auto (G403 restricts *contact* past the centre line), so a cut field would
     have had nowhere to put a robot that crossed and its path would have
