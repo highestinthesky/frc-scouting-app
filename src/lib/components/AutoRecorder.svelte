@@ -66,8 +66,19 @@
 	let flipped = $state(false);
 	let full = $state(false);
 	let portrait = $state(false);
-	/** Index of the climb interval waiting for its rung, or null. */
-	let askLevelFor = $state(null);
+	/**
+	 * Which climb is being asked about: `'pending'` while the recording is still
+	 * running and the mark has not been closed yet, an index into `intervals`
+	 * afterwards, or null.
+	 *
+	 * Two forms because the mark does not exist yet at the moment the question is
+	 * asked. A climb stays open until the whistle (see `release`), so during the
+	 * recording there is nothing to write to — the answers are parked here and
+	 * attached when finish() closes it.
+	 */
+	let askClimb = $state(null);
+	/** Answers for a climb that has not been closed into an interval yet. */
+	let pendingClimb = $state({ lvl: null, ok: null });
 
 	// Full screen on a phone held upright is width-bound — the field is half
 	// again as wide as it is tall, so it bought 2% and left 607px of height
@@ -232,7 +243,16 @@
 		// something true, and discarding it would lose the longest interval on the
 		// track precisely when it mattered.
 		const now = Math.round(elapsed);
-		for (const [a, t0] of Object.entries(held)) intervals.push({ a, t0, t1: now });
+		for (const [a, t0] of Object.entries(held)) {
+			const iv = { a, t0, t1: now };
+			// The climb's answers were given while it was still open; they belong to
+			// the mark that is only now being created.
+			if (a === 'climb') {
+				if (pendingClimb.lvl != null) iv.lvl = pendingClimb.lvl;
+				if (typeof pendingClimb.ok === 'boolean') iv.ok = pendingClimb.ok;
+			}
+			intervals.push(iv);
+		}
 		held = {};
 		intervals = intervals;
 		phase = 'correct';
@@ -249,19 +269,38 @@
 		// first correction lands on the last moment — which is the one still in the
 		// scout's head.
 		scrub = Math.max(0, (samples.length - 1) * STEP_MS);
-		// A climb that ended at the whistle never got its question. It gets it now,
-		// where there is no clock on the answer.
-		const pending = intervals.findIndex((iv) => iv.a === 'climb' && iv.lvl == null);
-		askLevelFor = pending >= 0 ? pending : null;
+		// A climb nobody finished answering gets asked again here, where there is
+		// no clock on it at all. Unanswered means EITHER question outstanding.
+		const pending = intervals.findIndex(
+			(iv) => iv.a === 'climb' && (iv.lvl == null || typeof iv.ok !== 'boolean')
+		);
+		askClimb = pending >= 0 ? pending : null;
+		pendingClimb = { lvl: null, ok: null };
 		emit();
 	}
 
 	function press(action) {
 		if (phase !== 'live' || held[action] != null) return;
 		held = { ...held, [action]: Math.round(performance.now() - startedAt) };
+		// A climb is the end of the robot's auto, so it is the one action that is
+		// not a hold. See `release` and `askClimb`.
+		if (action === 'climb') askClimb = true;
 	}
 
 	function release(action) {
+		// Letting go of the climb does not end it.
+		//
+		// A robot that has started climbing has finished its auto — it is on the
+		// tower and it is not going anywhere else. So the mark stays open and
+		// finish() closes it at the whistle, the same way any held action is
+		// closed. That is what frees the scout's hands for the two questions,
+		// which is the whole reason the popup is allowed to take the screen.
+		//
+		// It also has to work this way for the data. encodeTrack drops any
+		// interval with t1 <= t0, so a climb that ended the recording the instant
+		// it began would be silently discarded — the one action the scout most
+		// wants recorded, thrown away for being instantaneous.
+		if (action === 'climb') return;
 		if (held[action] == null) return;
 		const t0 = held[action];
 		const t1 = Math.round(performance.now() - startedAt);
@@ -270,7 +309,6 @@
 		if (t1 > t0) {
 			intervals.push({ a: action, t0: Math.min(t0, AUTO_MS), t1: Math.min(t1, AUTO_MS) });
 			intervals = intervals;
-			if (action === 'climb') askLevelFor = intervals.length - 1;
 		}
 	}
 
@@ -284,12 +322,33 @@
 	// It is skippable. A scout who saw a robot get onto the TOWER but could not
 	// tell which rung has recorded something true; forcing a number would turn it
 	// into something false, which is Decision 4 pointed at the input.
-	function setLevel(i, lvl) {
-		if (i == null || !intervals[i]) return;
-		if (lvl == null) delete intervals[i].lvl;
-		else intervals[i].lvl = lvl;
+	/** What has been answered so far, wherever the answers currently live. */
+	const climbAnswers = $derived(
+		askClimb === 'pending'
+			? pendingClimb
+			: typeof askClimb === 'number'
+				? { lvl: intervals[askClimb]?.lvl ?? null, ok: intervals[askClimb]?.ok ?? null }
+				: { lvl: null, ok: null }
+	);
+
+	/**
+	 * Answer one of the two questions.
+	 *
+	 * `value` of null is the deliberate "not sure", and it DELETES rather than
+	 * storing a zero or a false. A rung nobody could read is not rung zero and a
+	 * climb nobody judged is not a failed climb; both would be lies in the same
+	 * shape as blank-is-not-zero.
+	 */
+	function answerClimb(key, value) {
+		if (askClimb === 'pending') {
+			pendingClimb = { ...pendingClimb, [key]: value };
+			return;
+		}
+		const iv = typeof askClimb === 'number' ? intervals[askClimb] : null;
+		if (!iv) return;
+		if (value == null) delete iv[key];
+		else iv[key] = value;
 		intervals = intervals;
-		askLevelFor = null;
 		emit();
 	}
 
@@ -452,28 +511,6 @@
 </div>
 
 <div class="controls">
-	{#if askLevelFor != null}
-		<!-- Three RUNGs at 27, 45 and 63 inches. Skippable: a scout who saw a robot
-		     get onto the TOWER but could not tell which rung has recorded
-		     something true, and forcing a number would make it false. -->
-		<div class="rungs" role="group" aria-label="Which rung?">
-			<span class="say">Rung</span>
-			{#each CLIMB_LEVELS as lvl}
-				<button
-					type="button"
-					class="rung"
-					class:on={intervals[askLevelFor]?.lvl === lvl}
-					onclick={() => setLevel(askLevelFor, lvl)}
-				>
-					{lvl}
-				</button>
-			{/each}
-			<button type="button" class="rung skip" onclick={() => setLevel(askLevelFor, null)}>
-				Not sure
-			</button>
-		</div>
-	{/if}
-
 	{#if phase === 'place'}
 		<p class="say">
 			{#if start}Starting {zone ?? 'position'} set.{:else}Drag the robot to where it starts.{/if}
@@ -485,8 +522,18 @@
 			<Button variant="ghost" onclick={() => (flipped = !flipped)}>
 				Wall {flipped ? 'left' : 'right'}
 			</Button>
-			<Button variant="ghost" onclick={() => (full = !full)}>
-				{full ? 'Exit full screen' : 'Full screen'}
+			<!-- "Exit", not "Exit full screen", and the difference is 52px of layout.
+			     At 375px the three buttons here measured 149 + 106 + 145 against 351
+			     of row, so the third wrapped — and the controls block was then a row
+			     taller in this phase than during the recording, which is where the
+			     field's 7% jump at the whistle came from. The full phrase stays as
+			     the accessible name; only the visible label is short. -->
+			<Button
+				variant="ghost"
+				onclick={() => (full = !full)}
+				aria-label={full ? 'Exit full screen' : 'Enter full screen'}
+			>
+				{full ? 'Exit' : 'Full screen'}
 			</Button>
 		</div>
 	{:else if phase === 'live'}
@@ -523,12 +570,15 @@
 			<ul class="ivs">
 				{#each intervals as iv, i}
 					<li>
-						<span class="what {iv.a}">{LABELS[iv.a]}{#if iv.a === 'climb' && iv.lvl}
-								<span class="lvl">L{iv.lvl}</span>{/if}</span>
+						<span class="what {iv.a}">{LABELS[iv.a]}{#if iv.a === 'climb'}{#if iv.lvl}
+									<span class="lvl">L{iv.lvl}</span>{/if}{#if iv.ok === true}
+									<span class="lvl">made it</span>{:else if iv.ok === false}
+									<span class="lvl">failed</span>{/if}{/if}</span>
 						<span class="when">{(iv.t0 / 1000).toFixed(1)}–{(iv.t1 / 1000).toFixed(1)}s</span>
 						{#if iv.a === 'climb'}
-							<button type="button" class="drop" onclick={() => (askLevelFor = i)}>
-								{iv.lvl ? 'Change rung' : 'Set rung'}
+							<!-- Both questions, so the label is not "rung" any more. -->
+							<button type="button" class="drop" onclick={() => (askClimb = i)}>
+								The climb
 							</button>
 						{/if}
 						<button type="button" class="drop" onclick={() => dropInterval(i)}>Remove</button>
@@ -558,6 +608,74 @@
 	{/if}
 </div>
 </div>
+
+<!-- ─── the climb sheet ──────────────────────────────────────────────────────
+     A robot that has started climbing has finished its auto. That is what earns
+     this the whole screen: there is nothing left on the field to watch, so the
+     two questions only a scout can answer get asked while the answer is still in
+     their head, instead of being reconstructed at a table afterwards.
+
+     Both are skippable, and "Not sure" is a real answer rather than a way out. A
+     rung nobody could read is not rung zero, and a climb nobody judged is not a
+     failed one — forcing either would manufacture the exact false data the
+     recording exists to avoid. -->
+{#if askClimb != null}
+	<div class="sheet" role="dialog" aria-modal="true" aria-label="The climb">
+		<div class="sheet-in">
+			<p class="q">Which rung?</p>
+			<div class="opts" role="group" aria-label="Which rung?">
+				{#each CLIMB_LEVELS as lvl}
+					<button
+						type="button"
+						class="opt"
+						class:on={climbAnswers.lvl === lvl}
+						onclick={() => answerClimb('lvl', lvl)}
+					>
+						{lvl}
+					</button>
+				{/each}
+				<button
+					type="button"
+					class="opt skip"
+					class:on={climbAnswers.lvl == null}
+					onclick={() => answerClimb('lvl', null)}
+				>
+					Not sure
+				</button>
+			</div>
+
+			<p class="q">Did it make it?</p>
+			<div class="opts" role="group" aria-label="Did it make it?">
+				<button
+					type="button"
+					class="opt"
+					class:on={climbAnswers.ok === true}
+					onclick={() => answerClimb('ok', true)}
+				>
+					Made it
+				</button>
+				<button
+					type="button"
+					class="opt"
+					class:on={climbAnswers.ok === false}
+					onclick={() => answerClimb('ok', false)}
+				>
+					Failed
+				</button>
+				<button
+					type="button"
+					class="opt skip"
+					class:on={climbAnswers.ok == null}
+					onclick={() => answerClimb('ok', null)}
+				>
+					Not sure
+				</button>
+			</div>
+
+			<Button variant="primary" full onclick={() => (askClimb = null)}>Done</Button>
+		</div>
+	</div>
+{/if}
 
 <style>
 	/* Hallmark · genre: modern-minimal · component: auto-recorder
@@ -800,8 +918,16 @@
 		align-items: center;
 		gap: var(--space-2) var(--space-3);
 	}
+	/* The readout reserves the height of its own tallest state.
+	   `.say.live` is --fs-xl and the others are --fs-sm, so without this the
+	   controls block changed height at the whistle for the text alone — the same
+	   jump the row above was making, ten pixels smaller. Reserving it here costs
+	   nothing: this line is never the reason the field is short. */
 	.say {
 		margin: 0;
+		min-height: calc(var(--fs-xl) * 1.1);
+		display: flex;
+		align-items: center;
 		color: var(--text-muted);
 		font-size: var(--fs-sm);
 	}
@@ -835,19 +961,48 @@
 		text-align: right;
 	}
 
-	/* The rung question interrupts the flow, so it is set off as its own panel
-	   rather than sitting flush against the readout above it. */
-	.rungs {
+	/* The climb sheet. Fixed to the viewport rather than placed in the controls:
+	   it is asked WHILE the recording is still running, and the recorder may or
+	   may not be in full screen at the time, so it cannot be a child of either
+	   layout. z-index clears the full-screen shell's 50. */
+	.sheet {
+		position: fixed;
+		inset: 0;
+		z-index: 60;
+		display: grid;
+		place-items: center;
+		padding: max(var(--space-4), env(safe-area-inset-top, 0))
+			max(var(--space-4), env(safe-area-inset-right, 0))
+			max(var(--space-4), env(safe-area-inset-bottom, 0))
+			max(var(--space-4), env(safe-area-inset-left, 0));
+		/* Opaque, not a scrim. The field behind it has nothing left to show — the
+		   robot is on the tower — and a translucent panel over a drawn field is
+		   the hardest thing to read on this screen. */
+		background: var(--bg-page);
+	}
+	.sheet-in {
+		width: min(var(--w-form), 100%);
+		max-height: 100%;
+		overflow-y: auto;
+		display: grid;
+		gap: var(--space-3);
+	}
+	.q {
+		margin: 0;
+		font-size: var(--fs-lg);
+		font-weight: 700;
+		color: var(--text-primary);
+	}
+	.opts {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2) var(--space-3);
+		gap: var(--space-2);
 		flex-wrap: wrap;
-		padding: var(--space-3);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-md);
-		background: var(--bg-elev);
 	}
-	.rung {
+	/* Thumb-sized and then some. This is answered once, under no clock, and
+	   usually one-handed while the other hand is still holding the phone. */
+	.opt {
+		flex: 1 1 auto;
 		min-width: var(--tap-min);
 		min-height: var(--tap-min);
 		padding: 0 var(--space-3);
@@ -858,18 +1013,24 @@
 		font: inherit;
 		font-weight: 600;
 	}
-	.rung:focus-visible {
+	.opt:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
-	.rung.on {
+	.opt.on {
 		background: var(--accent);
 		color: var(--on-accent);
 		border-color: var(--accent);
 	}
-	.rung.skip {
+	/* "Not sure" reads as the lighter answer without becoming a way out: it is
+	   selectable and it selects, because it is the honest answer more often than
+	   any single rung is. */
+	.opt.skip {
 		font-weight: 400;
 		color: var(--text-muted);
+	}
+	.opt.skip.on {
+		color: var(--on-accent);
 	}
 
 	.lvl {

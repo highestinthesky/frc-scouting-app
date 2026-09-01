@@ -234,6 +234,15 @@
 		})
 	);
 
+	/**
+	 * How far past its own end a robot may be before it is drawn as finished.
+	 *
+	 * Alignment is on first movement, not on a shared clock, so six tracks of the
+	 * same match legitimately end up to a second apart. Anything under this is a
+	 * difference in when scouts pressed a button, not in what the robots did.
+	 */
+	const DONE_GRACE_MS = 1000;
+
 	/** Where each replayed robot is right now, with its own alignment offset. */
 	const ghosts = $derived(
 		mode === 'replay'
@@ -250,7 +259,15 @@
 							// Past its own end, a robot is drawn faded rather than removed:
 							// disappearing reads as "it left the field", which is a claim the
 							// recording does not make.
-							done: local > trackDuration(row.track)
+							//
+							// But not the instant it ends. Six scouts start their timers by
+							// hand and the replay aligns them on first movement, so tracks
+							// finish tenths of a second apart for reasons that have nothing
+							// to do with the robots — and a robot greying out while its
+							// neighbours keep going reads as "this one stopped", which is
+							// exactly the wrong thing to say about a clock difference.
+							// A robot is only faded once it is clearly, visibly finished.
+							done: local > trackDuration(row.track) + DONE_GRACE_MS
 						};
 					})
 					.filter(Boolean)

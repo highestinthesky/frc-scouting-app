@@ -291,12 +291,28 @@ export const ALLIANCE_BANDS = Object.freeze([
 
 // ─── where a robot may start ───────────────────────────────────────────────
 //
-// G303 START YOUR ROBOTS, point D: "its BUMPERS overlap their ROBOT STARTING
-// LINE." Not anywhere in the alliance zone, and not anywhere on the field —
-// straddling one line. So the centre of a bumpered robot is within half a robot
-// of it, and everywhere else is a placement that could not have happened.
+// A start is constrained to the ALLIANCE ZONE — the robot's own end of the
+// field, from its alliance wall out to the ROBOT STARTING LINE — and not to the
+// line itself.
 //
-// Point E — "it's not contacting the BUMP" — is deliberately NOT enforced. The
+// It was pinned to the line, on a reading of G303-D that treated "its BUMPERS
+// overlap their ROBOT STARTING LINE" as the only legal placement. The team says
+// otherwise: behind the hub is a real start, and they are the ones who watch
+// these matches. The tighter reading made a position a scout had actually seen
+// impossible to record.
+//
+// Which is the same argument this file already makes one paragraph down about
+// point E, and it generalises: THIS IS A RECORDING AID, NOT A REFEREE. The
+// constraint that earns its place is the one that rules out what could not have
+// happened — a robot cannot be inside the HUB, and cannot have started at the
+// far end of the field — not the one that enforces a rule the app has only
+// inferred. Where the two disagree, the scout saw it and this file did not.
+//
+// The upper bound keeps half a robot past the line, so a robot straddling it is
+// still expressible: that placement is legal and common, and clamping to the
+// line exactly would have made it unreachable from the wrong side.
+//
+// Point E — "it's not contacting the BUMP" — is likewise NOT enforced. The
 // lateral BUMP extents here are derived from a width that sums rather than
 // measured off a drawing, and hard-blocking a placement on an inferred number
 // would fight a scout who watched a robot start somewhere this file is wrong
@@ -313,48 +329,55 @@ export const STARTING_LINE = fx(ALLIANCE_ZONE_IN);
  */
 export function clampToStart(pos, allianceColor) {
 	const line = allianceColor === 'blue' ? 1 - STARTING_LINE : STARTING_LINE;
-	const lo = line - HALF_ROBOT_X;
-	const hi = line + HALF_ROBOT_X;
 
-	// x is the RULE and y is the freedom, so the robot only ever slides ALONG the
-	// line — it is never pushed off it.
-	//
-	// This used to clamp x into the band and then hand the result to
-	// clampToField(), whose obstacle escape can move in x. The HUB is a 47in
-	// square CENTRED ON THIS LINE, so a scout dragging to the middle of the field
-	// was pushed straight out of the band: measured at 391 of 3721 placements,
-	// up to 23.5in off — which for blue is 23.5in into the neutral zone, in front
-	// of the hub, where no robot may start.
-	//
-	// It is the same shape as the bug already recorded in clampToField below: a
-	// resolution that is free to move on the axis another rule has already fixed
-	// will use it.
-	const x = clamp(Number(pos?.x) || 0, lo, hi);
-	let y = clamp(Number(pos?.y) || 0, DRAWN.y0 + HALF_ROBOT_Y, DRAWN.y1 - HALF_ROBOT_Y);
+	// The alliance zone, plus the half robot that a start ON the line needs.
+	const [xLo, xHi] =
+		allianceColor === 'blue'
+			? [line - HALF_ROBOT_X, DRAWN.x1 - HALF_ROBOT_X]
+			: [DRAWN.x0 + HALF_ROBOT_X, line + HALF_ROBOT_X];
+	const yLo = DRAWN.y0 + HALF_ROBOT_Y;
+	const yHi = DRAWN.y1 - HALF_ROBOT_Y;
+	const inZone = (p) => ({ x: clamp(p.x, xLo, xHi), y: clamp(p.y, yLo, yHi) });
 
-	// Slide out of anything it landed inside, lateral only. Mid-width on the line
-	// IS inside the HUB, so this is the ordinary case rather than an edge one.
+	let out = inZone({ x: Number(pos?.x) || 0, y: Number(pos?.y) || 0 });
+
+	// Resolve inside the zone, never by leaving it.
+	//
+	// Handing the clamped position to clampToField() instead is what shipped: its
+	// escape is bounded by the FIELD, so with the HUB centred on the starting
+	// line it pushed 391 of 3721 placements clean out of the alliance zone — for
+	// blue, up to 23.5in into the neutral zone in front of the hub.
+	//
+	// It is the same shape as the note in clampToField below, one turn along: a
+	// resolution free to move on an axis another rule has already fixed will use
+	// it. There the field boundary undid the obstacle escape; here the obstacle
+	// escape undid the zone.
 	for (const o of OBSTACLES) {
 		if (o.kind !== 'rect') continue;
 		const hw = o.w / 2 + HALF_ROBOT_X;
 		const hh = o.h / 2 + HALF_ROBOT_Y;
-		if (Math.abs(x - o.x) >= hw - 1e-9 || Math.abs(y - o.y) >= hh - 1e-9) continue;
+		if (Math.abs(out.x - o.x) >= hw - 1e-9 || Math.abs(out.y - o.y) >= hh - 1e-9) continue;
 
 		let best = null;
-		for (const cand of [o.y - hh, o.y + hh]) {
-			const c = clamp(cand, DRAWN.y0 + HALF_ROBOT_Y, DRAWN.y1 - HALF_ROBOT_Y);
-			// Bounds-clamped BEFORE it is judged, or a side wall hands back a
-			// candidate that is still inside the obstacle.
-			if (Math.abs(c - o.y) < hh - 1e-9) continue;
-			const cost = Math.abs(c - y);
-			if (!best || cost < best.cost) best = { y: c, cost };
+		for (const c of [
+			{ x: o.x - hw, y: out.y },
+			{ x: o.x + hw, y: out.y },
+			{ x: out.x, y: o.y - hh },
+			{ x: out.x, y: o.y + hh }
+		]) {
+			// Zone-clamped BEFORE it is judged, or a candidate that only escapes by
+			// leaving the zone is chosen and then dragged back inside the obstacle.
+			const p = inZone(c);
+			if (Math.abs(p.x - o.x) < hw - 1e-9 && Math.abs(p.y - o.y) < hh - 1e-9) continue;
+			const cost = Math.hypot(p.x - out.x, (p.y - out.y) / FIELD_ASPECT);
+			if (!best || cost < best.cost) best = { p, cost };
 		}
-		// Both ways blocked means the geometry leaves no lateral room here. Staying
-		// put beats moving off the line, which is the one thing this must not do.
-		if (best) y = best.y;
+		// Every way out blocked means the geometry leaves no room here. Leaving the
+		// position where the scout put it beats teleporting it somewhere arbitrary.
+		if (best) out = best.p;
 	}
 
-	return { x, y };
+	return out;
 }
 
 /**

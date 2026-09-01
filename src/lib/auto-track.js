@@ -141,6 +141,17 @@ export function encodeTrack(input) {
 			if (iv.a === 'climb' && CLIMB_LEVELS.includes(Number(iv.lvl))) {
 				out.lvl = Number(iv.lvl);
 			}
+			// Whether the climb actually came off, which is a different question
+			// from how high it was aimed and only the scout can answer it.
+			//
+			// Three states, not two, and the third is the reason this is written
+			// out rather than coerced: `true` succeeded, `false` tried and failed,
+			// ABSENT means nobody said. `false` and absent are the two that get
+			// confused, and they are the blank-is-not-zero distinction again — a
+			// climb nobody judged must not be counted as a failed one.
+			if (iv.a === 'climb' && typeof iv.ok === 'boolean') {
+				out.ok = iv.ok;
+			}
 			return out;
 		})
 		// A zero-length interval is a mis-tap, not an action. A button held for
@@ -224,6 +235,10 @@ export function decodeTrack(raw) {
 		.map((iv) => {
 			const out = { a: iv.a, t0: Number(iv.t0), t1: Number(iv.t1) };
 			if (iv.a === 'climb' && CLIMB_LEVELS.includes(Number(iv.lvl))) out.lvl = Number(iv.lvl);
+			// Read back the same three ways it is written: true, false, or absent.
+			// `typeof` and not a truthiness test, so a stored `false` survives as
+			// "tried and failed" instead of decoding as "nobody said".
+			if (iv.a === 'climb' && typeof iv.ok === 'boolean') out.ok = iv.ok;
 			return out;
 		})
 		.sort((a, b) => a.t0 - b.t0);
@@ -371,6 +386,15 @@ export function cycleStats(track) {
 		// facts and must not collapse into the same number.
 		climbLevel: levels.length ? Math.max(...levels) : null,
 		climbed: climbs.length > 0,
+		// Did it come off? true / false / null, and null is "nobody said" rather
+		// than "no". A single `false` among the climbs is not a verdict either —
+		// what is reported is the best outcome recorded, because a robot that
+		// slipped and then got up did climb.
+		climbOk: climbs.some((iv) => iv.ok === true)
+			? true
+			: climbs.some((iv) => iv.ok === false)
+				? false
+				: null,
 		cycles,
 		duration: trackDuration(track)
 	};

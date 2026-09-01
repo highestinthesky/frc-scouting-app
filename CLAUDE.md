@@ -358,14 +358,25 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   The **whole** field is drawn: the plan assumed robots are confined to their own
   half in auto and there is no such rule (G403 restricts *contact* past the
   centre line, not territory), so a cut field would have had nowhere to put a
-  robot that crossed. A **start** position is constrained instead, by G303-D —
-  bumpers must overlap the ROBOT STARTING LINE, and `clampToStart()` resolves a
-  collision by sliding ALONG that line, never off it. The HUB is a 47in square
-  centred on the line, so the middle of the field is inside it: handing the
-  clamped x to `clampToField()`, whose escape is free in either axis, pushed 391
-  of 3721 placements off the line by up to 23.5in — for blue, into the neutral
-  zone in front of the hub. A resolution free to move on an axis another rule
-  has already fixed will use it.
+  robot that crossed. A **start** is constrained to the robot's own **ALLIANCE
+  ZONE** — wall to starting line, plus the half robot a start straddling the line
+  needs — and `clampToStart()` resolves a collision inside that zone, never by
+  leaving it.
+
+  It was pinned to the LINE for one release, on a reading of G303-D that made
+  "behind the hub" impossible to record; the team says behind the hub is a real
+  start, and they watch the matches. **This is a recording aid, not a referee**:
+  the constraint that earns its place rules out what could not have happened — a
+  robot inside the HUB, or at the wrong end of the field — not a rule the app has
+  only inferred. Where they disagree, the scout saw it and this file did not.
+
+  Resolving against the FIELD instead of the zone is what shipped: the HUB is a
+  47in square centred on the starting line, so the middle of the field is inside
+  it, and `clampToField()`'s escape pushed 391 of 3721 placements clean out of
+  the zone — for blue, 23.5in into the neutral zone in front of the hub. **A
+  resolution free to move on an axis another rule has already fixed will use
+  it**, which is the same note `clampToField` carries about the field boundary
+  undoing its own obstacle escape.
   It is the real 2026 REBUILT field — 54ft 3in by 26ft 3in, robots at a 120in
   frame perimeter — kept in **inches** and converted once, because `0.2826`
   cannot be checked against a game manual and `184` can. **The alliance zone
@@ -390,6 +401,20 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   exist. Its edge is `--text-faint`, not `--border-strong`: the disc is 1.08
   against the carpet so the edge carries the whole boundary, and `--border-strong`
   is 2.97 on `--bg-subtle` in the light palette — under the 3.0 floor.
+- **A climb ends the robot's auto, and that is what earns the popup the screen.**
+  `press('climb')` opens a mark that `release` deliberately does NOT close — it
+  runs to the whistle like any held action, which both frees the scout's hands
+  and keeps the interval non-empty (`encodeTrack` drops `t1 <= t0`, so a climb
+  that stopped the recording the instant it began would be silently discarded).
+  The sheet asks the two things only a scout can answer: which rung, and whether
+  it came off. Both are three-state — a rung nobody could read is not rung zero
+  and a climb nobody judged is not a failed one, so `ok` is `true`/`false`/absent
+  and `climbOk` reports null rather than false.
+- **A robot is not faded the instant its own track ends.** Replay aligns on first
+  movement, not a shared clock, so six recordings of one match legitimately end
+  tenths of a second apart; greying one out while its neighbours run says "this
+  robot stopped" about a difference in when scouts pressed a button.
+  `DONE_GRACE_MS` is the second of slack that buys.
 - **A position is only ever written down while the match is being watched.**
   `AutoField` accepts a drag in `record` mode; its third mode is `review`, not
   `correct`. The pass afterwards let the scout scrub back and move the robot,

@@ -314,28 +314,35 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 	//
 	// Note what this assertion does NOT say: it passes if EITHER axis clears the
 	// hub, so it stayed green the whole time a start was being pushed out of the
-	// hub along x — off the starting line and into the neutral zone. It is the
-	// right assertion for its own question and the wrong one for the rule, so the
-	// rule is asserted separately below.
+	// hub along x and clean out of the alliance zone. It is the right assertion
+	// for its own question and the wrong one for the rule, so the rule — stay in
+	// the zone — is swept separately below.
+	//
+	// WHICH way it escapes is deliberately not asserted. Sliding along the line
+	// was the only option while the start was pinned to the line; now that the
+	// whole zone is legal, going behind the hub is an equally good answer and
+	// pinning one of them would be pinning an implementation detail.
 	const intoHub = clampToStart({ x: STARTING_LINE, y: 0.5 }, 'red');
 	const hub = OBSTACLES.find((o) => o.label === 'hub');
 	ok('a start cannot be inside the HUB',
 		Math.abs(intoHub.x - hub.x) >= hub.w / 2 + HALF_ROBOT_X - 1e-9 ||
 			Math.abs(intoHub.y - hub.y) >= hub.h / 2 + HALF_ROBOT_Y - 1e-9);
-	ok('and it clears the HUB by sliding ALONG the line, not off it',
-		near(intoHub.x, STARTING_LINE, 1e-9) && Math.abs(intoHub.y - 0.5) > 1e-6);
+	ok('and it clears it without leaving the alliance zone',
+		intoHub.x >= HALF_ROBOT_X - 1e-9 && intoHub.x <= STARTING_LINE + HALF_ROBOT_X + 1e-9);
 }
 
-// ─── a start is always on the starting line ────────────────────────────────
+// ─── a start is always in the robot's own alliance zone ────────────────────
 //
-// G303-D is a rule about x and nothing else: the bumpers overlap the ROBOT
-// STARTING LINE, so the centre is within half a robot of it. Everywhere else is
-// a placement that could not have happened.
+// The constraint is the ZONE, not the line. It was the line for one release, on
+// a reading of G303-D that made "behind the hub" impossible to record — and the
+// team says behind the hub is a real start. This is a recording aid, not a
+// referee: what it must rule out is what could not have happened, which is a
+// robot inside a structure or at the wrong end of the field.
 //
-// Swept rather than sampled, because the failure was not at an edge — the HUB is
-// a 47in square CENTRED ON THE LINE, so the whole middle of the field resolved
-// out of the band. 391 of 3721 placements landed off the line, up to 23.5in,
-// which for blue is 23.5in into the neutral zone in front of the hub.
+// Swept rather than sampled, because the failure it replaced was not at an edge.
+// The HUB is a 47in square CENTRED ON THE STARTING LINE, so the whole middle of
+// the field resolved out of bounds: 391 of 3721 placements, up to 23.5in, which
+// for blue was 23.5in into the neutral zone in front of the hub.
 {
 	const insideAny = (p) =>
 		OBSTACLES.some(
@@ -347,24 +354,36 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 
 	for (const colour of ['red', 'blue']) {
 		const line = colour === 'blue' ? 1 - STARTING_LINE : STARTING_LINE;
-		const lo = line - HALF_ROBOT_X;
-		const hi = line + HALF_ROBOT_X;
-		let offLine = 0;
+		// The zone, plus the half robot a start straddling the line needs.
+		const [lo, hi] =
+			colour === 'blue'
+				? [line - HALF_ROBOT_X, 1 - HALF_ROBOT_X]
+				: [HALF_ROBOT_X, line + HALF_ROBOT_X];
+
+		let outOfZone = 0;
 		let inside = 0;
-		let outOfBounds = 0;
+		let behindTheLine = 0;
 		for (let i = 0; i <= 60; i += 1) {
 			for (let j = 0; j <= 60; j += 1) {
 				const p = clampToStart({ x: i / 60, y: j / 60 }, colour);
-				if (p.x < lo - 1e-9 || p.x > hi + 1e-9) offLine += 1;
+				if (p.x < lo - 1e-9 || p.x > hi + 1e-9) outOfZone += 1;
 				if (insideAny(p)) inside += 1;
-				if (p.y < HALF_ROBOT_Y - 1e-9 || p.y > 1 - HALF_ROBOT_Y + 1e-9) outOfBounds += 1;
+				const behind = colour === 'blue' ? p.x > line + 0.02 : p.x < line - 0.02;
+				if (behind) behindTheLine += 1;
 			}
 		}
-		ok(`${colour}: no drag anywhere on the field starts off the line`, offLine === 0,
-			`${offLine} of 3721 landed outside [${lo.toFixed(4)}, ${hi.toFixed(4)}]`);
+		ok(`${colour}: no drag anywhere on the field starts outside the alliance zone`,
+			outOfZone === 0, `${outOfZone} of 3721 outside [${lo.toFixed(4)}, ${hi.toFixed(4)}]`);
 		ok(`${colour}: and none of them starts inside a structure`, inside === 0, `${inside} of 3721`);
-		ok(`${colour}: and none of them leaves the field`, outOfBounds === 0, `${outOfBounds} of 3721`);
+		ok(`${colour}: and behind the hub is reachable`, behindTheLine > 0,
+			'the zone collapsed back onto the line');
 	}
+
+	// The two placements the change is about, stated as themselves.
+	const behindRed = clampToStart({ x: 0.05, y: 0.5 }, 'red');
+	ok('a red robot can start behind its hub', behindRed.x < STARTING_LINE - 0.02);
+	const onLine = clampToStart({ x: STARTING_LINE, y: 0.1 }, 'red');
+	ok('and one on the line is still on the line', near(onLine.x, STARTING_LINE, 1e-9));
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

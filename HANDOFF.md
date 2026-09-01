@@ -408,6 +408,46 @@ are in the v0.81.4 commit message; the two worth carrying forward:
   described the far HUB as "a half square" straddling a cut that no longer
   exists.
 
+### The v0.81.6 pass
+
+- **The start zone is the ALLIANCE ZONE, not the starting line.** The line was my
+  reading of G303-D and it made a placement the team actually sees — behind the
+  hub — impossible to record. The principle that settles it was already written
+  in `field.js` about rule point E and just needed generalising: **a recording
+  aid is not a referee.** Rule out what could not have happened; do not enforce a
+  rule the app has only inferred.
+
+- **A climb ends the auto run.** `press('climb')` opens a mark that `release`
+  does not close — it runs to the whistle. Two reasons, and the second is the
+  one that would have bitten: it frees the scout's hands for the questions, and
+  `encodeTrack` drops any interval with `t1 <= t0`, so a climb that ended the
+  recording the instant it began would have been silently thrown away. The one
+  action the scout most wants recorded, discarded for being instantaneous.
+
+  The sheet takes the screen because there is nothing left on the field to
+  watch. Both answers are three-state: `ok` is `true`/`false`/ABSENT, and
+  `cycleStats.climbOk` returns null rather than false for an unjudged climb —
+  the same blank-is-not-zero line the rest of the app holds.
+
+- **The 7% mobile reflow was one wrapped button.** At 375px the place row
+  measured 149 + 106 + 145 against 351, so "Exit full screen" wrapped and the
+  controls block was a row taller before the whistle than during it. The visible
+  label is "Exit" now (the full phrase is the accessible name) and `.say`
+  reserves its own tallest state. Both phases are 82px, and the field is 623 in
+  both — bigger than the 581 it used to be while placing, so nothing was traded
+  for it.
+
+- **Robots stopped fading a fraction of a second early.** Alignment is on first
+  movement, so tracks end up to a second apart for scout-timing reasons.
+  `DONE_GRACE_MS` is 1s. Verified both ways: three tracks ending 0.3s and 0.6s
+  apart never fade, and an 8s track among 14.5s ones still fades — at 9.6s, not
+  8.0s.
+
+**The action glyphs are about to be replaced.** They are a single `GLYPH` map of
+SVG path strings in `AutoField`, drawn in a local box of roughly +/-8 around the
+chip's centre, stroked not filled. Swapping them is a one-place change; keep the
+stroke widths, since they are what makes the glyph legible at 25px on a phone.
+
 ---
 
 ## Where things stood

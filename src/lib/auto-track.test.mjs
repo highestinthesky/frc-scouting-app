@@ -288,6 +288,41 @@ function synth(n = 150) {
 	const unknown = climb(undefined);
 	ok('a climb with no level still counts as a climb', cycleStats(unknown).climbed === true);
 	ok('and its level is null, not zero', cycleStats(unknown).climbLevel === null);
+	// ─── did it actually come off? ─────────────────────────────────────────
+	//
+	// Three states. `false` and absent are the pair that gets confused, and
+	// confusing them turns "nobody judged this climb" into "this climb failed".
+	const withOk = (ok) =>
+		decodeTrack(encodeTrack({ intervals: [{ a: 'climb', t0: 1000, t1: 4000, lvl: 2, ok }] }));
+	ok('a successful climb round-trips as true', withOk(true).intervals[0].ok === true);
+	ok('a failed one round-trips as false', withOk(false).intervals[0].ok === false);
+	ok('and an unjudged one carries no answer at all',
+		!('ok' in withOk(undefined).intervals[0]));
+	ok('a failed climb is not mistaken for an unjudged one',
+		withOk(false).intervals[0].ok !== undefined);
+	// Non-booleans are not answers. A stray string must not become `true`.
+	ok('only a boolean is accepted',
+		!('ok' in decodeTrack(encodeTrack({
+			intervals: [{ a: 'climb', t0: 1000, t1: 4000, ok: 'yes' }]
+		})).intervals[0]));
+	// The level and the outcome are independent questions.
+	ok('a climb can succeed with no level recorded',
+		decodeTrack(encodeTrack({ intervals: [{ a: 'climb', t0: 1000, t1: 4000, ok: true }] }))
+			.intervals[0].ok === true);
+
+	// cycleStats reports the outcome the same three ways.
+	const stats = (ok) => cycleStats(withOk(ok));
+	ok('a successful climb reports climbOk true', stats(true).climbOk === true);
+	ok('a failed one reports false', stats(false).climbOk === false);
+	ok('and an unjudged one reports null, not false', stats(undefined).climbOk === null);
+	// A robot that slipped and then got up did climb: the best outcome wins.
+	const slipped = decodeTrack(encodeTrack({ intervals: [
+		{ a: 'climb', t0: 1000, t1: 2000, ok: false },
+		{ a: 'climb', t0: 3000, t1: 4000, ok: true }
+	] }));
+	ok('one failed attempt does not overrule a later success',
+		cycleStats(slipped).climbOk === true);
+
 	ok('a track with no climb reports neither',
 		cycleStats(decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] }))).climbed === false);
 
