@@ -134,7 +134,6 @@
 
 	/** Where the robot is at the scrub position, for the correction pass. */
 	const atScrub = $derived(preview ? positionAt(preview, scrub) : null);
-	const scrubIndex = $derived(Math.min(samples.length - 1, Math.round(scrub / STEP_MS)));
 
 	function emit() {
 		onchange?.(encodeTrack({ start, samples, intervals, hz: SAMPLE_HZ }));
@@ -152,34 +151,23 @@
 			emit();
 			return;
 		}
-		here = pos;
-		if (phase === 'live') {
-			// Live drag only moves the robot; the sampler is what writes it down, at
-			// a fixed cadence. Recording on every pointer event instead would give a
-			// track whose density depends on how fast the scout's thumb moved, and
-			// the timestamps would stop being derivable from the index.
-		} else if (phase === 'correct') {
-			// Correcting rewrites the sample under the scrub head. This is the whole
-			// point of the pass: the live drag got the shape, and this buys back the
-			// two hundred milliseconds of human lag on the parts that matter.
-			if (scrubIndex >= 0 && scrubIndex < samples.length) {
-				samples[scrubIndex] = pos;
-				samples = samples;
-				// Correcting the first sample moves where the robot started, so the
-				// stored start has to move with it. They are separate keys (a
-				// start-only record is a real record) and nothing else keeps them
-				// agreeing — left alone, the start position and the head of the path
-				// would disagree, and the start zone would name a place the path does
-				// not begin.
-				if (scrubIndex === 0) start = pos;
-			} else if (samples.length === 0) {
-				start = pos;
-			}
-			emit();
-		}
+		// Live drag only moves the robot; the sampler is what writes it down, at a
+		// fixed cadence. Recording on every pointer event instead would give a track
+		// whose density depends on how fast the scout's thumb moved, and the
+		// timestamps would stop being derivable from the index.
+		//
+		// After the whistle the field stops accepting a drag at all, so there is no
+		// third case here. The correction pass used to rewrite the sample under the
+		// scrub head; see `draggable` in AutoField for why it no longer does.
+		if (phase === 'live') here = pos;
 	}
 
 	function begin() {
+		// Defensive: a second begin() with a timer still running leaks the first
+		// one, and two samplers filling the same array double the rate at which `t`
+		// advances — a 15-second recording that decodes as 7.5 seconds of motion at
+		// twice the speed, with nothing about it looking wrong.
+		if (timer) clearInterval(timer);
 		samples = [];
 		intervals = [];
 		held = {};
@@ -351,7 +339,19 @@
 		// open — the release then closes only the last, and the rest never end.
 		if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey) return;
 		if (isTyping(ev.target)) return;
-		if (phase === 'place' && ev.key === 'Enter' && start) {
+		// Space starts it, not Enter.
+		//
+		// Enter is across the keyboard from A/S/D/F and under the hand that is on
+		// the mouse — the one hand that is busy, because it is about to drag the
+		// robot. Space is under the thumb that is already resting there, and it is
+		// what starts a stopwatch, a video and a game, which is the whole of what
+		// this control does.
+		//
+		// preventDefault stops two things, both of which have to be stopped: the
+		// page scrolling, and Space activating whatever button happens to hold
+		// focus. Enter still works when the Start button itself is focused, which
+		// is the browser's job and not this handler's.
+		if (phase === 'place' && ev.key === ' ' && start) {
 			ev.preventDefault();
 			begin();
 			return;
@@ -360,6 +360,13 @@
 		if (ev.key === 'Escape') {
 			ev.preventDefault();
 			finish();
+			return;
+		}
+		// Space does nothing during the recording, but it must not do its DEFAULT
+		// either: it scrolls the page and it clicks whichever action button holds
+		// focus. The recorder owns the keyboard for these fifteen seconds.
+		if (ev.key === ' ') {
+			ev.preventDefault();
 			return;
 		}
 		const action = KEYS[ev.key.toLowerCase()];
@@ -420,8 +427,12 @@
 <div class="shell" class:full>
 <div class="rec" class:left={handed === 'left'}>
 	<div class="stage">
+		<!-- `phase` and `mode` deliberately disagree in the last state: the pass
+		     still corrects — trim an action, set a rung, turn the track end for end
+		     — but the FIELD is read-only, because those are the corrections that do
+		     not invent a position. -->
 		<AutoField
-			mode={phase === 'live' ? 'record' : phase === 'correct' ? 'correct' : 'record'}
+			mode={phase === 'correct' ? 'review' : 'record'}
 			position={phase === 'correct' ? atScrub : here}
 			trail={phase === 'place' ? [] : samples}
 			{flipped}
@@ -481,7 +492,7 @@
 		</p>
 		<div class="row">
 			<Button variant="primary" disabled={!start} onclick={begin}>
-				Start recording<kbd class="on-btn">↵</kbd>
+				Start recording<kbd class="on-btn">space</kbd>
 			</Button>
 			<Button variant="ghost" onclick={() => (flipped = !flipped)}>
 				Wall {flipped ? 'left' : 'right'}
@@ -518,7 +529,6 @@
 				/>
 				<span class="clock">{(scrub / 1000).toFixed(1)}s</span>
 			</label>
-			<p class="say hint">Drag the robot to correct where it was at this moment.</p>
 		{/if}
 
 		{#if intervals.length}
@@ -707,11 +717,22 @@
 		touch-action: none;
 		user-select: none;
 	}
+	/* The label WRAPS rather than truncating.
+	   "Off path" was already the short name — it replaced "Disrupted" because a
+	   truncated control is one a scout has to remember instead of read — and on a
+	   375px phone it still came out "Off pa…", which is the same bug with a
+	   shorter word in it. There is no name for this action that survives a quarter
+	   of a phone's width on one line, so it gets two: the button is 55px tall for
+	   the thumb and two lines of body text fit inside that without changing the
+	   rail's height. Shrinking the type instead would have kept the baseline tidy
+	   and made the control harder to hit, which is the wrong trade on the one
+	   surface that is used under a fifteen-second clock. */
 	.act .what {
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
+		hyphens: none;
+		line-height: 1.15;
+		text-align: center;
 	}
 	.act:focus-visible {
 		outline: 2px solid var(--accent);
