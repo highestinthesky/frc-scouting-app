@@ -235,6 +235,8 @@
 	}
 </script>
 
+<svelte:head><title>Event · FRC Scout</title></svelte:head>
+
 <PageHead title="Event">
 	{#snippet actions()}
 		{#if events.length > 1}

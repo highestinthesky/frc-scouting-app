@@ -30,11 +30,41 @@
 	import Stat from '$lib/components/studio/Stat.svelte';
 	import Table from '$lib/components/studio/Table.svelte';
 
+	// ─── two loads, because they can fail in different ways ────────────────────
+	//
+	// Everything on this page except the roster is already on the device: entries
+	// are IndexedDB and the schedule is a cached setting. The roster is the one
+	// thing that needs Supabase.
+	//
+	// They used to share a `loading` flag and a try block, and that put the local
+	// numbers behind a network round trip with no timeout on it. One request that
+	// never settles — a gym with no usable wifi, which CLAUDE.md says is the
+	// normal case — left a manager looking at "Loading…" on a page whose every
+	// statistic was sitting in IndexedDB. Measured: one hung fetch, and the page
+	// never rendered a number again.
+	//
+	// So the local half gates the statistics and the network half gates only the
+	// panel that needs it. An event with no signal now reads as coverage plus one
+	// panel that says why it is empty, which is the offline-first promise the rest
+	// of the app keeps.
 	let entries = $state([]);
 	let cached = $state(null);
-	let roster = $state([]);
 	let loading = $state(true);
 	let err = $state('');
+
+	let roster = $state([]);
+	let rosterLoading = $state(true);
+	let rosterErr = $state('');
+	let rosterSlow = $state(false);
+
+	// How long the roster may spin before it says so.
+	//
+	// Not a cancel: supabase-js retries a rejected fetch rather than surfacing it
+	// (measured — three attempts and still going at 4.8s), and a hung socket never
+	// rejects at all, so "loading" is a state this panel can sit in indefinitely.
+	// The request is left running and fills in if it lands; this only stops the
+	// spinner claiming progress it cannot demonstrate.
+	const ROSTER_PATIENCE_MS = 8000;
 
 	const qmList = $derived(cached?.matches ?? []);
 	const entryIndex = $derived(buildEntryIndex(entries, session.eventCode));
@@ -88,27 +118,80 @@
 			.sort((a, b) => a.count - b.count)
 	);
 
+	// The event code is read SYNCHRONOUSLY, before any await, in both effects.
+	//
+	// Svelte only tracks reads that happen before the first suspension, so reading
+	// it after `await listEntries()` — which is where it used to be read — made
+	// this effect dependency-free: it ran once on mount and never again. Switching
+	// events left the page showing the previous event's coverage under the new
+	// event's name.
+	//
+	// Which is also why both loads carry a `stale` flag. Now that they DO re-run,
+	// two event switches in quick succession have two loads in flight, and the
+	// slower one is not necessarily the older one — without this, the first
+	// event's roster lands under the second event's heading.
 	$effect(() => {
+		const code = session.eventCode;
+		let stale = false;
 		(async () => {
 			loading = true;
 			err = '';
 			try {
-				entries = await listEntries();
-				cached = session.eventCode ? await getCachedSchedule(session.eventCode) : null;
-				const events = await listMyEvents();
-				const here = events.find((e) => e.code === session.eventCode);
-				roster = here ? await eventRoster(here.id) : [];
+				const rows = await listEntries();
+				const sched = code ? await getCachedSchedule(code) : null;
+				if (stale) return;
+				entries = rows;
+				cached = sched;
 			} catch (e) {
-				err = e?.message ?? String(e);
+				if (!stale) err = e?.message ?? String(e);
 			} finally {
-				loading = false;
+				if (!stale) loading = false;
 			}
 		})();
+		return () => {
+			stale = true;
+		};
+	});
+
+	$effect(() => {
+		const code = session.eventCode;
+		let stale = false;
+		const slow = setTimeout(() => {
+			if (!stale) rosterSlow = true;
+		}, ROSTER_PATIENCE_MS);
+		(async () => {
+			rosterLoading = true;
+			rosterErr = '';
+			rosterSlow = false;
+			try {
+				const events = await listMyEvents();
+				const here = events.find((e) => e.code === code);
+				const rows = here ? await eventRoster(here.id) : [];
+				if (stale) return;
+				roster = rows;
+			} catch (e) {
+				if (stale) return;
+				roster = [];
+				rosterErr = e?.message ?? String(e);
+			} finally {
+				if (!stale) {
+					clearTimeout(slow);
+					rosterSlow = false;
+					rosterLoading = false;
+				}
+			}
+		})();
+		return () => {
+			stale = true;
+			clearTimeout(slow);
+		};
 	});
 
 	const personName = (p) =>
 		`${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || p.username || 'Unnamed';
 </script>
+
+<svelte:head><title>Coverage · FRC Scout</title></svelte:head>
 
 <PageHead
 	title="Coverage"
@@ -192,14 +275,22 @@
 			{/if}
 		</Panel>
 
+		<!-- The one panel that needs the network, and the only thing a dead
+		     connection is now allowed to empty. -->
 		<Panel
 			title="By scout"
-			hint={perScout.length === 0
-				? 'Nobody is on this event yet — add scouts on the Event tab.'
-				: 'Fewest first, because the useful end of this list is the top. A zero usually means a phone that has not synced rather than a scout who has not worked.'}
-			flush={perScout.length > 0}
+			hint={rosterLoading || rosterErr
+				? ''
+				: perScout.length === 0
+					? 'Nobody is on this event yet — add scouts on the Event tab.'
+					: 'Fewest first, because the useful end of this list is the top. A zero usually means a phone that has not synced rather than a scout who has not worked.'}
+			flush={!rosterLoading && !rosterErr && perScout.length > 0}
 		>
-			{#if perScout.length === 0}
+			{#if rosterLoading}
+				<p class="muted">{rosterSlow ? 'Still waiting on the network.' : 'Loading…'}</p>
+			{:else if rosterErr}
+				<p class="err">{rosterErr}</p>
+			{:else if perScout.length === 0}
 				<p class="muted">No roster.</p>
 			{:else}
 				<Table dense>
