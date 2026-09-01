@@ -36,7 +36,7 @@
 		trackDuration,
 		cycleStats
 	} from '$lib/auto-track.js';
-	import { startZone, clampToStart, mirrorPosition } from '$lib/field.js';
+	import { startZone, clampToStart } from '$lib/field.js';
 
 	/**
 	 * @type {{
@@ -146,8 +146,19 @@
 			// position is the single most-asked question of this whole feature — so
 			// it is constrained at the input rather than corrected in the reading.
 			const p = clampToStart(pos, allianceColor);
+			const first = !start;
 			here = p;
 			start = p;
+			// Full screen opens on the FIRST placement, not when the recording
+			// starts. It used to open at `begin`, which meant the field changed size
+			// and position — measured at 468x228 to 1104x535, and 468px to the left —
+			// at the exact instant the match did. A scout holding the robot when they
+			// pressed space had the whole coordinate system move under their hand.
+			//
+			// Placing is the right moment: it is before the match, there is no clock
+			// on it, and a scout who has put the robot down has committed to
+			// recording. Everything after it happens at one scale.
+			if (first) full = true;
 			emit();
 			return;
 		}
@@ -288,23 +299,6 @@
 		emit();
 	}
 
-	/**
-	 * Turn the whole recording end for end.
-	 *
-	 * For the scout who read the field the wrong way round — every position 180°
-	 * from the truth, which is a plausible auto at the wrong end and looks fine.
-	 * It cannot be re-recorded, because the match is over.
-	 *
-	 * Positions only. The alliance is a fact from the schedule and is not this
-	 * button's to change; that is why it says "flip" and not "switch alliance".
-	 */
-	function flipRecording() {
-		if (start) start = mirrorPosition(start);
-		samples = samples.map(mirrorPosition);
-		here = start;
-		emit();
-	}
-
 	function discard() {
 		start = null;
 		here = null;
@@ -398,17 +392,6 @@
 		};
 	});
 
-	// Recording takes the whole screen, and gives it back afterwards.
-	//
-	// The field was sharing a phone with a form, which is the one thing it cannot
-	// afford: fifteen seconds of thumb-tracking on a 358px-wide picture is the
-	// input the whole feature rests on. Full screen is entered automatically at
-	// `begin` rather than offered as a preference, because a scout about to watch
-	// a match is not going to go looking for a setting.
-	$effect(() => {
-		if (phase === 'live') full = true;
-	});
-
 	onDestroy(() => {
 		if (timer) clearInterval(timer);
 	});
@@ -442,8 +425,14 @@
 		/>
 	</div>
 
-	{#if phase === 'live'}
-		<div class="rail" aria-label="Actions">
+	<!-- Rendered whenever the recorder owns the screen, not only while it is
+	     recording, and hidden rather than removed outside that.
+	     Taking it out of the grid gave the stage its row back, so the field grew
+	     the moment the whistle went and shrank again when it ended — the scale
+	     "snapping" twice per recording. Reserving the space costs a strip that is
+	     empty for a few seconds either side and buys a picture that never moves. -->
+	{#if full || phase === 'live'}
+		<div class="rail" class:idle={phase !== 'live'} aria-label="Actions" aria-hidden={phase !== 'live'}>
 			{#each ACTIONS as a}
 				<button
 					type="button"
@@ -548,14 +537,20 @@
 			</ul>
 		{/if}
 
+		<!-- Two controls used to live here and both could only do harm.
+		     "Wall left/right" turns the PICTURE round, which is for aiming a thumb
+		     at a field you are looking at. The recording is over; there is nothing
+		     left to aim, and the two ends now carry their alliance's own colour, so
+		     the orientation is legible without touching anything.
+		     "Flip recording" turned the TRACK 180 degrees. For a manager comparing
+		     six tracks that is the repair for a scout who read the field backwards.
+		     In the scout's own hands it is never right: clampToStart() pinned this
+		     start to their own alliance's line, so a flip always lands it on the
+		     opponent's — a recording that could not have happened. It lives on the
+		     match page, where a mirrored track is actually visible against five
+		     others. -->
 		<div class="row">
 			<Button variant="ghost" onclick={discard}>Record again</Button>
-			{#if start || samples.length}
-				<Button variant="ghost" onclick={flipRecording}>Flip recording</Button>
-			{/if}
-			<Button variant="ghost" onclick={() => (flipped = !flipped)}>
-				Wall {flipped ? 'left' : 'right'}
-			</Button>
 			{#if full}
 				<Button variant="ghost" onclick={() => (full = false)}>Done</Button>
 			{/if}
@@ -635,22 +630,41 @@
 	   several intervals pushed the row of buttons past the bottom edge with
 	   nothing to scroll — the field had taken the space and `overflow: hidden` on
 	   the shell did the rest. */
+	/* The controls take what they need and no more than this.
+	   `flex: 0 1 auto` alone means "as tall as the content", and the review pass's
+	   content has no ceiling — one interval per row, six or eight of them, and the
+	   field was pushed from 626px to 432px by a list. Capping it bounds how much
+	   the picture can change when the recording ends, and the overflow that was
+	   already declared here finally has something to do.
+
+	   Not zero change: the field IS smaller during review than during recording,
+	   and that is the right way round. Holding the review pass's height open
+	   through the fifteen seconds would spend the screen on an empty box at the
+	   one moment the field is the input. */
 	.shell.full .controls {
 		flex: 0 1 auto;
 		min-height: 0;
+		max-height: 40%;
 		overflow-y: auto;
 		margin-top: 0;
 		padding-bottom: env(safe-area-inset-bottom, 0);
 	}
 
-	/* ─── landscape full screen: the controls go BESIDE the field ────────────
+	/* ─── a phone on its side: the controls go BESIDE the field ──────────────
 	   The field wants an aspect of 1.55 and a phone on its side is 2.16, so
 	   height is what binds — and a row of controls under it costs the field its
 	   whole width. Stacked, full screen rendered a SMALLER field than the form
 	   did: 449px against 472px, which is the opposite of the point.
 
-	   Beside, the field gets the full height and about 600px of width. */
-	@media (orientation: landscape) {
+	   Beside, the field gets the full height and about 600px of width.
+
+	   The height bound is not decoration. This was keyed on `orientation:
+	   landscape` alone, and A DESKTOP IS LANDSCAPE — so a 1440x900 screen got the
+	   layout designed for a 390px-tall phone: the scrubber, the interval list and
+	   every button squeezed into an 11rem column that ran 876px tall and put half
+	   of itself past the bottom of the screen. 30rem is the line between a phone
+	   turned sideways (24.4rem tall) and anything with room to stack. */
+	@media (orientation: landscape) and (max-height: 30rem) {
 		.shell.full {
 			flex-direction: row;
 			align-items: stretch;
@@ -672,6 +686,12 @@
 		}
 	}
 
+	/* Present but inert outside the recording. `visibility` rather than `display`
+	   on purpose: it keeps the grid row, which is the entire reason it is here. */
+	.rail.idle {
+		visibility: hidden;
+		pointer-events: none;
+	}
 	.rail {
 		display: grid;
 		gap: var(--space-2);
@@ -877,12 +897,17 @@
 		}
 	}
 
+	/* The list scrolls in its own box rather than growing without limit. It is
+	   the only part of the review pass whose height depends on what the scout
+	   did, so it is the only part that can push the field around. */
 	.ivs {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
 		gap: var(--space-2);
+		max-height: 9rem;
+		overflow-y: auto;
 	}
 	.ivs li {
 		display: flex;

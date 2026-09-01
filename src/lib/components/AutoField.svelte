@@ -371,8 +371,29 @@
 	let svg = $state(null);
 	let dragging = $state(false);
 
+	/**
+	 * The SVG's box as it was when the current drag began.
+	 *
+	 * A drag maps the pointer's ABSOLUTE position through this box, so if the box
+	 * moves or resizes mid-drag the same physical hand position means a different
+	 * place on the field, and the robot teleports on the next pointermove. That
+	 * shipped: entering full screen at the whistle moved the field from 468x228 to
+	 * 1104x535 with the scout's hand still on the robot.
+	 *
+	 * Freezing the box for the life of the drag is the guarantee rather than an
+	 * arrangement that happens to satisfy it. A ResizeObserver was tried first and
+	 * is not enough — the layout also TRANSLATES, and a five-pixel shift with an
+	 * unchanged size moved the robot four units without ever firing it.
+	 *
+	 * The cost is a drag that continues through a genuine scroll being off by the
+	 * scroll distance. Nothing here scrolls while a drag is live: full screen is
+	 * `position: fixed` with `overflow: hidden`, and the field sets
+	 * `touch-action: none` precisely so a drag never becomes one.
+	 */
+	let dragBox = null;
+
 	function posFromEvent(ev) {
-		const r = svg.getBoundingClientRect();
+		const r = dragBox ?? svg.getBoundingClientRect();
 		// Guard against a zero-width box. It happens during layout and while the
 		// pane is hidden, and dividing by it produces Infinity, which clamps to a
 		// field corner — a robot that teleports for no visible reason.
@@ -390,8 +411,14 @@
 
 	function down(ev) {
 		if (!draggable) return;
+		// Take the box once, here, and hold it for the whole drag.
+		const r = svg?.getBoundingClientRect();
+		dragBox = r && r.width >= 1 && r.height >= 1 ? r : null;
 		const p = posFromEvent(ev);
-		if (!p) return;
+		if (!p) {
+			dragBox = null;
+			return;
+		}
 		dragging = true;
 		// Capture, so a thumb that slides past the field edge keeps dragging
 		// instead of dropping the robot where it left.
@@ -416,6 +443,7 @@
 
 	function up(ev) {
 		dragging = false;
+		dragBox = null;
 		try {
 			ev.currentTarget.releasePointerCapture?.(ev.pointerId);
 		} catch {
