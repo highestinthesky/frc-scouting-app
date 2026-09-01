@@ -99,6 +99,12 @@ could have found: a toggle that turned the wrong axis, a field too small to aim
 at, buttons that clipped, a missing keybind, and a robot that snapped back at the
 end of a recording. Each one was correct and each one was specific.
 
+The next round was four, and it held to the pattern. "The coverage page simply
+says loading" was one hung network request holding an entirely local page
+hostage. "Enter is extremely awkward on desktop" was a key across the keyboard
+from the one hand that is free. "Mobile has not been tested" produced a
+32px button and a label truncated to "Off pa…" inside ten minutes at 375px.
+
 Two habits follow from that:
 
 - **Take a reported symptom literally and go find its mechanism.** "The flip is
@@ -294,6 +300,21 @@ answer.
     hand, in a gym, for fifteen real seconds, and that is the only test that
     matters for an input method. This is the reason v0.81 was scheduled early.
 
+    It has now been driven end to end on the **built** bundle at 375x812 —
+    signed in, placed, started with space, recorded, saved, and confirmed in
+    Postgres with a 400-character track. That is the deployed artifact rather
+    than the dev server, which is a different claim from before. It is still not
+    a thumb.
+
+11. **The alliance bands are nearly invisible on both themes, deliberately.**
+    Measured: 1.26 against the carpet on light, 1.28/1.33 on dark, and own
+    against opponent is 1.00 on light and 1.04 on dark — the two ends differ in
+    hue and not at all in luminance. The comment says tint-not-fill so the BUMPs
+    read through, and the two themes agree, so this is a design choice and not a
+    light-theme regression. Worth knowing before someone "fixes" one theme and
+    breaks the pair. If it turns out a scout cannot find their end at a glance,
+    the answer is a stroke or a label, not more opacity.
+
 ---
 
 ## Where things stood
@@ -304,10 +325,44 @@ nothing: `entries_evt_update` already permitted `manages_event()`. It NARROWS,
 by merging one key server-side instead of writing the whole observations blob
 from a possibly-stale copy.
 
-**v0.80 and v0.81 shipped and deployed, 2026-08-29.** Working tree clean, CI
-green, nothing unpushed. Production is at migration `0024`, `AUTH_ENFORCED` is
-true, and **no migration was needed for any of v0.81** — the auto recording rides
-`entries.observations`, which is already a JSON blob that syncs.
+**v0.80 and v0.81 shipped and deployed, 2026-08-29.** `AUTH_ENFORCED` is true,
+and **no migration was needed for the recording itself** — the auto track rides
+`entries.observations`, which is already a JSON blob that syncs. `0025` came
+later and is about who may correct one, not about storing it.
+
+### The v0.81.1 pass — four reports, and what each turned out to be
+
+- **The scout can no longer drag after the whistle.** ADR-002 Decision 6 had the
+  correction pass letting them scrub back and move the robot, described as
+  "where accuracy is bought". It is not: a position dragged in from memory is,
+  once stored, byte-for-byte a position observed at 10 Hz, and nothing
+  downstream can tell them apart. `AutoField` takes a drag in `record` mode
+  only; the third mode is `review` now, not `correct`, because it corrects
+  nothing. Scrub, trim, set a rung, flip end for end and record again all
+  survive — none of them invents a point. The ADR carries the reversal.
+- **Coverage held its own numbers behind the network.** Entries and the cached
+  schedule are IndexedDB; only the roster needs Supabase, and all three shared
+  one `loading` flag and one try block. One request that never settles left a
+  manager on "Loading…" with every statistic already on the device. Reproduced
+  with a stubbed fetch, split in two, verified. Two more things fell out of it:
+  supabase-js **retries** a rejected fetch rather than surfacing it (three
+  attempts and still going at 4.8s), so the roster panel has a patience timer;
+  and `session.eventCode` was read after the first `await`, which made the whole
+  effect dependency-free — switching events never reloaded the page.
+- **Space starts the recording, not Enter.** Enter is under the hand that is
+  about to be on the mouse. It still works natively when the button itself has
+  focus, which is the platform's job. `begin()` now clears any live timer, since
+  two callers can reach it in one gesture and a leaked interval would fill
+  samples at twice the rate with nothing looking wrong.
+- **Mobile.** Tested on the built bundle at 375x812, not the dev server. Two
+  real defects: `.sp-edit` on the schedule page at `min-height: 1.85rem` (32px,
+  12 under the floor design.md calls non-negotiable) and the "Off path" label
+  truncating to "Off pa…" — the same bug the label was already shortened once to
+  avoid. The label wraps now rather than shrinking, because a control read under
+  a fifteen-second clock should not get smaller. `check_components.mjs` gained a
+  sweep for the first one: it collects the classes that sit on an interactive tag
+  in each file and flags a literal height under 44px. Across all of `src/` it
+  finds exactly one thing, which is the one it was written for.
 
 `SCHEMA_VERSION` is **4**. An entry on 3 has no `autoTrack`, and that is not "the
 robot did not move": `readTrack()` returns null and every spatial aggregate counts

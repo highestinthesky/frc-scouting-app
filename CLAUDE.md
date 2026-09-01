@@ -28,7 +28,7 @@ on `/studio` — because the global tab bar was a trapdoor out of it.
 | `/scouting` | The scout's page: assignments, then their entries. |
 | `/scouting/new`, `/scouting/edit` | The entry form. |
 | `/settings` | Device settings, event picker, sign out. |
-| `/home` | A redirect to `/scouting`. Kept because installed PWAs still point here. |
+| `/home` | The scout's own upcoming matches, from `myMatches()`. Was a redirect to `/scouting`; v0.76 gave it content. Installed PWAs still point here. |
 | `/studio/event` | Who is on this event — drag scouts on and off. |
 | `/studio/schedule` | Publish a TBA schedule, auto-assign, per-match overrides, reminders. |
 | `/studio/coverage` | What is being watched and what is not. |
@@ -199,6 +199,14 @@ ones, and neither is a unit test:
   floor, the focus ring, token usage, that nav labels match their page's `<h1>`,
   that no grid track is a bare `fr` or a nested `minmax()`, that the body font is
   declared once, and that every `Button` variant asked for is one Button defines.
+
+  The tap-floor assertions used to NAME their components, which is only as good
+  as the list — `.sp-edit` was never on it and shipped at 32px. There is now a
+  sweep beside them: for each file it collects the classes that appear on an
+  interactive tag in the markup, then flags any of them given a **literal**
+  height under 44px. It reads only rules that set a height at all, so an inline
+  link in a sentence is never flagged, and it skips `var()`/`calc()` rather than
+  guessing. One hit across all of `src/`, which is the one it was written for.
 - **`check_contrast.mjs`** pins every token pairing against WCAG in all **four**
   palettes — light, dark, Studio light and Studio dark. Studio is two palettes,
   not one: the roles invert between them, and an unmeasured palette is how
@@ -338,6 +346,15 @@ A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — se
 - **`decodeTrack` refuses a version it does not know.** A future layout decoded
   as this one draws a plausible path in the wrong places, which is worse than a
   gap because a gap is visible.
+- **A position is only ever written down while the match is being watched.**
+  `AutoField` accepts a drag in `record` mode; its third mode is `review`, not
+  `correct`. The pass afterwards let the scout scrub back and move the robot,
+  and that was withdrawn: a position recalled ten seconds later is, once stored,
+  byte-for-byte one observed at 10 Hz, which is blank-is-not-zero wearing a
+  different hat. Scrub, trim an interval, set a rung, flip end for end, record
+  again — all kept, because none of them invents a point. See ADR-002 Decision 6
+  and the revision under it. Space starts a recording; Enter is under the hand
+  that is about to be on the mouse.
 
 `SCHEMA_VERSION` is 4. The track carries its own `v` for the byte layout, so the
 sample rate can change without pretending the whole form did. `autoTrack` is
