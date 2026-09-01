@@ -52,7 +52,6 @@
 	 *   t?: number,
 	 *   flipped?: boolean,
 	 *   rotated?: boolean,
-	 *   allianceColor?: string|null,
 	 *   active?: string[],
 	 *   onmove?: (pos: {x:number,y:number}) => void
 	 * }}
@@ -65,7 +64,6 @@
 		t = 0,
 		flipped = false,
 		rotated = false,
-		allianceColor = null,
 		active = [],
 		onmove
 	} = $props();
@@ -151,20 +149,32 @@
 		})
 	);
 
-	// The alliance's own end, tinted. The team's field image does this and it is
-	// the one thing that says which end is yours without a label.
-	const bands = $derived.by(() => {
-		const mine = allianceColor === 'blue' ? 'far' : 'near';
-		return ALLIANCE_BANDS.map((b) => {
-			const r = box({ x: b.x, y: 0.5, w: b.w, h: 1 });
-			return {
-				...r,
-				// With no alliance recorded yet, neither end is claimed — colouring one
-				// would be a guess a scout would read as a fact.
-				tone: allianceColor ? (b.end === mine ? 'own' : 'opp') : 'none'
-			};
-		});
-	});
+	// Each end tinted with the alliance that OWNS it, which is a fact about the
+	// field and not about who is looking at it.
+	//
+	// This used to be `own` / `opp` — the end's relationship to the scout — while
+	// the stylesheet painted `own` red and `opp` blue. Those two only agree for a
+	// red scout. A blue scout got their own end painted red and the opponent's
+	// painted blue: both ends wrong, on the one graphic whose entire job is
+	// saying which end is which, and it looked deliberate.
+	//
+	// `field.js` is unambiguous about the convention — "Red stands at x = 0
+	// looking toward +x; blue stands at the far end" — and `clampToStart()` and
+	// `startZone()` both already derive from it. So near is red and far is blue,
+	// full stop — which is why this component no longer takes an allianceColor
+	// at all. Where the robot may START is alliance-dependent and belongs to
+	// clampToStart(); what colour an end of the field is, is not.
+	//
+	// It is no longer gated on having picked an alliance either. The old guard
+	// was right for the old meaning: with nobody recorded, "yours" is a guess. It
+	// is not a guess that the red end is red, and drawing it before the alliance
+	// is chosen is what lets a scout orient the picture in the first place.
+	const bands = $derived.by(() =>
+		ALLIANCE_BANDS.map((b) => ({
+			...box({ x: b.x, y: 0.5, w: b.w, h: 1 }),
+			tone: b.end === 'near' ? 'red' : 'blue'
+		}))
+	);
 	const marks = $derived(FEATURES.filter((f) => f.kind === 'rect').map(box));
 	const lines = $derived(
 		FEATURES.filter((f) => f.kind === 'line').map((f) => {
@@ -481,11 +491,11 @@
 	   where the hub is passable. */
 	/* Tint, not fill: the band sits under the BUMPs and TRENCHes and has to let
 	   them read through it. */
-	.alliance.own {
+	.alliance.red {
 		fill: var(--alliance-red);
 		opacity: 0.16;
 	}
-	.alliance.opp {
+	.alliance.blue {
 		fill: var(--alliance-blue);
 		opacity: 0.16;
 	}
