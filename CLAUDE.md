@@ -359,7 +359,13 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   half in auto and there is no such rule (G403 restricts *contact* past the
   centre line, not territory), so a cut field would have had nowhere to put a
   robot that crossed. A **start** position is constrained instead, by G303-D —
-  bumpers must overlap the ROBOT STARTING LINE.
+  bumpers must overlap the ROBOT STARTING LINE, and `clampToStart()` resolves a
+  collision by sliding ALONG that line, never off it. The HUB is a 47in square
+  centred on the line, so the middle of the field is inside it: handing the
+  clamped x to `clampToField()`, whose escape is free in either axis, pushed 391
+  of 3721 placements off the line by up to 23.5in — for blue, into the neutral
+  zone in front of the hub. A resolution free to move on an axis another rule
+  has already fixed will use it.
   It is the real 2026 REBUILT field — 54ft 3in by 26ft 3in, robots at a 120in
   frame perimeter — kept in **inches** and converted once, because `0.2826`
   cannot be checked against a game manual and `184` can. **The alliance zone

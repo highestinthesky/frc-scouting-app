@@ -381,6 +381,33 @@ backs would demand a palette change for a pairing that does not exist. The
 2.97 is still true and still latent — if anything ever draws a strong border on
 a subtle fill, measure it first.
 
+### The v0.81.4/.5 pass — seven reports from use
+
+Five about the recorder's layout, two about the field itself. The layout five
+are in the v0.81.4 commit message; the two worth carrying forward:
+
+- **A start could land in the neutral zone, in front of the hub.**
+  `clampToStart()` clamped x into the legal band and then handed the result to
+  `clampToField()`, whose obstacle escape is free in EITHER axis. The HUB is a
+  47in square centred on the starting line, so the middle of the field is inside
+  it — and the cheapest way out was often along x, straight off the line. 391 of
+  3721 placements, up to 23.5in.
+
+  It resolves along the line now. The general lesson is the one already in
+  `clampToField`'s own comment, in a second costume: **a resolution that is free
+  to move on an axis another rule has already fixed will use it.**
+
+  The existing test `a start cannot be inside the HUB` was green throughout,
+  because it passes if EITHER axis clears the hub — which escaping along x does.
+  It is the right assertion for its own question and the wrong one for the rule,
+  so the rule is now swept separately over a 61x61 grid per alliance.
+
+- **The grey line down the blue end was the cut edge.** `DRAWN` has been the
+  whole field since v0.81; the `.cut` line at `u=1` was left behind and drew
+  `--text-faint` down the far wall. Removed, along with two comments that still
+  described the far HUB as "a half square" straddling a cut that no longer
+  exists.
+
 ---
 
 ## Where things stood

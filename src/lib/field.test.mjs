@@ -311,11 +311,60 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 	ok('the across-field axis turns too', near(flipped.y, 0.7, 1e-9));
 
 	// And it still cannot end up inside a structure.
+	//
+	// Note what this assertion does NOT say: it passes if EITHER axis clears the
+	// hub, so it stayed green the whole time a start was being pushed out of the
+	// hub along x — off the starting line and into the neutral zone. It is the
+	// right assertion for its own question and the wrong one for the rule, so the
+	// rule is asserted separately below.
 	const intoHub = clampToStart({ x: STARTING_LINE, y: 0.5 }, 'red');
 	const hub = OBSTACLES.find((o) => o.label === 'hub');
 	ok('a start cannot be inside the HUB',
 		Math.abs(intoHub.x - hub.x) >= hub.w / 2 + HALF_ROBOT_X - 1e-9 ||
 			Math.abs(intoHub.y - hub.y) >= hub.h / 2 + HALF_ROBOT_Y - 1e-9);
+	ok('and it clears the HUB by sliding ALONG the line, not off it',
+		near(intoHub.x, STARTING_LINE, 1e-9) && Math.abs(intoHub.y - 0.5) > 1e-6);
+}
+
+// ─── a start is always on the starting line ────────────────────────────────
+//
+// G303-D is a rule about x and nothing else: the bumpers overlap the ROBOT
+// STARTING LINE, so the centre is within half a robot of it. Everywhere else is
+// a placement that could not have happened.
+//
+// Swept rather than sampled, because the failure was not at an edge — the HUB is
+// a 47in square CENTRED ON THE LINE, so the whole middle of the field resolved
+// out of the band. 391 of 3721 placements landed off the line, up to 23.5in,
+// which for blue is 23.5in into the neutral zone in front of the hub.
+{
+	const insideAny = (p) =>
+		OBSTACLES.some(
+			(o) =>
+				o.kind === 'rect' &&
+				Math.abs(p.x - o.x) < o.w / 2 + HALF_ROBOT_X - 1e-9 &&
+				Math.abs(p.y - o.y) < o.h / 2 + HALF_ROBOT_Y - 1e-9
+		);
+
+	for (const colour of ['red', 'blue']) {
+		const line = colour === 'blue' ? 1 - STARTING_LINE : STARTING_LINE;
+		const lo = line - HALF_ROBOT_X;
+		const hi = line + HALF_ROBOT_X;
+		let offLine = 0;
+		let inside = 0;
+		let outOfBounds = 0;
+		for (let i = 0; i <= 60; i += 1) {
+			for (let j = 0; j <= 60; j += 1) {
+				const p = clampToStart({ x: i / 60, y: j / 60 }, colour);
+				if (p.x < lo - 1e-9 || p.x > hi + 1e-9) offLine += 1;
+				if (insideAny(p)) inside += 1;
+				if (p.y < HALF_ROBOT_Y - 1e-9 || p.y > 1 - HALF_ROBOT_Y + 1e-9) outOfBounds += 1;
+			}
+		}
+		ok(`${colour}: no drag anywhere on the field starts off the line`, offLine === 0,
+			`${offLine} of 3721 landed outside [${lo.toFixed(4)}, ${hi.toFixed(4)}]`);
+		ok(`${colour}: and none of them starts inside a structure`, inside === 0, `${inside} of 3721`);
+		ok(`${colour}: and none of them leaves the field`, outOfBounds === 0, `${outOfBounds} of 3721`);
+	}
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

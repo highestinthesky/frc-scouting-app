@@ -92,11 +92,10 @@
 	/**
 	 * Full-field position to a point in the viewBox, honouring the flip.
 	 *
-	 * The rotation is applied in DRAWN space, after toDrawn — the drawn region is
-	 * cut, so rotating in field coordinates would slide the window onto the
-	 * opponent's half. Everything on the field goes through here, which is what
-	 * makes "the whole picture turns together" true by construction rather than
-	 * by remembering to flip each layer.
+	 * The rotation is applied in DRAWN space, after toDrawn. Everything on the
+	 * field goes through here, which is what makes "the whole picture turns
+	 * together" true by construction rather than by remembering to flip each
+	 * layer.
 	 */
 	function place(pos) {
 		if (!pos) return null;
@@ -518,14 +517,8 @@
 		<line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} class="mark-line {l.label.split(' ')[0]}" />
 	{/each}
 
-	<!-- The cut edge. The picture stops here; the coordinate space does not. It is
-	     the far end from the alliance wall, so it changes sides with the flip. -->
-	{#each [segment(1, 0, 1, 1)] as c}
-		<line x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} class="cut" />
-	{/each}
-
-	<!-- Solid: a robot cannot be here. Both HUBs and the DEPOT. The far HUB
-	     straddles the cut, so it renders as a half square on the right edge. -->
+	<!-- Solid: a robot cannot be here. Both HUBs and the DEPOT, both ends, drawn
+	     whole — the field has not been cut since v0.81. -->
 	{#each solids as o}
 		<rect x={o.x} y={o.y} width={o.w} height={o.h} rx="4" class="solid" />
 		{#if o.hex}<polygon points={o.hex} class="opening" />{/if}
@@ -620,10 +613,6 @@
 		font-size: 26px;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-	}
-	.cut {
-		stroke: var(--border-strong);
-		stroke-width: 3;
 	}
 	/* A stroke means "this stops a robot", and nothing else on the field has one.
 	   That is the entire visual grammar here, and it has to survive being glanced

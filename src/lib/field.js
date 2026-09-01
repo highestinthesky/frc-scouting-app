@@ -174,9 +174,9 @@ export const DRAWN = Object.freeze({ x0: 0, y0: 0, x1: 1, y1: 1 });
  * robot inside the HUB, which is a different thing from rejecting a scout's
  * input. Rectangles in full-field fractions, `x`/`y` being the centre.
  *
- * Both HUBs are here. The near one is centred on this alliance's own starting
- * line; the far one is centred on the opponent's, which is the cut edge, so it
- * appears as a half square against the right-hand boundary.
+ * Both HUBs are here, and both are drawn whole. Each is centred on its own
+ * alliance's starting line — which is also why a robot dragged to the middle of
+ * a starting line has to slide sideways rather than off it; see clampToStart.
  */
 const mirrorX = (o) => ({ ...o, x: 1 - o.x, label: `far ${o.label}` });
 
@@ -313,11 +313,48 @@ export const STARTING_LINE = fx(ALLIANCE_ZONE_IN);
  */
 export function clampToStart(pos, allianceColor) {
 	const line = allianceColor === 'blue' ? 1 - STARTING_LINE : STARTING_LINE;
-	const p = clampToField(pos);
-	return clampToField({
-		x: clamp(p.x, line - HALF_ROBOT_X, line + HALF_ROBOT_X),
-		y: p.y
-	});
+	const lo = line - HALF_ROBOT_X;
+	const hi = line + HALF_ROBOT_X;
+
+	// x is the RULE and y is the freedom, so the robot only ever slides ALONG the
+	// line — it is never pushed off it.
+	//
+	// This used to clamp x into the band and then hand the result to
+	// clampToField(), whose obstacle escape can move in x. The HUB is a 47in
+	// square CENTRED ON THIS LINE, so a scout dragging to the middle of the field
+	// was pushed straight out of the band: measured at 391 of 3721 placements,
+	// up to 23.5in off — which for blue is 23.5in into the neutral zone, in front
+	// of the hub, where no robot may start.
+	//
+	// It is the same shape as the bug already recorded in clampToField below: a
+	// resolution that is free to move on the axis another rule has already fixed
+	// will use it.
+	const x = clamp(Number(pos?.x) || 0, lo, hi);
+	let y = clamp(Number(pos?.y) || 0, DRAWN.y0 + HALF_ROBOT_Y, DRAWN.y1 - HALF_ROBOT_Y);
+
+	// Slide out of anything it landed inside, lateral only. Mid-width on the line
+	// IS inside the HUB, so this is the ordinary case rather than an edge one.
+	for (const o of OBSTACLES) {
+		if (o.kind !== 'rect') continue;
+		const hw = o.w / 2 + HALF_ROBOT_X;
+		const hh = o.h / 2 + HALF_ROBOT_Y;
+		if (Math.abs(x - o.x) >= hw - 1e-9 || Math.abs(y - o.y) >= hh - 1e-9) continue;
+
+		let best = null;
+		for (const cand of [o.y - hh, o.y + hh]) {
+			const c = clamp(cand, DRAWN.y0 + HALF_ROBOT_Y, DRAWN.y1 - HALF_ROBOT_Y);
+			// Bounds-clamped BEFORE it is judged, or a side wall hands back a
+			// candidate that is still inside the obstacle.
+			if (Math.abs(c - o.y) < hh - 1e-9) continue;
+			const cost = Math.abs(c - y);
+			if (!best || cost < best.cost) best = { y: c, cost };
+		}
+		// Both ways blocked means the geometry leaves no lateral room here. Staying
+		// put beats moving off the line, which is the one thing this must not do.
+		if (best) y = best.y;
+	}
+
+	return { x, y };
 }
 
 /**
