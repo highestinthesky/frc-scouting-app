@@ -191,7 +191,25 @@ through `myMatches()` so it agrees with the coverage maths.
 
 ### The checks, and why each exists
 
-`npm test` runs 21 unit suites plus 2 checkers. The checkers are the important
+**A published schedule is the RAW TBA payload, playoffs included.** Production's
+is 68 quals, 13 semifinals and 2 finals. `qualMatches()` is what every consumer
+of the cache calls on the way in — home, scouting, `MyAssignments`, the match
+page, the schedule page, reminders — and Studio's coverage page did not, in a
+variable named `qmList`.
+
+The inflated denominator was the smaller half. `cellKey()` is `(match_number,
+team)` and **playoff numbering restarts within each set**, so thirteen
+semifinals all carry `match_number` 1 and collide with qual 1: three entries
+counted as five robot-matches. Worse, the Gaps table is a keyed `{#each}` on
+that number, and a duplicate key makes Svelte throw `each_key_duplicate`, which
+**aborts the render** — leaving the DOM showing whatever it painted last, which
+on that page is "Loading…". A page that looks like it is still loading when it
+has already finished and simply cannot paint.
+
+Key a match on TBA's own `match.key` (`2026nyny_sf10m1`), never on
+`match_number`: the SET number is the part that makes it unique.
+
+`npm test` runs 22 unit suites plus 2 checkers. The checkers are the important
 ones, and neither is a unit test:
 
 - **`check_components.mjs`** reads *emitted* CSS, not source, because Svelte's

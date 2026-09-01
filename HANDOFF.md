@@ -340,15 +340,46 @@ later and is about who may correct one, not about storing it.
   only; the third mode is `review` now, not `correct`, because it corrects
   nothing. Scrub, trim, set a rung, flip end for end and record again all
   survive — none of them invents a point. The ADR carries the reversal.
-- **Coverage held its own numbers behind the network.** Entries and the cached
-  schedule are IndexedDB; only the roster needs Supabase, and all three shared
-  one `loading` flag and one try block. One request that never settles left a
-  manager on "Loading…" with every statistic already on the device. Reproduced
-  with a stubbed fetch, split in two, verified. Two more things fell out of it:
-  supabase-js **retries** a rejected fetch rather than surfacing it (three
-  attempts and still going at 4.8s), so the roster panel has a patience timer;
-  and `session.eventCode` was read after the first `await`, which made the whole
-  effect dependency-free — switching events never reloaded the page.
+- **Coverage was frozen on "Loading…" by a duplicate key, not by the network.**
+  Worth reading in full, because the first diagnosis was confidently wrong.
+
+  The reported symptom was "simply says loading and never shows statistics". The
+  first pass found that entries and the cached schedule are IndexedDB while only
+  the roster needs Supabase, and that all three shared one `loading` flag — so a
+  hung request held the whole page. That is real, it was fixed, and **it was not
+  what the user was seeing.**
+
+  The actual cause only appeared against production's own data. A published
+  schedule is the RAW TBA payload, playoffs included: 68 quals, 13 semifinals,
+  2 finals. Every other consumer of the cache calls `qualMatches()`; coverage
+  read `cached.matches` straight, in a variable named `qmList`. Playoff
+  numbering restarts, so thirteen semifinals all carry `match_number` 1 — and
+  the Gaps table is a KEYED `{#each}` on that number. Svelte throws
+  `each_key_duplicate`, which **aborts the render**, and an aborted render
+  leaves the DOM showing whatever it painted last. On this page that is the
+  "Loading…" paragraph. A spinner that is not a spinner: the page had already
+  finished loading and simply could not paint.
+
+  Two fixes, and both belong: `qualMatches()` makes the numbers right, and the
+  `{#each}` is keyed on TBA's own `match.key` (`2026nyny_sf10m1` — the SET
+  number is what makes it unique) so a stray non-qual is never again fatal.
+
+  Measured on production's data before the fix: **three entries reported as five
+  robot-matches recorded**, 83 matches counted as the event, and the Gaps list
+  showing "Q1" three times, twice for semifinals.
+
+  The lesson is the one already in this file, and it still cost a wrong answer:
+  **a symptom reproduced is not a symptom explained.** The stubbed-fetch
+  repro produced the right words on screen from the wrong mechanism, and it was
+  only running the real functions over the real payload that found the truth.
+  Reach for production's actual data early — `schedules` is one row and it is
+  the whole story.
+
+  Two smaller things fell out of the same pass: supabase-js **retries** a
+  rejected fetch rather than surfacing it (three attempts and still going at
+  4.8s), so the roster panel has a patience timer; and `session.eventCode` was
+  read after the first `await`, which made the effect dependency-free —
+  switching events never reloaded the page.
 - **Space starts the recording, not Enter.** Enter is under the hand that is
   about to be on the mouse. It still works natively when the button itself has
   focus, which is the platform's job. `begin()` now clears any live timer, since

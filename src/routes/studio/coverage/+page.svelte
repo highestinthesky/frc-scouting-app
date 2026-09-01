@@ -20,7 +20,7 @@
 
 	import { session } from '$lib/session.svelte.js';
 	import { listEntries } from '$lib/db.js';
-	import { getCachedSchedule } from '$lib/tba.js';
+	import { getCachedSchedule, qualMatches } from '$lib/tba.js';
 	import { buildEntryIndex, scheduleRollup, matchCoverage } from '$lib/coverage.js';
 	import { eventRoster, listMyEvents } from '$lib/events.js';
 	import { sameScout, rowScout, scoutRef } from '$lib/scout-identity.js';
@@ -66,7 +66,25 @@
 	// spinner claiming progress it cannot demonstrate.
 	const ROSTER_PATIENCE_MS = 8000;
 
-	const qmList = $derived(cached?.matches ?? []);
+	// qualMatches(), not `cached.matches`. The variable was named qmList and was
+	// not one.
+	//
+	// A published schedule is the RAW TBA payload, playoffs included — production's
+	// is 68 quals, 13 semifinals and 2 finals. Every other consumer of the cache
+	// filters (home, scouting, MyAssignments, the match page, the schedule page,
+	// reminders); this page alone read it straight, so 83 matches were counted as
+	// the event.
+	//
+	// The inflated denominator was the smaller half of it. `cellKey()` is
+	// (match_number, team) and playoff numbering restarts, so THIRTEEN semifinals
+	// and a final all carry match_number 1 and collide with qual 1. Measured on
+	// production's own data: three entries reported as five robot-matches
+	// recorded, and the Gaps list showed "Q1" three times — twice for semifinals.
+	//
+	// A numerator larger than the number of entries is the same failure this file
+	// already carries a comment about, where strays counted toward coverage. A
+	// number that looks like one thing and is another.
+	const qmList = $derived(cached ? qualMatches(cached.matches) : []);
 	const entryIndex = $derived(buildEntryIndex(entries, session.eventCode));
 	const rollup = $derived(scheduleRollup(qmList, entryIndex));
 
@@ -257,7 +275,17 @@
 							<th data-num>Robots</th>
 						</tr>
 					{/snippet}
-					{#each partial as { match, cov } (match.match_number ?? match.matchNumber)}
+					<!-- Keyed on TBA's own match key, not the number.
+					     A match_number is only unique WITHIN a competition level, and
+					     playoff numbering restarts — production's schedule has thirteen
+					     semifinals all numbered 1. Keyed on the number, Svelte threw
+					     `each_key_duplicate`, which aborts the render and leaves the DOM
+					     showing whatever it painted last: the "Loading…" paragraph. A
+					     page frozen on a spinner, with no network fault anywhere near it.
+					     The qualMatches() filter above is what makes the numbers right;
+					     this is what stops a duplicate key being fatal if a non-qual ever
+					     reaches this list again. -->
+					{#each partial as { match, cov } (match.key ?? match.match_number ?? match.matchNumber)}
 						<tr>
 							<td class="qm">Q{match.match_number ?? match.matchNumber}</td>
 							<td>
