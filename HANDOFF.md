@@ -315,6 +315,33 @@ answer.
     breaks the pair. If it turns out a scout cannot find their end at a glance,
     the answer is a stroke or a label, not more opacity.
 
+### The v0.81.2 pass
+
+- **The alliance bands were inverted for every blue scout.** The tint was keyed
+  on the end's relationship to the SCOUT (`own` / `opp`) while the stylesheet
+  painted `own` red and `opp` blue. Those agree only for a red scout; a blue one
+  got their own end red and the opponent's blue — both wrong, on the one graphic
+  whose entire job is saying which end is which, and it looked deliberate.
+  An end's colour is a fact about the field, so it is now `near → red, far →
+  blue` from `field.js`'s own convention, unconditionally. `AutoField` no longer
+  takes an `allianceColor`: where a robot may START is alliance-dependent and
+  belongs to `clampToStart()`, and leaving the prop in place would invite the
+  same mistake back.
+
+- **The match page was linked from nowhere.** `/studio/[eventCode]/q[n]` shipped
+  with the replay in it and the only inbound links were its own prev/next pager
+  — which needs you to already be there. It was reachable by typing the URL and
+  no other way, so nobody had it. Now linked from Schedule (the complete index)
+  and from Coverage's Gaps rows. Coverage alone is not enough: that list holds
+  only matches with gaps, so a fully-covered match never appears there.
+
+  Worth a habit: when a route is added, add the link in the same commit. Grep
+  `href=.*<route>` before calling a page done.
+
+- **The replay needs one track, not six.** `{#if withTracks.length}` — the panel
+  renders whatever exists and says "N of 6 robots were tracked". Verified with 2
+  of 6.
+
 ---
 
 ## Where things stood

@@ -1,11 +1,14 @@
 <script>
 	// Manager's full match table, with a coverage rollup on top. Used to
 	// spot-check a TBA fetch before publishing it to everyone.
+	import { base } from '$app/paths';
 	import { matchCoverage, coverageLevel } from '$lib/coverage.js';
 	import { timeOfDay } from '$lib/format.js';
 	import Panel from './Panel.svelte';
 
-	let { qmList, rollup, entryIndex, overridesByMatch, onOpenMatch } = $props();
+	// eventCode is needed for the match link — /studio/<code>/q<n> is event-scoped
+	// because a match number means nothing without one.
+	let { qmList, rollup, entryIndex, overridesByMatch, onOpenMatch, eventCode = '' } = $props();
 </script>
 
 <Panel title="Schedule preview">
@@ -38,7 +41,21 @@
 			{@const cov = matchCoverage(m, entryIndex)}
 			<li class="sched-li" id={`match-${m.match_number}`}>
 				<div class="sched-row">
-					<span class="sp-match">Q{m.match_number}</span>
+					<!-- The match number is the way IN to a match.
+					     /studio/<code>/q<n> existed from the day it was built and
+					     nothing in the app linked to it — its only inbound links were
+					     its own prev/next pager, which you can only reach once you are
+					     already there. A page reachable only by typing its URL is a page
+					     nobody has. This is the index of every match, so this is where
+					     the link belongs; Coverage lists only the matches with GAPS, so
+					     a fully-covered match never appears there at all. -->
+					{#if eventCode}
+						<a class="sp-match" href="{base}/studio/{eventCode}/q{m.match_number}/">
+							Q{m.match_number}
+						</a>
+					{:else}
+						<span class="sp-match">Q{m.match_number}</span>
+					{/if}
 					<span class="sp-side red">{red.join(' · ')}</span>
 					<span class="sp-vs">vs</span>
 					<span class="sp-side blue">{blue.join(' · ')}</span>
@@ -91,7 +108,13 @@
 		background: var(--bg-card);
 		font-size: var(--fs-sm);
 	}
-	.sp-match { font-weight: 700; color: var(--accent); }
+	/* Already the accent and already bold, so as a link it needs no new colour —
+	   only the underline on hover that every other text link here uses. No tap
+	   floor: this is a word inside a dense row, and 44px of height would push the
+	   schedule apart to solve a problem a whole row-height target does not have. */
+	.sp-match { font-weight: 700; color: var(--accent); text-decoration: none; }
+	a.sp-match:hover,
+	a.sp-match:focus-visible { text-decoration: underline; }
 	.sp-side { font-variant-numeric: tabular-nums; }
 	.sp-side.red { color: var(--alliance-red); text-align: right; }
 	.sp-side.blue { color: var(--alliance-blue); text-align: left; }

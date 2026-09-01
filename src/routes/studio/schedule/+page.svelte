@@ -965,6 +965,7 @@
 						{entryIndex}
 						{overridesByMatch}
 						onOpenMatch={openMatch}
+						eventCode={session.eventCode}
 					/>
 				{/if}
 			</div>

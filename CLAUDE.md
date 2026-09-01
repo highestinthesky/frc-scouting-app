@@ -34,7 +34,7 @@ on `/studio` — because the global tab bar was a trapdoor out of it.
 | `/studio/coverage` | What is being watched and what is not. |
 | `/studio/insights` | Team metrics, compare, picklist. |
 | `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles. |
-| `/studio/[eventCode]/q[n]` | One match: its six teams by alliance, what was recorded, what was missed. |
+| `/studio/[eventCode]/q[n]` | One match: its six teams by alliance, what was recorded, what was missed, and the auto replay of every track on it. Linked from Schedule (every match) and from Coverage's Gaps rows — for a release it was linked from nowhere and reachable only by typing the URL. |
 | `/studio/[eventCode]/team/[n]` | One team at one event, with its season record beside it. |
 
 **The event is in the URL for the last two, and that is load-bearing.** A match
@@ -337,7 +337,15 @@ A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — se
   `performance.now()` rather than counting `setInterval` ticks: a backgrounded
   tab throttles the interval, and the first version recorded 52 seconds and would
   have decoded as 15 seconds of motion at three times the true speed.
-- **Every view transform is a ROTATION, never a mirror**, and `toScreen` /
+- **An end of the field is coloured by the alliance that owns it, not by who is
+looking.** `field.js` fixes the convention — "Red stands at x = 0" — so near is
+red and far is blue, and `AutoField` takes no `allianceColor` at all. The tint
+was keyed on `own`/`opp` while the stylesheet painted `own` red: correct for a
+red scout, and both ends inverted for a blue one, on the one graphic whose whole
+job is saying which end is which. Where a robot may START is alliance-dependent
+and belongs to `clampToStart()`; what colour an end is, is not.
+
+**Every view transform is a ROTATION, never a mirror**, and `toScreen` /
   `fromScreen` in `field.js` own them. Turning the field around moves the
   alliance wall to the other side *and* keeps Left on the scout's left; a mirror
   would move the wall and reverse the labels while still looking deliberate. A

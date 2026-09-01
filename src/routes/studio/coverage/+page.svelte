@@ -18,6 +18,7 @@
 	// first. Both, on one screen, because chasing one without the other is how a
 	// manager fixes symptoms all afternoon.
 
+	import { base } from '$app/paths';
 	import { session } from '$lib/session.svelte.js';
 	import { listEntries } from '$lib/db.js';
 	import { getCachedSchedule, qualMatches } from '$lib/tba.js';
@@ -287,7 +288,15 @@
 					     reaches this list again. -->
 					{#each partial as { match, cov } (match.key ?? match.match_number ?? match.matchNumber)}
 						<tr>
-							<td class="qm">Q{match.match_number ?? match.matchNumber}</td>
+							<td class="qm">
+								<!-- Straight to the match: its six seats, who recorded what,
+								     and the auto replay of every track on it. Note this list
+								     holds only matches with GAPS, so Studio → Schedule is the
+								     complete index and links the same way. -->
+								<a href="{base}/studio/{session.eventCode}/q{match.match_number ?? match.matchNumber}/">
+									Q{match.match_number ?? match.matchNumber}
+								</a>
+							</td>
 							<td>
 								<span class="bar" aria-hidden="true">
 									<span
@@ -369,6 +378,14 @@
 	.qm {
 		font-weight: 600;
 		white-space: nowrap;
+	}
+	.qm a {
+		color: var(--accent);
+		text-decoration: none;
+	}
+	.qm a:hover,
+	.qm a:focus-visible {
+		text-decoration: underline;
 	}
 	.who {
 		font-weight: 600;
