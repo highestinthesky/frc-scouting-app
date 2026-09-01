@@ -372,6 +372,18 @@ and belongs to `clampToStart()`; what colour an end is, is not.
 - **`decodeTrack` refuses a version it does not know.** A future layout decoded
   as this one draws a plausible path in the wrong places, which is worse than a
   gap because a gap is visible.
+- **What a robot is DOING is drawn on the robot**, as a chip above it —
+  `badges()` and `GLYPH` in `AutoField`. The field used to say only *that*
+  something was happening (a stroke in replay, a pulse while recording), which
+  is the half of the question nobody asks. Colour is the second signal and never
+  the first: collect and score are a mirrored pair of arrows because at fifteen
+  screen pixels a reversal reads and a hue does not, and `fault` is `--warning`
+  to agree with the rail the scout holds. The chip is a neutral `--bg-card` disc
+  with coloured ink, because `--accent`/`--success`/`--warning` on `--bg-card`
+  are already pinned at 4.5 in all four palettes and an `--on-success` does not
+  exist. Its edge is `--text-faint`, not `--border-strong`: the disc is 1.08
+  against the carpet so the edge carries the whole boundary, and `--border-strong`
+  is 2.97 on `--bg-subtle` in the light palette — under the 3.0 floor.
 - **A position is only ever written down while the match is being watched.**
   `AutoField` accepts a drag in `record` mode; its third mode is `review`, not
   `correct`. The pass afterwards let the scout scrub back and move the robot,

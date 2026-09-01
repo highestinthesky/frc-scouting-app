@@ -402,6 +402,28 @@ coverage maths rather than computing the same thing a second way.
 Last because it is the smallest and the only item in the series that can slip
 without costing anything on the day.
 
+### v0.84b — getting to a match, and to a replay
+
+Raised from use, 2026-09-01: *"most people will not realize that the match
+numbers actually link to their replays."*
+
+The link exists now — Studio → Schedule on every match number, and Coverage's
+Gaps rows — and that only fixed REACHABILITY. Before it, `/studio/<event>/q<n>`
+was linked from nowhere at all and could only be reached by typing the URL. A
+match number that happens to be a link is still not an invitation, and the
+replay is the most valuable thing in the app to a manager at a table.
+
+Not designed yet, deliberately. What is known:
+
+- The affordance has to say *replay*, not just be clickable. A count of tracked
+  robots on the row would do it — "4/6 tracked" is both the invitation and the
+  reason to take it.
+- The chips (v0.81.3) mean a still frame of a replay is already legible, so a
+  thumbnail is a real option rather than a decoration.
+- Coverage cannot be the only route: its Gaps list holds only matches with
+  holes, so a fully covered match — the most interesting kind to replay — never
+  appears there.
+
 ### v0.85 — the app moves to rohawks.org/app
 
 Off GitHub Pages and onto the team's own hosting, once the features are stable.

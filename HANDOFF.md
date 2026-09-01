@@ -342,6 +342,45 @@ answer.
   renders whatever exists and says "N of 6 robots were tracked". Verified with 2
   of 6.
 
+### The v0.81.3 pass — the field says what, not just whether
+
+Asked for: *"whenever a robot is performing an action, they should have an icon
+on them displaying collecting, shooting, or anything else."*
+
+The action state was already plumbed to the renderer and simply not drawn.
+Replay put a stroke round the rect, the recorder put a pulse behind it, and both
+said only THAT something was happening. `badges()` in `AutoField` now lays a row
+of chips above the robot, driven by `active` in record mode and `actionsAt()` in
+replay — the same data, one renderer, both surfaces.
+
+Four things worth keeping:
+
+- **Above the robot, never on it.** The rect's colour carries the alliance, its
+  middle carries the team number, and its POSITION is the recorded data. Nothing
+  may sit on the position.
+- **Sized for the phone, which is the tightest case.** Full screen and turned a
+  quarter, the field draws at ~0.62 screen px per viewBox unit; a radius of 15
+  was a 19px disc holding a 9px glyph — present and unreadable. 20 measures 25px
+  on a 375px phone, confirmed in the running app.
+- **Clamped back on-canvas.** A robot against the top wall — which is most of a
+  start position on a rotated phone — would have put the row at cy = -24 and
+  simply lost it, and a chip that vanishes reads as an action that stopped. It
+  flips below, and the row is kept inside the sides too because two chips are
+  wider than the robot.
+- **Colour is the second signal.** Collect and score are a mirrored pair of
+  arrows; at fifteen pixels a reversal reads and a hue does not.
+
+The contrast work found one real thing. The chip's disc is `--bg-card` on a
+`--bg-subtle` carpet — 1.08 apart in dark — so its EDGE is the entire boundary,
+and that ground had never been measured. Pinning `--border-strong` against it
+failed at **2.97 in the light scout palette**, under the 3.0 floor. The edge
+moved to `--text-faint`, which the field's other outlines already use and which
+is pinned at 4.5 against exactly that ground; the speculative pair came back out
+of the table, because nothing renders it any more and an assertion no surface
+backs would demand a palette change for a pairing that does not exist. The
+2.97 is still true and still latent — if anything ever draws a strong border on
+a subtle fill, measure it first.
+
 ---
 
 ## Where things stood

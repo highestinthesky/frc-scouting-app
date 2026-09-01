@@ -41,7 +41,7 @@
 		toScreen,
 		fromScreen
 	} from '$lib/field.js';
-	import { positionAt, actionsAt, trackDuration } from '$lib/auto-track.js';
+	import { ACTIONS, positionAt, actionsAt, trackDuration } from '$lib/auto-track.js';
 
 	/**
 	 * @type {{
@@ -264,6 +264,94 @@
 		return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.cx.toFixed(1)},${p.cy.toFixed(1)}`).join(' ');
 	});
 
+	// ─── what the robot is DOING, drawn on the robot ───────────────────────────
+	//
+	// The field used to say only THAT something was happening: a stroke round the
+	// rect in replay, a pulse while recording. Which is the half of the question
+	// nobody asks. A manager watching six robots needs to see the collect and the
+	// score, because the gap between them IS the cycle.
+	//
+	// A chip above the robot rather than a fill on it. The rect's colour is
+	// already carrying the alliance in replay, its middle is already carrying the
+	// team number, and its POSITION is the recorded data — the one thing nothing
+	// may sit on top of.
+	//
+	// Colour is the second signal, never the first: the glyphs are a mirrored
+	// pair (an arrow into the robot, an arrow out of it) because at fifteen
+	// screen pixels a reversal reads and a hue does not. `fault` is --warning to
+	// agree with the action rail the scout holds, so there is one mapping to
+	// learn rather than two.
+	//
+	// Every pairing here is already in check_contrast's table at 4.5 across all
+	// four palettes — the chip is --bg-card and the glyphs are --accent,
+	// --success and --warning, which are measured against it. That is why the
+	// chip is neutral with coloured ink and not a coloured fill: an --on-success
+	// token does not exist, and inventing one would mean four new assertions to
+	// keep true forever.
+	// Sized for the PHONE, which is the tightest case: full screen and turned a
+	// quarter, the field draws at about 0.62 screen pixels per viewBox unit, so a
+	// radius of 15 was a 19px disc holding a 9px glyph — present, and unreadable.
+	// 20 puts it at 25px with a 17px glyph, which is legible at arm's length. It
+	// is deliberately wider than the 56-unit robot when two are shown: what the
+	// robot is doing is the thing being read, and the robot's own square is
+	// already carrying its colour and its number.
+	const BADGE_R = 20;
+	const BADGE_GAP = 5;
+
+	/**
+	 * Glyphs in a local box of roughly +/-7 around the chip's centre.
+	 *
+	 * Stroked, not filled, so they hold their weight when the whole picture is
+	 * scaled down to a phone. Both cycle actions share a baseline at the bottom —
+	 * the robot's own edge — and differ only in which way the arrow runs.
+	 */
+	const GLYPH = {
+		collect: 'M-7,8 H7 M0,-8 V4 M-4.5,-0.5 L0,4 L4.5,-0.5',
+		score: 'M-7,8 H7 M0,4 V-8 M-4.5,-3.5 L0,-8 L4.5,-3.5',
+		climb: 'M-6,8 L0,2 L6,8 M-6,1 L0,-5 L6,1',
+		// The bang's dot is a zero-length segment: with a round linecap it draws
+		// as a disc of exactly the stroke width, so it scales with the glyph
+		// instead of needing its own radius kept in step by hand.
+		fault: 'M0,-8 V2 M0,7 V7'
+	};
+	const GLYPH_LABEL = {
+		collect: 'Collecting',
+		score: 'Scoring',
+		climb: 'Climbing',
+		fault: 'Off path'
+	};
+
+	/**
+	 * Lay a row of chips above a robot, centred on it.
+	 *
+	 * Ordered by ACTIONS rather than by whatever order the intervals happen to
+	 * be in, so a robot collecting-and-off-path draws its chips the same way
+	 * every time and the row does not reshuffle between frames.
+	 */
+	function badges(doing, cx, cy) {
+		const list = ACTIONS.filter((a) => doing?.includes(a));
+		if (!list.length) return [];
+		const step = BADGE_R * 2 + BADGE_GAP;
+
+		// Above the robot, unless there is no above. A robot against the top wall
+		// — which is most of a start position on a rotated phone — would put the
+		// row off the top of the viewBox and simply lose it, and a chip that
+		// vanishes reads as an action that stopped.
+		const lift = HALF_BOT + BADGE_R + 4;
+		const wantY = cy - lift;
+		const y = wantY - BADGE_R < 0 ? cy + lift : wantY;
+
+		// And the row is kept inside the sides for the same reason: two chips are
+		// wider than the robot, so a robot in a corner would drop one.
+		const span = (list.length - 1) * step;
+		const half = span / 2;
+		const lo = BADGE_R + half;
+		const hi = VB_W - BADGE_R - half;
+		const mid = hi < lo ? cx : Math.min(Math.max(cx, lo), hi);
+
+		return list.map((a, i) => ({ a, cx: mid - half + i * step, cy: y }));
+	}
+
 	const me = $derived(place(position));
 	// A drag writes a position down. That is only ever allowed while the match is
 	// the thing being watched.
@@ -432,7 +520,32 @@
 			{/if}
 		</g>
 	{/if}
+
+	<!-- Chips LAST, so they sit above every robot rather than under the next one
+	     drawn. Six robots overlap constantly on a real replay, and a chip that
+	     slides behind a passing robot reads as the action having stopped. -->
+	{#each ghosts as g}
+		{#each badges(g.doing, g.cx, g.cy) as b (b.a)}
+			{@render chip(b, g.done)}
+		{/each}
+	{/each}
+	{#if me}
+		{#each badges(active, me.cx, me.cy) as b (b.a)}
+			{@render chip(b, false)}
+		{/each}
+	{/if}
 </svg>
+
+<!-- One chip. A <title> rather than a legend beside the field: it is the native
+     tooltip AND the accessible name, it costs no space on a phone, and the
+     field is already the densest picture in the app. -->
+{#snippet chip(b, faded)}
+	<g class="badge {b.a}" class:faded>
+		<title>{GLYPH_LABEL[b.a]}</title>
+		<circle cx={b.cx} cy={b.cy} r={BADGE_R} />
+		<path d={GLYPH[b.a]} transform="translate({b.cx} {b.cy})" />
+	</g>
+{/snippet}
 
 <style>
 	/* Hallmark · genre: modern-minimal · component: auto-field
@@ -581,6 +694,45 @@
 	.bot.doing rect {
 		stroke: var(--on-accent);
 		stroke-width: 3;
+	}
+
+	/* The action chip. Neutral disc, coloured glyph — see `badges()` for why that
+	   way round and not a coloured fill. */
+	/* The disc is --bg-card on a --bg-subtle carpet, which is 1.08 apart in dark:
+	   the EDGE is the whole of what separates the chip from the field, so it is
+	   doing the job WCAG 1.4.11 describes and it has to be measured.
+	   --border-strong is 2.97 on --bg-subtle in the light palette — under the 3.0
+	   floor, found by pinning the pair. --text-faint is what the field's other
+	   outlines already use (.solid, .opening) and it is pinned at 4.5 against
+	   this ground in all four palettes, so it is both stronger and already
+	   guaranteed. */
+	.badge circle {
+		fill: var(--bg-card);
+		stroke: var(--text-faint);
+		stroke-width: 1.5;
+	}
+	.badge path {
+		fill: none;
+		stroke: var(--accent);
+		stroke-width: 3;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+	/* Scoring is the other half of a cycle, so it gets the one hue change that
+	   earns its place. Collecting and climbing stay on the accent: their glyphs
+	   are an arrow and a pair of chevrons, which cannot be mistaken for each
+	   other at any size a phone will draw them. */
+	.badge.score path {
+		stroke: var(--success);
+	}
+	/* Matches `.act.fault.on` in the recorder's rail, so the scout learns one
+	   colour for this and not two. */
+	.badge.fault path {
+		stroke: var(--warning);
+	}
+	/* Past the end of its own recording, a robot's chips fade with it. */
+	.badge.faded {
+		opacity: 0.3;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
