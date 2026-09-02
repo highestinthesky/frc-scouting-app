@@ -31,6 +31,7 @@ Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
 | Surviving a season change | **Not built (v0.9).** `form-config.js` already generalises the scalar half; the spatial half does not |
 | Pit scouting and the team profile | Not built (v0.84) |
 | Native apps | Paused — see *Deliberately not in v0.8* |
+| Used by a scout, ever | **No.** Every verification is synthetic pointer events from a console. The offseason was cancelled, so the first real use is a competition |
 
 **The production model is no longer hybrid.** `0020` dropped `session_id` from
 all eight tables along with 29 policies, `has_manager_token()` and the
@@ -45,6 +46,35 @@ passphrase:
   sync waits for a session.
 - **Roles live on `profiles.role`**, enforced in Postgres RLS, with
   `manages_event()` as the one predicate.
+
+## The season this is all aimed at
+
+Planned 2026-09-01, from the published dates.
+
+| | |
+|---|---|
+| **BIOCORE reveal** | Saturday 9 January 2027, 12:00 ET — the FRC 2027 game |
+| Now → kickoff | ~18 weeks |
+| Kickoff → first event | ~7 weeks, the usual FRC build season |
+| First competition | roughly late February / early March 2027 |
+
+**BIOBUZZ is the FTC game and is not this.** The two were confused once during
+planning; this app is FRC-shaped throughout — TBA event codes, a 54ft field,
+G303 and G403 — so the distinction is load-bearing.
+
+Two facts set every priority below.
+
+**The first real use of this app is a competition.** The offseason was
+cancelled, so there is no scrimmage, no dry run, and no event to rehearse
+against. Every untested assumption arrives at once, in a gym, with scouts who
+have never seen it. The recorder in particular has only ever been driven by
+synthetic pointer events from a console.
+
+**The seven weeks after kickoff are the busiest of the team's year.** Anything
+unfinished on 9 January gets finished by people who are also building a robot,
+and then walks into that first event. So "at kickoff it is one file and a
+config" is not an aspiration for v0.9 — it is the requirement, and the work
+before January has to earn it.
 
 ## v0.8 — the event series
 
@@ -687,43 +717,119 @@ re-register. The one hard requirement is HTTPS — `deriveSessionId()` uses
 
 ## v0.9 — the season boundary
 
-**The framework series.** BIOCORE is revealed 9 January 2027 and the first real
-use of this app is the competition after it — there was no offseason, so nothing
-here gets a rehearsal. Planned 2026-09-01; specced separately once v0.83 lands.
+**The framework series, and the one with a deadline it does not control.**
+Specced 2026-09-01; build after v0.83, finish before 9 January.
 
-The scalar half already generalises: `form-config.js` says so in its own header
-and the form, the CSV export, the aggregation engine and every manager surface
-read from it. **The spatial half does not.** `field.js` is 2026 geometry,
-`ACTIONS` is this game's vocabulary, `cycleStats` defines a cycle as
-collect-then-score, `AUTO_MS` is 15 seconds, and the endgame is a climb with
-three rungs.
+### What already survives a season change — do not rebuild these
+
+- **`form-config.js`** is the framework for the scalar half and says so in its
+  own header: the form, the CSV export, the aggregation engine and every manager
+  surface read from it. Metrics are deliberately named for what a scout counts
+  rather than for this year's game pieces.
+- **Blank-is-not-zero plus `SCHEMA_VERSION`** means changing the vocabulary does
+  not corrupt old entries — a missing key is *not recorded*, never 0.
+- **Season pooling is already enforced.** `seasonOf()`, `scopeEntries()` and
+  `sameSeason()`, and `teamProfile` already computes `autoSeason` from
+  `inSeason` — so the *spatial* aggregates are season-scoped too. That
+  discipline is the hard part and it is done.
+- **Coordinates are fractions of the full field**, which is already the right
+  representation. Only their meaning changes.
+- Events, membership, RLS, sync, assignments, reminders, coverage and accounts
+  are game-agnostic. TBA and Statbotics are already year-parameterised.
+
+### What is hard-coded and must become configuration
+
+| | where | note |
+|---|---|---|
+| Field geometry | `field.js` — ~20 inch constants, `OBSTACLES`, `FEATURES`, `ALLIANCE_BANDS`, `START_BANDS` | good shape, wrong home |
+| The action set | `auto-track.js` `ACTIONS` | stored as strings on every entry |
+| What a cycle is | `cycleStats` — collect then score | game-defined, not universal |
+| The endgame | `CLIMB_LEVELS`, the two climb questions, `climbOk`, `climbStartedAt` | 2027 may have no climb at all |
+| Auto duration | `AutoRecorder` `AUTO_MS = 15_000` | not constant across FRC history |
+| The rail | `LABELS`, `KEYS`, `KEY_FOR` — four actions on A/S/D/F | |
+| The icons | inline paths in `AutoField`, files in `icons/` | only `malfunction` is game-agnostic |
+| The start rule | `clampToStart`, the alliance zone | a new game may not constrain starts at all |
+| Zone names | `START_BANDS`, derived from the HUB | `routeSignature` buckets on these |
+
+### What BIOCORE being pick-and-place tells us
+
+It is the most useful thing known about the game before the reveal, and it says
+the current model is shaped for the wrong thing in three places.
+
+1. **The metrics assume volume.** Counters maxed at 20/99/40/40 are a repeated
+   action. A pick-and-place game has fewer, slower, more deliberate scores where
+   *which* one matters more than how many.
+2. **Scoring has no target.** The track records where the ROBOT was —
+   `positionAt()` during a score interval already answers "where did it place
+   from", which is more valuable here than in a shooting game. What it cannot
+   answer is **which node it placed into**, and pick-and-place games are usually
+   built around exactly that.
+3. **The pattern for it already exists.** The climb sheet is an action that ends
+   and then asks follow-up questions. A `place` action asking *which level,
+   which node* is the same shape. **Generalising "an action can carry answers"
+   from a working example is far safer than inventing it at kickoff**, and it is
+   the single most valuable thing to build before the reveal.
+
+### The steps
 
 1. **v0.90 — `seasons/`.** `field.js` becomes `seasons/2026.js` plus a loader
-   and nothing else changes. **Prove it by adding a deliberately weird throwaway
-   season and switching to it** — different dimensions, five actions, an endgame
-   that is not a climb. A swap only ever tested against a copy of 2026 proves
-   nothing, and January is the wrong week to find that out.
-2. **v0.91 — the season on the track.** `FIELD_VERSION`'s own comment reads
-   *"Dates the picture; stored on nothing"*, and `FIELD_SEASON` is read by one
-   test. A stored track carries `v` for its byte layout and nothing about which
-   field it was drawn on, so a 2026 track re-renders against a 2027 field: a
-   robot drawn confidently in the wrong place, which is what `decodeTrack`
-   already refuses for the layout. No backfill — the 2026 tracks are test data
-   and are not being kept.
-3. **v0.92 — lift the vocabulary.** Actions, the cycle definition, the endgame
-   and the auto duration into the season module; the rail and the chips drive
-   from it. **Shape it for actions that carry answers.** The climb sheet already
-   proves the pattern — an action that ends and then asks — and BIOCORE is a
-   pick-and-place game, so a `place` action asking *which node, which level* is
-   the likely shape. Generalising from a working example beats inventing it at
-   kickoff.
-4. **v0.93 — the BIOCORE field.** Blocked until 9 January. If the three above
-   are right this is one file.
+   and nothing else changes.
 
-**Practice mode** belongs in this series: the recorder against a countdown with
-nothing saved, so a scout can run fifteen seconds on their phone at home. It is
-the only substitute available for the dry run that cannot happen, and it is the
-only way to retire any of the *never used by a scout* risk before the event.
+   **Prove it by adding a deliberately weird throwaway season and switching to
+   it** — different dimensions, five actions, an endgame that is not a climb, a
+   scoring action that asks two questions. A swap only ever tested against a
+   copy of 2026 proves nothing, and January is the wrong week to discover that.
+   The throwaway season stays in the repo as a test fixture.
+
+2. **v0.91 — the season on the track.** `FIELD_VERSION`'s own comment reads
+   *"Dates the picture; stored on nothing"*, and `FIELD_SEASON` is read by
+   exactly one line — a test asserting it is 2026. A stored track carries `v`
+   for its byte layout and nothing about which field it was drawn on, so a 2026
+   track re-renders against a 2027 field: a robot drawn confidently in the wrong
+   place, which is precisely what `decodeTrack` already refuses for the layout.
+
+   `decodeTrack` refuses or flags a mismatch. **No backfill** — the existing
+   tracks are test data and are not being kept. It is still worth doing now
+   rather than in 2028, because doing it while the code is open is nearly free.
+
+3. **v0.92 — lift the vocabulary.** Actions, the cycle definition, the endgame
+   and the auto duration into the season module; the rail, the chips and the
+   icons drive from it. Shaped for actions that carry answers, per above.
+
+4. **v0.93 — the BIOCORE field.** Blocked until 9 January. If the three above
+   are right, this is one file plus a `form-config.js` edit. **That is the test
+   of everything above it.**
+
+### Practice mode
+
+The recorder against a countdown with nothing saved, so a scout can run fifteen
+seconds on their own phone at home, as many times as they like.
+
+It needs no event and no game, so it can be built before January. It does the
+two jobs the impossible dry run was going to do: the team builds muscle memory
+before kickoff, and it surfaces the usability failures that synthetic pointer
+events cannot. **It is the only available way to retire any of the "never used
+by a scout" risk.**
+
+Optionally it replays a recorded track as a moving target to track against, but
+the plain version earns its place alone.
+
+### Deliberately deferred to after kickoff
+
+**Manager statistics.** Which numbers are worth counting cannot be designed
+without knowing what the game scores, and guessing now would bake a shooting
+game's assumptions into the one surface that is meant to answer questions about
+a different one.
+
+### Done means
+
+- A season is one module, and switching seasons is a one-line change
+- The app runs correctly on the throwaway season, verified by switching to it
+  and using the recorder — not by reading the code
+- A track knows which field it was drawn on, and one from another season is
+  refused rather than misdrawn
+- No 2026 constant remains outside `seasons/`
+- `npm test` green, and the checkers still measure what they measured
 
 ## Target model
 
@@ -752,22 +858,23 @@ Login may require a network. Recording may not.
 - Access tokens last four days so a device that signs in before leaving holds a
   valid session through the whole event without refreshing.
 
-## Retuning metrics each season
+## Retuning at kickoff
 
-`METRIC_FIELDS` in `src/lib/form-config.js` is deliberately game-agnostic, and
-from v0.81 the field image is season data in the same way. Each January:
+**Superseded in shape by v0.9**, which exists to make this list shorter. Until
+that ships, this is what a January actually costs; after it, steps 1–2 become
+one module under `seasons/`.
 
-1. Update labels, maximums and `higherIsBetter` flags.
-2. **Replace the field image**, and re-check the coordinate normalisation against
-   it. Spatial observations store field-absolute fractions, so a new picture with
-   different proportions silently moves every mark recorded against the old one —
-   which is why the image is versioned with the schema rather than swapped in
-   place.
+1. Update `METRIC_FIELDS` — labels, maximums, `higherIsBetter`.
+2. **Replace the field geometry**, and re-check the coordinate normalisation.
+   Spatial observations store field-absolute fractions, so a new field with
+   different proportions silently moves every mark recorded against the old one.
+   v0.91 is what stops that being silent.
 3. Bump `SCHEMA_VERSION`.
 4. Run the full test and build checks before deploying.
 
-Keep the list short enough to record reliably during one match. Preserve the
-critical invariant: blank means *not recorded*; `0` means *recorded and zero*.
+Keep the list short enough to record reliably during one match, and preserve the
+invariant underneath all of it: blank means *not recorded*; `0` means *recorded
+and zero*.
 
 ## Constraints worth preserving
 
@@ -780,6 +887,18 @@ critical invariant: blank means *not recorded*; `0` means *recorded and zero*.
 - **Design system and accessibility.** `design.md`, token checks and the AA
   contrast floor remain enforced.
 - **Metrics semantics.** Blank and zero remain different.
+
+## Outstanding, owned by the user
+
+Neither is blocked on any release and neither can be done from the codebase.
+
+- **Leaked password protection is still OFF** in the Supabase dashboard. Worth
+  doing before accounts are handed to the team for the season.
+- **`supabase/rollout/revoke_email_for_username.sql`** is the final gate on the
+  username-privacy rollout and deliberately lives outside `migrations/`. The
+  client half has been live since v0.81; run it once satisfied no cached PWA is
+  still on the old bundle. Running it early locks out every cached client,
+  because a service worker can serve an old bundle long after a deploy.
 
 ## Conditional work
 
