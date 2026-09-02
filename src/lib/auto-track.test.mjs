@@ -330,6 +330,15 @@ function synth(n = 150) {
 	ok('one failed attempt does not overrule a later success',
 		cycleStats(slipped).climbOk === true);
 
+	// When it began is the observation; the span is the recording's length.
+	ok('the start of the climb is reported',
+		cycleStats(withOk(true)).climbStartedAt === 1000);
+	ok('and is null when nothing climbed',
+		cycleStats(decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] })))
+			.climbStartedAt === null);
+	ok('two attempts report the FIRST',
+		cycleStats(slipped).climbStartedAt === 1000);
+
 	ok('a track with no climb reports neither',
 		cycleStats(decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] }))).climbed === false);
 

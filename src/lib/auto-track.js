@@ -398,6 +398,10 @@ export function cycleStats(track) {
 		// facts and must not collapse into the same number.
 		climbLevel: levels.length ? Math.max(...levels) : null,
 		climbed: climbs.length > 0,
+		// When it BEGAN. A climb runs to the whistle by construction, so its
+		// duration is a fact about the recording rather than about the robot —
+		// the moment it started is the only part anybody observed.
+		climbStartedAt: climbs.length ? Math.min(...climbs.map((iv) => iv.t0)) : null,
 		// Did it come off? true / false / null, and null is "nobody said" rather
 		// than "no". A single `false` among the climbs is not a verdict either —
 		// what is reported is the best outcome recorded, because a robot that

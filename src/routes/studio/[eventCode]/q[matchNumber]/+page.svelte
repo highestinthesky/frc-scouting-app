@@ -185,11 +185,13 @@
 												: ''}{a.stats.msScoring
 												? ` · ${(a.stats.msScoring / 1000).toFixed(1)}s scoring`
 												: ''}{a.stats.climbed
-												? ` · climb${a.stats.climbLevel ? ` L${a.stats.climbLevel}` : ''}${
+												? ` · climbed from ${(a.stats.climbStartedAt / 1000).toFixed(1)}s${
+														a.stats.climbLevel ? `, rung ${a.stats.climbLevel}` : ''
+													}${
 														a.stats.climbOk === true
-															? ' made'
+															? ', made it'
 															: a.stats.climbOk === false
-																? ' failed'
+																? ', failed'
 																: ''
 													}`
 												: ''}

@@ -395,9 +395,21 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   space with one transform — not re-traced, because a re-traced icon stops
   matching the file it came from. Its three hardcoded colours are dropped and
   re-applied from tokens; the shapes are untouched. **The climb icons are two
-  slots** — ladder or warning triangle, then the rung — so a climb with no rung
-  draws the left slot alone and centred rather than borrowing a numeral nobody
-  reported. The field used to say only *that*
+  slots** — ladder or warning triangle, then the rung, with a question mark in
+  the second slot when nobody read it. Never a numeral as a stand-in.
+
+  **Scope a chip's rules to the chip's own parts.** `.badge circle` was the
+  disc's rule and it also matched every circle inside the icon on it: the
+  shooting icon's balls were painted `--bg-card` and vanished into the disc,
+  black on black in dark and white on white in light. A direct match also beats
+  the fill inherited from the icon's own group, so the parent computed the right
+  colour and the child did not.
+
+  **A climb outlives its own recording.** Once a robot starts climbing it is on
+  the tower for the rest of auto, so the chip keeps showing past the end of that
+  robot's track while nothing else does — and a climb is named by WHEN IT BEGAN,
+  never by a span, because the span is the length of the recording rather than a
+  fact about the robot. The field used to say only *that*
   something was happening (a stroke in replay, a pulse while recording), which
   is the half of the question nobody asks. Colour is the second signal and never
   the first: collect and score are a mirrored pair of arrows because at fifteen

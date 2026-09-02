@@ -255,7 +255,20 @@
 							...place(pos),
 							label: row.label,
 							colour: row.colour ?? '',
-							doing: marksAt(row.track, local),
+							// A climb outlives its own recording.
+							//
+							// Once a robot starts climbing it is on the tower for the rest
+							// of auto — that is why the mark runs to the whistle and why the
+							// recorder stops asking the scout to track it. So past the end
+							// of this robot's track the climb keeps showing, while nothing
+							// else does: a collect that happened to be open at the whistle
+							// makes no claim about the seconds after it, and a climb does.
+							doing:
+								local > trackDuration(row.track)
+									? marksAt(row.track, trackDuration(row.track)).filter(
+											(m) => m.a === 'climb'
+										)
+									: marksAt(row.track, local),
 							// Past its own end, a robot is drawn faded rather than removed:
 							// disappearing reads as "it left the field", which is a claim the
 							// recording does not make.
@@ -349,6 +362,18 @@
 	/** The ladder, shared by every made climb. */
 	const LADDER = 'M58 44V212M104 44V212 M42 64H120M42 108H120M42 152H120M42 196H120';
 
+	/**
+	 * The right slot: a numeral, or the question mark for a rung nobody read.
+	 *
+	 * `ladder-question` and `warning-question` were drawn for exactly this, which
+	 * is better than the centred-ladder composition they replace — an absence now
+	 * has a mark of its own instead of being drawn by leaving something out, and
+	 * a scout reading the chip is told the rung is unknown rather than left to
+	 * infer it from the icon being narrower.
+	 */
+	const RUNG_UNKNOWN =
+		'M175.6 148.7C175.6 130.9 183.1 123.8 193.3 116.1C201.2 110.1 205.5 105.6 205.5 98.6C205.5 90.7 200.2 86 191.8 86C182.3 86 176.3 92.4 175.7 104.1H147.8C148.7 76.7 164.9 61 192.9 61C219.3 61 234 75.4 234 97.4C234 113.3 226.2 122.6 214.5 131.4C205.7 138 201.9 142.5 201.9 152.7V157.5H175.6V148.7ZM174.1 176.4C174.1 167.8 180.7 161.3 189.8 161.3C198.9 161.3 205.5 167.8 205.5 176.4C205.5 185.1 198.9 191.5 189.8 191.5C180.7 191.5 174.1 185.1 174.1 176.4Z';
+
 	/** The numerals, as the designer drew them. */
 	const RUNG = {
 		1: 'M172.8 188V91.2L149.2 105.4V80.6L174.9 64H200.7V188H172.8Z',
@@ -357,18 +382,6 @@
 	};
 	/** Rung 3 is drawn 3 units high in the source; keep its own nudge. */
 	const RUNG_SHIFT = { 1: 0, 2: 0, 3: -3 };
-
-	/**
-	 * Centring for the case the icon set does not draw.
-	 *
-	 * Every climb icon is a two-slot composition: the ladder or the warning
-	 * triangle on the left, the numeral on the right. With no rung recorded there
-	 * is nothing in the right slot, and the left one alone sits visibly off to one
-	 * side of the disc. The ladder spans 42..120 of 256 (centre 81) and the
-	 * triangle 19..141 (centre 80), so each is nudged to the box centre when it is
-	 * drawing alone.
-	 */
-	const SOLO_SHIFT = { ladder: 'translate(47 0)', warn: 'translate(48 8)' };
 
 	/** The small warning triangle that replaces the ladder on a failed climb. */
 	const WARN_SMALL = {
@@ -398,12 +411,24 @@
 		fault: 'Malfunction'
 	};
 
-	/** What a chip announces, including the rung and the outcome when known. */
+	/**
+	 * What a chip announces.
+	 *
+	 * A climb is named by WHEN IT BEGAN rather than by a span, because the span is
+	 * not a fact about the robot — it always runs to the whistle. "Began climbing
+	 * at 12.7s" is the observation; "12.7 to 15.0s" is that observation plus the
+	 * length of the recording, which says nothing.
+	 */
 	function markLabel(mark) {
 		if (mark?.a !== 'climb') return GLYPH_LABEL[mark?.a] ?? '';
-		const lvl = CLIMB_LEVELS.includes(Number(mark.lvl)) ? ` level ${Number(mark.lvl)}` : '';
+		const at = Number.isFinite(Number(mark.t0))
+			? ` at ${(Number(mark.t0) / 1000).toFixed(1)}s`
+			: '';
+		const lvl = CLIMB_LEVELS.includes(Number(mark.lvl))
+			? `, rung ${Number(mark.lvl)}`
+			: ', rung not recorded';
 		const out = mark.ok === true ? ', made it' : mark.ok === false ? ', failed' : '';
-		return `Climbing${lvl}${out}`;
+		return `Began climbing${at}${lvl}${out}`;
 	}
 
 	/**
@@ -657,7 +682,7 @@
 {#snippet chip(b, faded)}
 	<g class="badge {b.a}" class:faded class:failed={b.icon.failed}>
 		<title>{b.label}</title>
-		<circle cx={b.cx} cy={b.cy} r={BADGE_R} />
+		<circle class="disc" cx={b.cx} cy={b.cy} r={BADGE_R} />
 		<!-- The icon draws in its own 256 space and one transform puts it on the
 		     chip, so the path data stays byte-identical to the source files. The
 		     glyph fills GLYPH_FILL of the disc; the rest is the ring of clear
@@ -693,31 +718,30 @@
 			{:else if b.icon.kind === 'climb'}
 				<!-- Left slot: the ladder, or the warning triangle when it came off. -->
 				{#if b.icon.failed}
-					<g transform={b.icon.lvl ? '' : SOLO_SHIFT.warn}>
-						<path class="g-warn" d={WARN_SMALL.tri} />
-						<path class="g-mark" stroke-width={WARN_SMALL.barWidth} d={WARN_SMALL.bar} />
-						<circle
-							class="g-mark-fill"
-							cx={WARN_SMALL.dot.cx}
-							cy={WARN_SMALL.dot.cy}
-							r={WARN_SMALL.dot.r}
-						/>
-					</g>
+					<path class="g-warn" d={WARN_SMALL.tri} />
+					<path class="g-mark" stroke-width={WARN_SMALL.barWidth} d={WARN_SMALL.bar} />
+					<circle
+						class="g-mark-fill"
+						cx={WARN_SMALL.dot.cx}
+						cy={WARN_SMALL.dot.cy}
+						r={WARN_SMALL.dot.r}
+					/>
 				{:else}
-					<g class="g-line" stroke-width="13" transform={b.icon.lvl ? '' : SOLO_SHIFT.ladder}>
+					<g class="g-line" stroke-width="13">
 						<path d={LADDER} />
 					</g>
 				{/if}
-				<!-- Right slot: the rung, when one was recorded. A climb with no rung
-				     draws the left slot alone rather than borrowing a numeral nobody
-				     said — the icon set has no "unknown rung" variant because the
-				     answer is an absence, and an absence is drawn by leaving it out. -->
+				<!-- Right slot: the rung, or a question mark when nobody read it.
+				     Never a numeral picked as a stand-in — that would assert a rung
+				     the scout did not report. -->
 				{#if b.icon.lvl}
 					<path
 						class="g-fill"
 						transform="translate(0 {RUNG_SHIFT[b.icon.lvl]})"
 						d={RUNG[b.icon.lvl]}
 					/>
+				{:else}
+					<path class="g-fill" d={RUNG_UNKNOWN} />
 				{/if}
 			{/if}
 		</g>
@@ -879,7 +903,15 @@
 	   outlines already use (.solid, .opening) and it is pinned at 4.5 against
 	   this ground in all four palettes, so it is both stronger and already
 	   guaranteed. */
-	.badge circle {
+	/* `.disc`, not `circle`.
+	   This was `.badge circle`, which is the chip's disc AND every circle inside
+	   the icon on it — the shooting icon's three balls and the warning triangle's
+	   dot. The balls were painted --bg-card and vanished into the disc: black on
+	   black in dark, and white on white in light, so it was never a dark-mode
+	   problem and a second icon set would have fixed nothing. A direct match also
+	   beats the fill inherited from the icon's own group, which is why the parent
+	   computed the right colour and the child did not. */
+	.badge .disc {
 		fill: var(--bg-card);
 		stroke: var(--text-faint);
 		stroke-width: 1.5;

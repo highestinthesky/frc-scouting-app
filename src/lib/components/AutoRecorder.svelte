@@ -588,7 +588,14 @@
 									<span class="lvl">L{iv.lvl}</span>{/if}{#if iv.ok === true}
 									<span class="lvl">made it</span>{:else if iv.ok === false}
 									<span class="lvl">failed</span>{/if}{/if}</span>
-						<span class="when">{(iv.t0 / 1000).toFixed(1)}–{(iv.t1 / 1000).toFixed(1)}s</span>
+						<!-- A climb runs to the whistle by construction, so its span is a
+						     fact about the recording and not about the robot. What was
+						     observed is the moment it began. -->
+						<span class="when">
+							{#if iv.a === 'climb'}began {(iv.t0 / 1000).toFixed(1)}s{:else}{(
+									iv.t0 / 1000
+								).toFixed(1)}–{(iv.t1 / 1000).toFixed(1)}s{/if}
+						</span>
 						{#if iv.a === 'climb'}
 							<!-- Both questions, so the label is not "rung" any more. -->
 							<button type="button" class="drop" onclick={() => (askClimb = i)}>

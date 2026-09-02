@@ -457,13 +457,20 @@ Three things worth knowing before touching them:
 - **The white mark on the warning triangle needed no new assertion.** It is
   `--bg-card` on `--danger`, which is the inverse of a pair already pinned at
   4.5 — and contrast is symmetric, so all four palettes were already covered.
-- **The set has nine icons and the app has ten states.** A climb whose rung was
-  not recorded has no icon, because the set encodes the rung as a numeral and an
-  unknown rung is an absence. Every climb icon is two slots — ladder or warning
-  triangle on the left, numeral on the right — so the missing cases are composed
-  by drawing the left slot alone and nudging it to centre (`SOLO_SHIFT`).
-  Reaching for `climbing-1` instead would assert a rung nobody reported, which
-  is blank-is-not-zero in a picture.
+- **The set covers every state now.** `ladder-question` and `warning-question`
+  arrived for the two cases it did not draw — a climb whose rung nobody read —
+  and they replaced a centred-ladder composition. They are better than it was:
+  an absence has a mark of its own rather than being drawn by leaving something
+  out. Nothing is composed any more.
+
+- **The shooting icon's balls were invisible, and the cause is worth keeping.**
+  `.badge circle` was written as the disc's rule and it matched every circle
+  INSIDE the icon on the disc too, painting the balls `--bg-card`. Reported as a
+  dark-mode bug; it was not one — in light it was white on white, equally gone.
+  A second icon set would have fixed nothing. Two general lessons: scope a
+  chip's rules to the chip's own parts, and remember a direct match beats an
+  inherited fill, which is why the parent group computed `--success` correctly
+  while its children did not.
 
 ---
 
