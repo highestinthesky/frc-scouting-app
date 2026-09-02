@@ -870,7 +870,7 @@ read-only `/schedule` was never built.
 
 | | |
 |---|---|
-| `ROADMAP.md` | the single dependency-ordered plan; v0.76 shipped, v0.8 is the event series |
+| `ROADMAP.md` | the single dependency-ordered plan; v0.82 shipped, **v0.83 is Studio reorganised and is specced for another model to build**, v0.9 is the season boundary before BIOCORE |
 | `HANDOFF.md` | working preferences, environment traps, and the decisions still open |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/auto-scouting-plan.md` | interactive auto scouting as the team asked for it — the source document, reference not draft |
