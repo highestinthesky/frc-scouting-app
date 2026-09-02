@@ -73,7 +73,7 @@
 			Your account is a {auth.role ?? 'scout'}. A super can change that — everything
 			you record is unaffected either way.
 		</p>
-		<a href="{base}/scouting/">Back to Home</a>
+		<a href="{base}/home/">Back to Home</a>
 	</div>
 {:else}
 	<div class="studio">
@@ -106,7 +106,7 @@
 			<!-- The only way out, so it is a real control and it is never hidden.
 			     The global tab bar used to be the escape route and it was a trapdoor:
 			     it left Studio without offering a way back. -->
-			<a class="out" href="{base}/scouting/">
+			<a class="out" href="{base}/home/">
 				<span aria-hidden="true">←</span> Leave Studio
 			</a>
 		</nav>

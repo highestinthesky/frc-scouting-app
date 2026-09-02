@@ -11,7 +11,7 @@ is the shape they sit on.
 
 **Two applications share one deployment.**
 
-    the scout app     Scouting · Settings          + a Studio button for managers
+    the scout app     Home · Settings              + a Studio button for managers
     Studio            Event · Schedule · Coverage · Insights · Accounts
 
 A scout opens the app to record a match. A manager opens Studio to run an event.
@@ -25,10 +25,10 @@ on `/studio` — because the global tab bar was a trapdoor out of it.
 |---|---|
 | `/` | Sign in. The front door; every other route redirects here when signed out. |
 | `/register` | Redeem an invite code. Shows whose invite it is. |
-| `/scouting` | The scout's page: assignments, then their entries. |
+| `/scouting` | A redirect to `/home`. Folded in at v0.82; kept because an installed PWA still has a tab bar pointing here. |
 | `/scouting/new`, `/scouting/edit` | The entry form. |
 | `/settings` | Device settings, event picker, sign out. |
-| `/home` | The scout's own upcoming matches, from `myMatches()`. Was a redirect to `/scouting`; v0.76 gave it content. Installed PWAs still point here. |
+| `/home` | The scout's whole page: what is next, what a manager has said, what they are watching, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. |
 | `/studio/event` | Who is on this event — drag scouts on and off. |
 | `/studio/schedule` | Publish a TBA schedule, auto-assign, per-match overrides, reminders. |
 | `/studio/coverage` | What is being watched and what is not. |
@@ -184,10 +184,12 @@ scroll sideways.
 `PageHead` renders the page's `<h1>` from a `title` prop, and
 `check_components.mjs` reads that prop for the nav-label assertion.
 
-**`components/scouting/` is `MyAssignments` and `MyTeams`.** `MyTeams` is not
-dead — `MyAssignments` imports it and renders it. `UpcomingMatches` was the third
-and is gone; v0.76 gave the scout their upcoming list on Home instead, resolved
-through `myMatches()` so it agrees with the coverage maths.
+**`components/scouting/` is gone.** `UpcomingMatches` went in v0.76 when Home
+grew its own upcoming list; `MyAssignments` and `MyTeams` went in v0.82 when
+`/scouting` folded into Home. Of what they rendered, "Your teams" was already on
+Home, "Refresh from manager" is the sync panel's *Sync now*, and the one thing
+that existed nowhere else — the two-cause diagnosis for an empty assignment list
+— moved into Home's "Up next" empty state rather than being lost with them.
 
 ### The checks, and why each exists
 

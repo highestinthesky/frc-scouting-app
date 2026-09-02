@@ -425,17 +425,15 @@ for (const [label, file] of [
 	);
 }
 
-// The scout's own page. It had a directory until v0.73 — Scouting (itself),
-// Insights, Accounts, Settings — and every one of those is now a tab or lives
-// behind the Studio button, so the directory went rather than being restyled.
-//
-// The assertion follows: what a scout actually taps here is the entry list, and
-// each row opens a saved entry for editing. That is the most-tapped control in
-// the app and it is what has to clear the floor.
+// The scout's own page. Home, since v0.82 folded /scouting into it — the entry
+// list moved with everything else, and the ASSERTION MOVED WITH THE LIST. That
+// is the point of re-pointing it rather than deleting it: what a scout taps is
+// the entry row, wherever the row lives, and a check tied to a filename would
+// have gone green the moment the file did.
 {
-	const r = rules('src/routes/scouting/+page.svelte');
+	const r = rules('src/routes/home/+page.svelte');
 	ok(
-		'/scouting: entry rows meet the tap floor',
+		'Home: entry rows meet the tap floor',
 		r.some(
 			(x) =>
 				/\.(entry|row|item)\b/.test(unscoped(x.selector)) &&
@@ -636,8 +634,11 @@ for (const [label, file] of [
 		);
 	}
 
+	// "Scouting" is not here any more: v0.82 folded that page into Home and the
+	// tab went with it. The pair is removed rather than pointed at the redirect,
+	// because a redirect has no heading and asserting one against it would be
+	// asserting the absence of a page.
 	for (const [label, file] of [
-		['Scouting', 'src/routes/scouting/+page.svelte'],
 		['Settings', 'src/routes/settings/+page.svelte'],
 		['Event', 'src/routes/studio/event/+page.svelte'],
 		['Schedule', 'src/routes/studio/schedule/+page.svelte'],

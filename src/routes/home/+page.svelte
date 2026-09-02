@@ -11,11 +11,26 @@
 	// asking "what now", and answering it with a history means they have to
 	// derive the answer themselves, on a phone, between matches.
 	//
-	// So this page answers, in order, the three questions actually being asked:
+	// So this page answers, in order, the questions actually being asked:
 	//
 	//   1. am I up?           the next match with one of my teams, unrecorded
 	//   2. has anyone told me anything?   reminders from a manager
 	//   3. what am I watching?            my teams for the event
+	//   4. what have I recorded?          the entries, to check or to fix
+	//
+	// ─── /scouting folded in here ─────────────────────────────────────────────
+	//
+	// There were two pages and only the fourth question separated them. Of the
+	// five things /scouting showed, three were already on this one — the next
+	// unrecorded match, the assigned teams, and the count for today — and its
+	// own tail link called the difference by its real name: "everything you have
+	// recorded". So the list came here and the page went.
+	//
+	// The list is rebuilt in THIS page's idiom rather than moved across with its
+	// markup. /scouting was a workbench — a heading, a CTA and a dense list;
+	// this is a page that speaks to a person and quiets down as it goes. Pasting
+	// one into the other would have produced a page with two voices, which is
+	// what the two pages already were.
 	//
 	// ─── on "pretty" ──────────────────────────────────────────────────────────
 	//
@@ -36,9 +51,13 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { listEntries } from '$lib/db.js';
+	import { dialog } from '$lib/dialog.svelte.js';
+	import { withdrawEntry } from '$lib/sync.svelte.js';
 	import { getCachedSchedule, qualMatches, myMatches } from '$lib/tba.js';
 	import { session } from '$lib/session.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
+	import { listAssignments } from '$lib/assignments.js';
+	import { rowScout, sameScout } from '$lib/scout-identity.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import { reminders } from '$lib/reminders.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
@@ -75,6 +94,88 @@
 		session.eventCode;
 		if (!loading) refreshSchedule();
 	});
+
+	// ── why is nothing assigned? ──────────────────────────────────────────────
+	//
+	// "Nothing assigned" has two causes and they need opposite responses: wait,
+	// or go and find your manager. Carried over from MyAssignments when /scouting
+	// folded into this page — it was the one thing that component knew and this
+	// one did not, and losing it in a merge would have been the merge quietly
+	// costing something.
+	//
+	// null while unknown, so nothing is claimed before the answer is in. A failed
+	// read is not a diagnosis either: the network preventing the check is not
+	// evidence about the schedule.
+	let diagnosis = $state(/** @type {null | {kind: string, total: number}} */ (null));
+
+	async function diagnose() {
+		if (!session.eventCode || myTeams.length > 0 || !auth.signedIn) {
+			diagnosis = null;
+			return;
+		}
+		try {
+			const all = await listAssignments(session.eventCode);
+			if (all.length === 0) {
+				diagnosis = { kind: 'none-published', total: 0 };
+				return;
+			}
+			const mine = all.filter((r) => sameScout(rowScout(r), auth.me));
+			diagnosis = mine.length > 0 ? null : { kind: 'not-yours', total: all.length };
+		} catch {
+			diagnosis = null;
+		}
+	}
+
+	$effect(() => {
+		void syncState.inboundChanges;
+		void session.eventCode;
+		void myTeams.length;
+		diagnose();
+	});
+
+	// ── what this scout has recorded ──────────────────────────────────────────
+	//
+	// Scoped to the current event, and that is a change from /scouting, which
+	// listed every entry on the device from every event it had ever seen.
+	//
+	// Everything else on this page is event-scoped — the greeting names the
+	// event, "up next" comes from its schedule, the teams are its assignments —
+	// so an all-events list would have been the one thing here that silently
+	// meant something wider than the page around it. That is the same shape as
+	// the pooling invariant in CLAUDE.md: a list that looks like one thing and is
+	// another. Entries from elsewhere are counted in a line rather than dropped,
+	// because they are still on the device and a scout who recorded them should
+	// not conclude they are gone.
+	const eventEntries = $derived(
+		session.eventCode ? entries.filter((e) => e.eventCode === session.eventCode) : entries
+	);
+	const elsewhere = $derived(entries.length - eventEntries.length);
+
+	/**
+	 * Withdraw an entry.
+	 *
+	 * The confirmation says which of the two things is about to happen, because
+	 * they are not the same act: an unsynced entry exists only here, and a synced
+	 * one is the team's record and only a manager of the event may retract it.
+	 */
+	async function remove(entry, summary) {
+		const synced = Boolean(entry.remoteId);
+		const confirmed = await dialog.confirm({
+			title: 'Delete this entry?',
+			body: synced
+				? `${summary}\n\nThis removes it for the whole team, not just this device. Only a manager of this event can do that.`
+				: `${summary}\n\nThis entry has not synced yet, so it only exists on this device.`,
+			confirmLabel: 'Delete',
+			danger: true
+		});
+		if (!confirmed) return;
+		const res = await withdrawEntry(entry);
+		if (!res.ok) {
+			await dialog.confirm({ title: 'Not deleted', body: res.message, confirmLabel: 'OK' });
+			return;
+		}
+		await refresh();
+	}
 
 	// ── the greeting ──────────────────────────────────────────────────────────
 	//
@@ -226,7 +327,16 @@
 			{:else if !session.eventCode}
 				<p class="muted">No event chosen. <a href="{base}/settings/">Settings</a></p>
 			{:else if !myTeams.length}
-				<p class="muted">Nothing assigned yet.</p>
+				{#if diagnosis?.kind === 'not-yours'}
+					<p class="muted">
+						{diagnosis.total} assignments published for this event, none to you. Ask your
+						manager.
+					</p>
+				{:else if diagnosis?.kind === 'none-published'}
+					<p class="muted">No assignments published for this event yet.</p>
+				{:else}
+					<p class="muted">Nothing assigned yet.</p>
+				{/if}
 			{:else if !qmList.length}
 				<p class="muted">No schedule published for this event yet.</p>
 			{:else}
@@ -297,9 +407,56 @@
 			</section>
 		{/if}
 
-		<div class="tail">
-			<a class="tail-link" href="{base}/scouting/">Everything you have recorded →</a>
-		</div>
+		<!-- ── 4. what have I recorded? ─────────────────────────────────── -->
+		<section class="mine">
+			<div class="mine-head">
+				<h2>Your entries</h2>
+				<Button variant="primary" href="{base}/scouting/new/">+ New</Button>
+			</div>
+
+			{#if eventEntries.length === 0}
+				<p class="muted">Nothing recorded here yet.</p>
+			{:else}
+				<ul class="entries">
+					{#each eventEntries as e (e.id)}
+						<li class="entry" data-color={e.allianceColor}>
+							<div class="entry-row">
+								<a
+									class="entry-link"
+									href="{base}/scouting/edit/?id={e.id}"
+									aria-label="Edit entry Q{e.matchNumber} · Team {e.teamNumber}"
+								>
+									<span class="qm">Q{e.matchNumber}</span>
+									<span class="team">{e.teamNumber}</span>
+									<span class="alliance">{e.allianceColor}</span>
+								</a>
+								<button
+									type="button"
+									class="scrub"
+									aria-label="Delete entry Q{e.matchNumber} · Team {e.teamNumber}"
+									onclick={() => remove(e, `Q${e.matchNumber} · Team ${e.teamNumber}`)}
+								>
+									×
+								</button>
+							</div>
+							{#if e.observations?.comments?.trim() || e.observations?.strengths?.trim()}
+								<p class="entry-note">
+									{e.observations.strengths?.trim() || e.observations.comments?.trim()}
+								</p>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+
+			<!-- Counted, not hidden. They are still on this device. -->
+			{#if elsewhere > 0}
+				<p class="muted elsewhere">
+					{elsewhere}
+					{elsewhere === 1 ? 'entry' : 'entries'} from another event, not shown here.
+				</p>
+			{/if}
+		</section>
 	{/if}
 </main>
 
@@ -506,6 +663,115 @@
 		flex-wrap: wrap;
 		gap: var(--space-2);
 	}
+	/* ── the entries, in this page's voice ────────────────────────────────────
+	   /scouting set its list against a full-width workbench: a big heading, a
+	   CTA pinned opposite it, and rows that filled the page. Here the list is the
+	   last of four sections and the quietest of them, so it takes the same
+	   --fs-xs uppercase heading as the rest and the rows are the same card the
+	   "After that" list already uses. One page, one voice. */
+	.mine-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		margin-bottom: var(--space-2);
+	}
+	/* h2 carries its own bottom margin for every other section; here the flex
+	   row owns the spacing, so the heading gives it back. */
+	.mine-head h2 {
+		margin-bottom: 0;
+	}
+	.entries {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+	.entry {
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+	}
+	/* The alliance is on the edge of the card rather than only in the text: it
+	   is the one property of an entry a scout scans for, and a rule down the side
+	   survives being glanced at where a word does not. The word stays too —
+	   colour is never the only signal. */
+	.entry[data-color='red'] {
+		border-left-color: var(--alliance-red);
+	}
+	.entry[data-color='blue'] {
+		border-left-color: var(--alliance-blue);
+	}
+	.entry-row {
+		display: flex;
+		align-items: stretch;
+		gap: var(--space-2);
+	}
+	.entry-link {
+		flex: 1;
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-3);
+		min-height: var(--tap-min);
+		padding: var(--space-2) var(--space-3);
+		color: var(--text-primary);
+		text-decoration: none;
+	}
+	.entry-link:hover {
+		background: var(--bg-subtle);
+	}
+	.entry-link .qm {
+		font-size: var(--fs-md);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.entry-link .team {
+		font-size: var(--fs-sm);
+		font-variant-numeric: tabular-nums;
+	}
+	.entry-link .alliance {
+		margin-left: auto;
+		font-size: var(--fs-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+	}
+	/* Destructive, so it is not styled as one of the row's affordances — it is
+	   quiet until reached for, and it keeps the full tap floor either way. */
+	.scrub {
+		flex: none;
+		min-width: var(--tap-min);
+		min-height: var(--tap-min);
+		border: none;
+		background: none;
+		color: var(--text-faint);
+		font-size: var(--fs-lg);
+		line-height: 1;
+		cursor: pointer;
+		border-radius: var(--radius-md);
+	}
+	.scrub:hover {
+		color: var(--danger);
+		background: var(--bg-subtle);
+	}
+	.scrub:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.entry-note {
+		margin: 0;
+		padding: 0 var(--space-3) var(--space-2);
+		font-size: var(--fs-sm);
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.elsewhere {
+		margin-top: var(--space-2);
+	}
+
 	.teams-list li {
 		padding: var(--space-1) var(--space-3);
 		border-radius: var(--radius-pill);
@@ -516,19 +782,4 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.tail {
-		margin-top: var(--space-6);
-	}
-	.tail-link {
-		display: inline-flex;
-		align-items: center;
-		min-height: var(--tap-min);
-		font-size: var(--fs-sm);
-		font-weight: 600;
-		color: var(--accent);
-		text-decoration: none;
-	}
-	.tail-link:hover {
-		text-decoration: underline;
-	}
 </style>

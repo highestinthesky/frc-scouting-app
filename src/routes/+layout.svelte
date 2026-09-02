@@ -294,18 +294,15 @@
 
 	<!-- Bottom-docked on phones, top strip from 40rem up. See design.md
 	     § Three deviations — a scout holds this one-handed. -->
-	<!-- Three tabs, not five. This app records matches; running an event is
-	     Studio's job and Studio is not a peer of these — it is a different
-	     application, so it is a button in the bar above rather than a tab here.
-	     Home leads because it answers "what now", which is the question a scout
-	     opens the app holding. Scouting is the record of what they have already
-	     done, which is a different and later question. -->
+	<!-- Two tabs. Studio is not a peer of these — it is a different application,
+	     so it is a button in the bar above rather than a tab here.
+	     Scouting was the third and is gone: it answered "what have I recorded",
+	     which turned out to be one section of Home rather than a place. Three of
+	     the five things it showed were already on Home, and a tab whose page is
+	     mostly another tab's page is a tab that makes a scout check both. -->
 	<nav class="tabs" aria-label="Main">
 		<a href="{base}/home/" class:active={isActive('/home')} aria-current={isActive('/home') ? 'page' : undefined}>
 			Home
-		</a>
-		<a href="{base}/scouting/" class:active={isActive('/scouting')} aria-current={isActive('/scouting') ? 'page' : undefined}>
-			Scouting
 		</a>
 		<a href="{base}/settings/" class:active={isActive('/settings')} aria-current={isActive('/settings') ? 'page' : undefined}>
 			Settings
