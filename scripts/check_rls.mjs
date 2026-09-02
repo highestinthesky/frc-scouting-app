@@ -1495,8 +1495,128 @@ const scout2B = await clientFor(scout2, EVENT_B);
 	ok('create_invite has exactly one signature', sigs === 1, `${sigs} found`);
 }
 
+// ─── the name belongs to the manager (0026) ─────────────────────────────────
+//
+// `scout_name` is a join key. Assignments, overrides and reminders are all
+// addressed to it, so a scout who renames themselves silently detaches from
+// every row aimed at them — and nobody downstream can tell that is what
+// happened.
+//
+// Neither hole was reachable through the app, which is exactly why they are
+// asserted here. Settings renders a signed-in scout's name as text and the
+// invite form refuses to mint without one, both in the browser. That is the
+// 0021 shape: a client that does not offer something is not a server that
+// refuses it.
+{
+	const [{ id: scoutId }] = await sql('select id from public.profiles where id = $1', [scout.id]);
+
+	// The direct write. profiles carries a table-wide GRANT UPDATE, and
+	// profiles_self_update passes every row where id = auth.uid(), so nothing but
+	// the trigger stands between a scout and their own name.
+	const { error: selfRename } = await scoutA
+		.from('profiles')
+		.update({ first_name: 'Renamed' })
+		.eq('id', scoutId);
+	const [{ first_name: afterSelf }] = await sql(
+		'select first_name from public.profiles where id = $1',
+		[scoutId]
+	);
+	ok(
+		'a scout cannot rename themselves',
+		afterSelf !== 'Renamed',
+		selfRename ? `denied (${selfRename.code})` : 'UPDATE reported success'
+	);
+
+	// The permission this is a NARROWING of, asserted so the narrowing cannot
+	// quietly become a lockout. A manager renaming a scout is the whole point:
+	// it is now the only way a wrong name gets fixed.
+	const { error: mgrRename } = await managerA
+		.from('profiles')
+		.update({ first_name: 'Corrected' })
+		.eq('id', scoutId);
+	const [{ first_name: afterMgr }] = await sql(
+		'select first_name from public.profiles where id = $1',
+		[scoutId]
+	);
+	ok(
+		'a manager can correct a scout’s name',
+		afterMgr === 'Corrected',
+		mgrRename ? `denied (${mgrRename.code})` : `name is ${afterMgr}`
+	);
+
+	// A manager's OWN row is only reachable through profiles_self_update —
+	// profiles_manager_update carries `id <> auth.uid()`. Block the self path
+	// unconditionally and a manager's own typo becomes permanent with nobody able
+	// to fix it, so the trigger asks who is renaming rather than only whether it
+	// is their own row.
+	const { error: mgrSelf } = await managerA
+		.from('profiles')
+		.update({ first_name: 'Selfset' })
+		.eq('id', manager.id);
+	const [{ first_name: afterMgrSelf }] = await sql(
+		'select first_name from public.profiles where id = $1',
+		[manager.id]
+	);
+	ok(
+		'a manager can still fix their own name',
+		afterMgrSelf === 'Selfset',
+		mgrSelf ? `denied (${mgrSelf.code})` : `name is ${afterMgrSelf}`
+	);
+
+	// The rest of the guard has to survive the new clause sitting in front of it.
+	const { error: roleSelf } = await scoutA
+		.from('profiles')
+		.update({ role: 'manager' })
+		.eq('id', scoutId);
+	const [{ role: afterRole }] = await sql('select role from public.profiles where id = $1', [
+		scoutId
+	]);
+	ok(
+		'and a scout still cannot promote themselves',
+		afterRole === 'scout',
+		roleSelf ? `denied (${roleSelf.code})` : 'UPDATE reported success'
+	);
+}
+
+// ─── an invite carries a name (0026) ────────────────────────────────────────
+//
+// The name is only "the manager's to set" if there is one. 0023 left the
+// arguments defaulting to NULL for the rollout window; a nameless invite is the
+// last way a redeemer types their own name into their own profile.
+{
+	const { error: nameless } = await managerA.rpc('create_invite', { p_role: 'scout' });
+	ok(
+		'a nameless invite is refused',
+		Boolean(nameless),
+		nameless ? `denied (${nameless.code})` : 'create_invite returned a code'
+	);
+
+	const { error: blank } = await managerA.rpc('create_invite', {
+		p_role: 'scout',
+		p_first: '  ',
+		p_last: 'Ng'
+	});
+	ok(
+		'and whitespace is not a name',
+		Boolean(blank),
+		blank ? `denied (${blank.code})` : 'create_invite returned a code'
+	);
+
+	const { data: code, error: named } = await managerA.rpc('create_invite', {
+		p_role: 'scout',
+		p_first: 'Ada',
+		p_last: 'Lovelace'
+	});
+	ok('a named invite is still minted', !named && typeof code === 'string', named?.message ?? '');
+	if (code) {
+		const [{ first_name }] = await sql('select first_name from public.invites where code = $1', [
+			code
+		]);
+		ok('and it carries the name the manager typed', first_name === 'Ada', String(first_name));
+	}
+}
+
 await reset();
 await db.end();
-
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

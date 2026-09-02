@@ -42,7 +42,7 @@
 	// and the installed PWA's start URL, and in each of those the previous entry
 	// belongs to another site or does not exist. A known-good fallback beats
 	// walking off the app.
-	let origin = $state(`${base}/scouting/`);
+	let origin = $state(`${base}/home/`);
 
 	afterNavigate((nav) => {
 		const from = nav?.from?.url?.pathname;

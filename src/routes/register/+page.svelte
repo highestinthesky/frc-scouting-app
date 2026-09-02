@@ -12,6 +12,9 @@
 	import { getAuthClient } from '$lib/supabase.js';
 
 	let code = $state('');
+	// Never bound to an input any more. They stay in the register() call because
+	// redeem_invite still takes them as its pre-0023 fallback, and sending empty
+	// strings is what makes the invite's own name win by construction.
 	let firstName = $state('');
 	let lastName = $state('');
 	let username = $state('');
@@ -58,12 +61,16 @@
 		})()
 	);
 
-	/** A named invite carries the name, so the form does not have to collect it. */
+	/** A named invite carries the name, so the form never collects it. */
 	const inviteNamed = $derived(Boolean(invite?.valid && invite?.first_name));
 
 	const canSubmit = $derived(
 		invite?.valid &&
-			(inviteNamed || (firstName.trim() && lastName.trim())) &&
+			// The invite's name, and only the invite's name. A code minted before
+			// 0026 could carry none, and the honest response is to refuse rather
+			// than to collect one here: a profile named by its own owner detaches
+			// from every assignment addressed to the manager's spelling.
+			inviteNamed &&
 			username &&
 			!nameProblem &&
 			(resuming || (email.includes('@') && password.length >= 8))
@@ -82,7 +89,7 @@
 			lastName
 		});
 		busy = false;
-		if (res.ok) await goto(`${base}/scouting/`);
+		if (res.ok) await goto(`${base}/home/`);
 		else error = res.message;
 	}
 </script>
@@ -119,28 +126,29 @@
 			{:else if invite}
 				<small class="note bad">Not valid, already used, or expired.</small>
 			{/if}
+			{#if invite?.valid && !invite.first_name}
+				<small class="note bad">
+					This code carries no name. Ask your manager for a new one.
+				</small>
+			{/if}
 		</label>
 
-		<!-- The name comes from the invite (0023). Asking here is what let a scout
-		     register as a spelling their manager never typed, so the field only
-		     appears for codes minted before that migration — which is a real case
-		     for as long as an unredeemed one is outstanding. -->
+		<!-- The name comes from the invite and there is no field for it any more.
+		     0023 made redeem_invite prefer the invite's spelling; 0026 made
+		     create_invite refuse to mint without one, so a nameless invite cannot
+		     exist and the fallback field this used to show has nothing to fall
+		     back for. It was also the last way a scout could register as a
+		     spelling their manager never typed — and `scout_name` is a join key,
+		     so that spelling is what every assignment is addressed to.
+		     Checked before removing it: zero live invites on production. -->
 		{#if invite?.valid && invite.first_name}
 			<p class="named">
 				Joining as <strong>{invite.first_name} {invite.last_name ?? ''}</strong>.
-				<small>Your manager set this so your assignments reach you. Not you? Ask them for your own code.</small>
+				<small
+					>Your manager set this so your assignments reach you. Not you? Ask them for your
+					own code.</small
+				>
 			</p>
-		{:else}
-			<div class="row">
-				<label class="field">
-					<span class="label">First name</span>
-					<input bind:value={firstName} autocomplete="given-name" required />
-				</label>
-				<label class="field">
-					<span class="label">Last name</span>
-					<input bind:value={lastName} autocomplete="family-name" required />
-				</label>
-			</div>
 		{/if}
 
 		<label class="field">

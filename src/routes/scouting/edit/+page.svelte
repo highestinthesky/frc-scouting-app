@@ -119,7 +119,7 @@
 			});
 
 			kickSync();
-			await goto(`${base}/scouting/`);
+			await goto(`${base}/home/`);
 		} catch (err) {
 			error = err.message ?? String(err);
 		} finally {
@@ -137,7 +137,7 @@
 		});
 		if (!ok) return;
 		await deleteEntry(entry.id);
-		await goto(`${base}/scouting/`);
+		await goto(`${base}/home/`);
 	}
 </script>
 

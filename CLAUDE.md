@@ -569,7 +569,21 @@ and reminder addressed to the old spelling.
 `0023` narrows how often that can happen rather than lifting the rule. The
 invite now carries the name the manager typed and `redeem_invite` uses it over
 whatever the redeemer sends, so a profile and the assignments agree by
-construction. Where a device's stored name still diverges, Settings **shows**
+construction. **`0026` closes the two ways it could still drift afterwards**: a
+scout may not change their own `first_name`/`last_name` (`guard_profile_update`,
+which asks `is_manager()` rather than only whether it is your own row — a
+manager's own row is unreachable through `profiles_manager_update`, so blocking
+the self path outright would make a manager's typo permanent), and
+`create_invite` refuses to mint without a name. Neither hole was reachable
+through the UI, which is exactly the `0021` shape: Settings rendered the name as
+text and the invite form required one, both in the browser. Renaming is now the
+manager's alone, on `/studio/accounts`.
+
+`0026` also replaces `guard_profile_update`, and **the body it extends is
+`0016`'s, not `0008`'s** — `0016` deleted the username/email assertion when real
+addresses arrived. The first draft extended `0008` and silently reverted that;
+`npm run test:rls` caught it on the first run. Filename order is semantic in both
+directions: find the LATEST definition, not the first. Where a device's stored name still diverges, Settings **shows**
 the mismatch and offers to adopt the account name — visible and fixed on
 request, which is the difference between repairing it and doing it to someone.
 

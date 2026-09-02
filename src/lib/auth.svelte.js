@@ -459,6 +459,33 @@ export const auth = {
 	},
 
 	/**
+	 * Correct someone's name.
+	 *
+	 * Since 0026 this is the ONLY way a name changes: a scout cannot rename
+	 * themselves, and the invite that named them has already been redeemed. So a
+	 * typo the manager made when minting the code is fixed here or nowhere.
+	 *
+	 * Renaming is not cosmetic. `scout_name` is the join key that assignments,
+	 * overrides and reminders are addressed to, so this moves a person relative
+	 * to every row aimed at them — which is exactly why it belongs to the person
+	 * who owns the assignments rather than to the person who owns the name.
+	 *
+	 * @param {string} id
+	 * @param {string} firstName
+	 * @param {string} lastName
+	 */
+	async renameProfile(id, firstName, lastName) {
+		const first = String(firstName ?? '').trim();
+		const last = String(lastName ?? '').trim();
+		if (!first || !last) throw new Error('Enter a first and last name.');
+		const { error } = await getAuthClient()
+			.from('profiles')
+			.update({ first_name: first, last_name: last })
+			.eq('id', id);
+		if (error) throw new Error(error.message);
+	},
+
+	/**
 	 * Create an account for someone else. Managers make scouts; supers make
 	 * anyone.
 	 *

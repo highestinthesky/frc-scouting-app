@@ -139,6 +139,54 @@
 		}
 	}
 
+	// ─── correcting a name ──────────────────────────────────────────────────
+	//
+	// Since 0026 a scout cannot rename themselves, so this is the only way a
+	// wrong spelling is ever fixed — and it has to exist, because the name was
+	// typed by a manager into an invite and typos happen there like anywhere.
+	//
+	// Renaming is not cosmetic. `scout_name` is a join key: assignments,
+	// overrides and reminders are addressed to the spelling, and sameScout()
+	// compares normalised names wherever both sides do not carry an account. So
+	// this moves a person relative to every row aimed at them.
+	//
+	// Edited in the row rather than in a dialog, because `dialog` has confirm()
+	// and no prompt() — and adding one to a shared component to serve a single
+	// caller is the wrong shape. The row already holds the name; it can hold the
+	// field that changes it.
+	let renamingId = $state(/** @type {string|null} */ (null));
+	let renameValue = $state('');
+
+	function startRename(p) {
+		renamingId = p.id;
+		renameValue = `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim();
+		err = '';
+	}
+
+	async function saveRename(p) {
+		// One field, split on the last space: a manager types a name, not a form.
+		// "Mary Anne Evans" keeps "Mary Anne" as the first name rather than
+		// silently dropping a word, which a two-field version gets wrong the same
+		// way every time.
+		const parts = renameValue.trim().split(/\s+/);
+		if (parts.length < 2) {
+			err = 'Enter a first and last name.';
+			return;
+		}
+		busy = true;
+		err = '';
+		try {
+			await auth.renameProfile(p.id, parts.slice(0, -1).join(' '), parts[parts.length - 1]);
+			msg = `Renamed to ${parts.join(' ')}.`;
+			renamingId = null;
+			await load();
+		} catch (e) {
+			err = e.message;
+		} finally {
+			busy = false;
+		}
+	}
+
 	async function changeRole(p, role) {
 		if (role === p.role) return;
 		const ok = await dialog.confirm({
@@ -415,7 +463,37 @@
 					{#each profiles as p (p.id)}
 						{@const self = p.id === auth.profile?.id}
 						<tr>
-							<td><strong>{p.first_name} {p.last_name}</strong></td>
+							<td>
+								{#if renamingId === p.id}
+									<div class="rename">
+										<input
+											bind:value={renameValue}
+											aria-label="Name for {p.username}"
+											onkeydown={(e) => {
+												if (e.key === 'Enter') saveRename(p);
+												if (e.key === 'Escape') renamingId = null;
+											}}
+										/>
+										<button type="button" class="mini" disabled={busy} onclick={() => saveRename(p)}>
+											Save
+										</button>
+										<button type="button" class="mini" onclick={() => (renamingId = null)}>
+											Cancel
+										</button>
+									</div>
+								{:else}
+									<strong>{p.first_name} {p.last_name}</strong>
+									<button
+										type="button"
+										class="mini"
+										disabled={busy}
+										onclick={() => startRename(p)}
+										aria-label="Rename {p.first_name} {p.last_name}"
+									>
+										Rename
+									</button>
+								{/if}
+							</td>
 							<td><span class="uname">{p.username}</span></td>
 							<td>
 								{#if self}<span class="tag you">you</span>{/if}
@@ -456,6 +534,49 @@
 </main>
 
 <style>
+	/* The rename control. `.mini` is a secondary action inside a dense table row,
+	   so it does NOT take the 44px floor — it is a word beside a name, the same
+	   shape as the match links in Schedule, and a full tap target per row would
+	   double the height of the table. The input beside it does take the floor,
+	   because it is the thing being aimed at. */
+	.rename {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+	}
+	.rename input {
+		flex: 1 1 10rem;
+		min-width: 0;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-2);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--text-primary);
+		font: inherit;
+	}
+	.mini {
+		border: none;
+		background: none;
+		padding: 0 var(--space-1);
+		color: var(--accent);
+		font: inherit;
+		font-size: var(--fs-xs);
+		font-weight: 600;
+		cursor: pointer;
+		text-decoration: none;
+	}
+	.mini:hover,
+	.mini:focus-visible {
+		text-decoration: underline;
+	}
+	.mini:disabled {
+		color: var(--text-faint);
+		cursor: default;
+		text-decoration: none;
+	}
+
 	.new-grid {
 		display: grid;
 		/* minmax(0, 1fr), not 1fr. A bare fr track refuses to shrink below its
