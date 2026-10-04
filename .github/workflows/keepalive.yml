@@ -1,0 +1,43 @@
+# Pings Supabase twice a week so the free-tier project is never paused for
+# inactivity. See scripts/keepalive.mjs for what counts as a live answer.
+
+name: Supabase keepalive
+
+on:
+  schedule:
+    # Monday and Thursday: no gap is longer than four days, so one failed or
+    # skipped run still leaves the next one inside Supabase's seven.
+    - cron: '17 9 * * 1,4'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # For the self re-enable step below, and nothing else.
+  actions: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # No `npm ci`: the script has no dependencies, and a broken lockfile
+      # (which has happened here) must not be able to stop the ping.
+      - name: Ping Supabase
+        run: node scripts/keepalive.mjs
+
+      # GitHub disables a scheduled workflow on a public repo after 60 days with
+      # no repository activity — and the offseason, when nobody commits, is the
+      # whole reason this file exists. Re-enabling it from inside itself is what
+      # keeps the schedule alive without dummy commits.
+      - name: Keep this schedule enabled
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/keepalive.yml/enable"
