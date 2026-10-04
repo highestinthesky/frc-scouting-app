@@ -819,8 +819,8 @@ sets `border-box` locally; changing it globally is its own release.
 
 Checked, not remembered. A new session should re-verify before trusting it.
 
-- **Production is at migration `0028`** (checked 2026-10-04 against
-  `schema_migrations` and a full schema dump). `0015`–`0028` are applied —
+- **Production is at migration `0029`** (checked 2026-10-04 against
+  `schema_migrations` and a full schema dump). `0015`–`0029` are applied —
   `0015` out of order, on 2026-10-04 after `0026`, because it had been missed;
   until then invites expired in 14 days, not 90. `0011` and `0012` never were;
   `0013` was, then superseded by the `0001`/`0008` re-run. All three live in
@@ -868,13 +868,11 @@ Checked, not remembered. A new session should re-verify before trusting it.
   fingerprint 9/9, every grant as before, keepalive, both Edge Functions and
   GoTrue answering. There is no Supabase backup on this plan, so a full
   logical dump was taken first.
-- **anon still holds table grants on `invites` and `profiles`** (on `invites`,
-  everything including SELECT; on `profiles`, everything but SELECT). They are
-  leftovers from the pre-0018 default ACL. RLS is on and neither table has an
-  anon policy, so a GET returns `200 []` and writes match nothing. PostgREST
-  exposes no TRUNCATE, so nothing is reachable. It is still the only place
-  anon's privileges rest on RLS alone rather than on a missing grant.
-  Unfixed as of 2026-10-04.
+- **anon holds no privilege on any table in `public`** — `0029`, 2026-10-04.
+  `invites` and `profiles` had kept pre-0018 grants, hidden only by RLS
+  (`GET /invites` answered `200 []`). Now every table answers 42501 to anon.
+  The migration's DO block fails if anon holds anything on any table, and
+  `check_rls.mjs` asserts the same thing against the grant itself.
 - **Probing as anon from a shell: check the key is non-empty first.**
   `grep -oE "… \|\| '…'"` on `src/lib/supabase.js` returned nothing in zsh,
   and every request went out with no key. The 401s that came back were "No

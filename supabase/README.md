@@ -5,7 +5,7 @@ Applied in filename order, they rebuild it from nothing.
 
 ## Audited live state
 
-Verified against the live project on 2026-10-04: production is at `0028`,
+Verified against the live project on 2026-10-04: production is at `0029`,
 `AUTH_ENFORCED` is true, and the old `0011`–`0013` drafts live under
 `superseded/` rather than in the active sequence.
 Do not infer production state from the presence of a migration file.
@@ -29,6 +29,7 @@ Do not infer production state from the presence of a migration file.
 | `0026_the_name_belongs_to_the_manager.sql` | **Applied 2026-09-02** (`schema_migrations`, checked 2026-10-04) |
 | `0027_keepalive.sql` | **Applied 2026-10-04**, recorded as `20261004183523`. Rehearsed on the replica first; afterwards anon gets `true` from `keepalive()`. (The "still 401 on every table" first written here was a probe sent with an empty key. With the real key, `events`/`entries`/`profiles` refuse, and `invites` returns `200 []` under RLS. See the anon-grants note in CLAUDE.md.) `scripts/keepalive.mjs` no longer falls back to the 42501 probe — a missing `keepalive()` now fails the run |
 | `0028_revoke_email_for_username.sql` | **Applied 2026-10-04**, recorded as `20261004193845`, on the user's call after 45 days of soak. Anon now gets 42501 from the lookup, and only `service_role` holds the grant |
+| `0029_anon_holds_no_table.sql` | **Applied 2026-10-04**, recorded as `20261004201724`. Afterwards anon holds no table privilege in `public`; every table answers 42501, checked with a real key. `peek_invite` still answers for `/register` |
 
 `username-sign-in` is deployed and ACTIVE (v1, `verify_jwt` **off** — it runs
 before a session exists and is itself the credential check). Smoke-tested
