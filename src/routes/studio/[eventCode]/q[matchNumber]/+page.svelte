@@ -78,9 +78,19 @@
 		const e = seat.entries.find((x) => readTrack(x));
 		if (!e) return null;
 		const track = readTrack(e);
+		// interim — Task 5 replaces: the old field names, read off the
+		// season-aware stats so this page renders unchanged until then.
+		const c = cycleStats(track);
 		return {
 			zone: startZone(track.start, seat.allianceColor),
-			stats: cycleStats(track)
+			stats: {
+				cycles: c.cycles,
+				msScoring: c.byAction.score?.ms ?? 0,
+				climbed: c.endgame?.done ?? false,
+				climbStartedAt: c.endgame?.startedAt ?? null,
+				climbLevel: c.endgame?.answers.lvl ?? null,
+				climbOk: c.endgame?.answers.ok ?? null
+			}
 		};
 	}
 </script>

@@ -247,7 +247,7 @@
 			{#if a.cycles}
 				<Stats>
 					<Stat label="Auto cycles" value={a.cycles.meanCycles.toFixed(1)} note="mean of {a.cycles.n}" />
-					<Stat label="Seconds scoring" value={(a.cycles.meanScoringMs / 1000).toFixed(1)} note="per match" />
+					<Stat label="Seconds scoring" value={(a.cycles.meanToMs / 1000).toFixed(1)} note="per match" />
 					<Stat
 						label="Disrupted"
 						value={a.cycles.faultRate.toFixed(2)}

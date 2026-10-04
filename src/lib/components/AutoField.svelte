@@ -28,7 +28,10 @@
 	// overshoots the field edge drops the robot mid-recording.
 	import { toScreen, fromScreen } from '$lib/field.js';
 	import { currentSeason } from '$lib/seasons/index.js';
-	import { ACTIONS, CLIMB_LEVELS, positionAt, marksAt, trackDuration } from '$lib/auto-track.js';
+	import { positionAt, marksAt, trackDuration } from '$lib/auto-track.js';
+	// interim — Task 4 replaces: the vocabulary now comes from the season.
+	const ACTIONS = currentSeason().actions.map((a) => a.key);
+	const CLIMB_LEVELS = [1, 2, 3];
 
 	/**
 	 * @type {{

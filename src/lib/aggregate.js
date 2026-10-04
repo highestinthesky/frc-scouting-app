@@ -6,9 +6,7 @@ import { listEntries } from './db.js';
 import { allMetricStats, hasAnyMetrics } from './metrics.js';
 import { normalizeCode, sameSeason, seasonOf } from './event-rules.js';
 import { readTrack, cycleStats, clusterRoutes } from './auto-track.js';
-import { currentSeason } from './seasons/index.js';
-
-const { startZone } = currentSeason().field;
+import { currentSeason, seasonFor } from './seasons/index.js';
 
 /**
  * "Did the robot break down on this entry?"
@@ -247,6 +245,8 @@ export function teamProfile(entries, teamNumber, eventCode) {
 		? mine.filter((e) => sameSeason(e?.eventCode, code) || normalizeCode(e?.eventCode) === code)
 		: mine;
 
+	const autoSeason = seasonFor(seasonOf(code)) ?? currentSeason();
+
 	const oneTeam = (list) => (list.length ? summarizeEntries(list).teams[0] ?? null : null);
 
 	// Per-event breakdown, newest event last so it reads left to right as a
@@ -282,8 +282,12 @@ export function teamProfile(entries, teamNumber, eventCode) {
 		// Scoped the same two ways, for the same reason: "where does 254 line up"
 		// is a different question here and across the season, and a team that
 		// changed its auto between events is exactly what a manager wants to spot.
-		auto: autoSummary(atEvent),
-		autoSeason: autoSummary(inSeason)
+		//
+		// Both read on the event's own season: a track is only comparable with
+		// tracks drawn on the same field in the same game. An undated or
+		// unregistered event falls back to the season this build records.
+		auto: autoSummary(atEvent, autoSeason),
+		autoSeason: autoSummary(inSeason, autoSeason)
 	};
 }
 
@@ -403,17 +407,28 @@ export function matchReport(entries, eventCode, matchNumber, lineup = {}) {
  * rather than contributing an empty path — so `n` is the number of entries with
  * a track, never the number of entries.
  *
+ * One season at a time, and the caller says which. A track from another season
+ * is positions on another field and actions from another game: its start zone
+ * means something else and its cycle is a different thing, so it is left out
+ * rather than averaged in. `season` null counts nothing.
+ *
  * @param {any[]} entries  already scoped by the caller
- * @returns {{n: number, ofEntries: number, zones: Array<{zone: string, count: number}>,
- *            routes: Array<object>, cycles: object|null}}
+ * @param {import('./seasons/index.js').Season|null} season
+ * @returns {{n: number, ofEntries: number, season: import('./seasons/index.js').Season|null,
+ *            zones: Array<{zone: string, count: number}>, routes: Array<object>,
+ *            cycles: null|{n: number, meanCycles: number|null, meanToMs: number|null,
+ *                          faultRate: number|null}}}
  */
-export function autoSummary(entries) {
+export function autoSummary(entries, season) {
 	const list = Array.isArray(entries) ? entries : [];
 	const rows = [];
-	for (const e of list) {
-		const track = readTrack(e);
-		if (!track) continue;
-		rows.push({ entry: e, track, zone: startZone(track.start, e?.allianceColor) });
+	if (season) {
+		for (const e of list) {
+			const track = readTrack(e);
+			// Same object, not same year: seasonFor() is memoised.
+			if (!track || track.season !== season) continue;
+			rows.push({ entry: e, track, zone: season.field.startZone(track.start, e?.allianceColor) });
+		}
 	}
 
 	const byZone = new Map();
@@ -424,25 +439,28 @@ export function autoSummary(entries) {
 
 	// Sums, then means at the end. Averaging per-entry averages would weight a
 	// match with one interval the same as one with six.
+	//
+	// Each figure is null when the season has nothing it could measure — no
+	// cycle, no fault action — rather than a zero that reads as an observation.
 	let cycles = null;
 	if (rows.length) {
-		const totals = { cycles: 0, msScoring: 0, msCollecting: 0, faults: 0, n: 0 };
+		const to = season.cycle?.to ?? null;
+		const totals = { cycles: 0, msTo: 0, faults: 0, n: 0 };
 		for (const r of rows) {
 			const c = cycleStats(r.track);
 			if (!c) continue;
-			totals.cycles += c.cycles;
-			totals.msScoring += c.msScoring;
-			totals.msCollecting += c.msCollecting;
-			totals.faults += c.faultCount;
+			totals.cycles += c.cycles ?? 0;
+			if (to) totals.msTo += c.byAction[to]?.ms ?? 0;
+			totals.faults += c.faults ?? 0;
 			totals.n += 1;
 		}
 		if (totals.n) {
 			cycles = {
 				n: totals.n,
-				meanCycles: totals.cycles / totals.n,
-				meanScoringMs: totals.msScoring / totals.n,
-				meanCollectingMs: totals.msCollecting / totals.n,
-				faultRate: totals.faults / totals.n
+				meanCycles: season.cycle ? totals.cycles / totals.n : null,
+				// Time spent in the cycle's closing action — in 2026, seconds scoring.
+				meanToMs: to ? totals.msTo / totals.n : null,
+				faultRate: season.faultAction ? totals.faults / totals.n : null
 			};
 		}
 	}
@@ -450,6 +468,7 @@ export function autoSummary(entries) {
 	return {
 		n: rows.length,
 		ofEntries: list.length,
+		season,
 		zones: [...byZone.entries()]
 			.map(([zone, count]) => ({ zone, count }))
 			.sort((a, b) => b.count - a.count || a.zone.localeCompare(b.zone)),

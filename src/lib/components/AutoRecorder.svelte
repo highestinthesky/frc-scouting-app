@@ -28,8 +28,6 @@
 	import Button from './Button.svelte';
 	import {
 		SAMPLE_HZ,
-		ACTIONS,
-		CLIMB_LEVELS,
 		encodeTrack,
 		decodeTrack,
 		positionAt,
@@ -37,6 +35,9 @@
 		cycleStats
 	} from '$lib/auto-track.js';
 	import { currentSeason } from '$lib/seasons/index.js';
+	// interim — Task 4 replaces: the vocabulary now comes from the season.
+	const ACTIONS = currentSeason().actions.map((a) => a.key);
+	const CLIMB_LEVELS = [1, 2, 3];
 	const { startZone, clampToStart } = currentSeason().field;
 
 	/**
