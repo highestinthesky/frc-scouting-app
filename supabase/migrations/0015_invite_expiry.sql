@@ -22,9 +22,13 @@
 -- chats, so they should stop working eventually. 90 days covers an offseason
 -- plus a build season without covering next year's roster.
 --
--- Only the DEFAULT moves. Existing rows keep the dates they were issued with —
--- an invite already sent with a 14-day life still dies on schedule, which is
--- correct: this changes what gets handed out next, not what was promised.
+-- The default moves, and so does every invite still unredeemed — see the
+-- UPDATE below. An earlier draft of this header said existing rows kept their
+-- dates; the UPDATE was always here, and the header was wrong.
+--
+-- Applied to production 2026-10-04, after 0026 rather than before 0016. Nothing
+-- from 0016 on touches expires_at, so the order changes nothing; rehearsed on
+-- the replica in that order before it ran. Zero invites were open at the time.
 
 BEGIN;
 

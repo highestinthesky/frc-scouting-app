@@ -19,7 +19,7 @@ Do not infer production state from the presence of a migration file.
 | `0010_identity.sql` | Applied 2026-08-07 |
 | `0011`–`0013` | Superseded; never applied in this sequence |
 | `0001` + `0008` re-run | **Applied 2026-08-07, after `0013`** (`249cf23`). `verify_0008_rerun.sql` returns 9 PASS on production, checked 2026-10-04 |
-| `0015_invite_expiry.sql` | **Not applied** — checked 2026-10-04: `invites.expires_at` still defaults to 14 days |
+| `0015_invite_expiry.sql` | **Applied 2026-10-04, after `0026`** — missed in sequence; found by the schema diff. Rehearsed on the replica in that order, zero open invites at the time, recorded in `schema_migrations` as `20261004183245` |
 | `0016_real_emails.sql` | **Applied 2026-08-14** |
 | `0017_managed_accounts.sql` | **Applied 2026-08-14** |
 | `0018_revoke_from_anon.sql` | **Applied 2026-08-14** — grants, not behaviour |
