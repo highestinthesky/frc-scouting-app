@@ -228,8 +228,8 @@ const nearMarks = [
 // far end of the field — not the one that enforces a rule the app has only
 // inferred. Where the two disagree, the scout saw it and this file did not.
 //
-// The upper bound keeps half a robot past the line, so a robot straddling it is
-// still expressible: that placement is legal and common, and clamping to the
+// `clampToStart()` in `../field.js` lets a start reach half a robot past the
+// line, so a robot straddling it is still expressible: that placement is legal and common, and clamping to the
 // line exactly would have made it unreachable from the wrong side.
 //
 // Point E — "it's not contacting the BUMP" — is likewise NOT enforced. The

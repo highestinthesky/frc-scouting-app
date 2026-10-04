@@ -102,6 +102,20 @@
 	 * @type {Record<string, number|string|boolean>}
 	 */
 	let pendingAnswers = $state({});
+	/**
+	 * Whether the open sheet is the post-whistle sweep, which walks every interval
+	 * with a question still open. Only the sweep's Done moves on to the next one;
+	 * a sheet the scout opened on one interval with "Answers" closes on Done,
+	 * because that scout asked about that interval and nothing else.
+	 */
+	let sweeping = false;
+	/**
+	 * The form holds a track this build cannot read — a season it does not have,
+	 * or a version it does not know. Shown, never placed over: the placement
+	 * step's first drag would emit a new track and silently replace the stored
+	 * one. Only "Record again" discards it, and says so by being pressed.
+	 */
+	let unreadable = $state(false);
 
 	// Full screen on a phone held upright is width-bound — the field is half
 	// again as wide as it is tall, so it bought 2% and left 607px of height
@@ -156,6 +170,8 @@
 				samples = d.samples.map((s) => ({ x: s.x, y: s.y }));
 				intervals = d.intervals.map((iv) => ({ ...iv }));
 				phase = 'correct';
+			} else {
+				unreadable = true;
 			}
 		}
 	});
@@ -175,6 +191,7 @@
 	}
 
 	function place(pos) {
+		if (unreadable) return;
 		if (phase === 'place') {
 			// A start the season's field rules out — inside an obstacle, or outside
 			// the robot's own alliance zone — is a placement that could not have
@@ -212,13 +229,14 @@
 	function begin() {
 		// Defensive: a second begin() with a timer still running leaks the first
 		// one, and two samplers filling the same array double the rate at which `t`
-		// advances — a 15-second recording that decodes as 7.5 seconds of motion at
+		// advances — a recording that decodes at half its length, its motion at
 		// twice the speed, with nothing about it looking wrong.
 		if (timer) clearInterval(timer);
 		samples = [];
 		intervals = [];
 		held = {};
 		askFor = null;
+		sweeping = false;
 		pendingAnswers = {};
 		elapsed = 0;
 		here = start;
@@ -300,8 +318,9 @@
 		// and every other action whose questions could not be asked mid-match
 		// without taking the screen while there was still a field to watch.
 		// Unanswered means ANY question outstanding. One at a time, in order; the
-		// sheet's Done moves to the next.
+		// sheet's Done moves to the next — this sweep, and only this one.
 		askFor = nextUnanswered(-1);
+		sweeping = askFor !== null;
 		pendingAnswers = {};
 		emit();
 	}
@@ -426,9 +445,26 @@
 		emit();
 	}
 
-	/** The sheet's Done: on to the next interval still waiting, or close. */
+	/** "Answers" on one interval: ask its questions, and only its. */
+	function openAnswers(i) {
+		sweeping = false;
+		askFor = i;
+	}
+
+	/**
+	 * The sheet's Done. During the post-whistle sweep, on to the next interval
+	 * still waiting; otherwise close. Advancing after a sheet the scout opened
+	 * by hand would walk them into a question about some other interval they
+	 * never asked to see.
+	 */
 	function doneAsking() {
-		askFor = typeof askFor === 'number' ? nextUnanswered(askFor) : null;
+		if (sweeping && typeof askFor === 'number') {
+			askFor = nextUnanswered(askFor);
+			if (askFor === null) sweeping = false;
+			return;
+		}
+		askFor = null;
+		sweeping = false;
 	}
 
 	function dropInterval(i) {
@@ -444,10 +480,12 @@
 		intervals = [];
 		held = {};
 		askFor = null;
+		sweeping = false;
 		pendingAnswers = {};
 		elapsed = 0;
 		scrub = 0;
 		phase = 'place';
+		unreadable = false;
 		// A new recording is made on the current season, whatever the one being
 		// thrown away was recorded on.
 		season = currentSeason();
@@ -558,7 +596,7 @@
 		     not invent a position. -->
 		<AutoField
 			{season}
-			mode={phase === 'correct' ? 'review' : 'record'}
+			mode={phase === 'correct' || unreadable ? 'review' : 'record'}
 			position={phase === 'correct' ? atScrub : here}
 			trail={phase === 'place' ? [] : samples}
 			{flipped}
@@ -595,7 +633,12 @@
 </div>
 
 <div class="controls">
-	{#if phase === 'place'}
+	{#if unreadable}
+		<p class="say">Recorded on a field this build does not have.</p>
+		<div class="row">
+			<Button variant="ghost" onclick={discard}>Record again</Button>
+		</div>
+	{:else if phase === 'place'}
 		<p class="say">
 			{#if start}Starting {zone ?? 'position'} set.{:else}Drag the robot to where it starts.{/if}
 		</p>
@@ -666,7 +709,7 @@
 								).toFixed(1)}–{(iv.t1 / 1000).toFixed(1)}s{/if}
 						</span>
 						{#if action?.questions?.length}
-							<button type="button" class="drop" onclick={() => (askFor = i)}>
+							<button type="button" class="drop" onclick={() => openAnswers(i)}>
 								Answers
 							</button>
 						{/if}
@@ -895,6 +938,7 @@
 		   wide as its widest label times their number and overflows a phone rather
 		   than sharing the width. */
 		min-width: 0;
+		/* One row of equal shares: it does not grow past ~6 actions on a short phone. */
 	}
 
 	/* The plan asks for the rail to swap sides for whichever hand holds the phone.

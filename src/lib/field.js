@@ -336,8 +336,8 @@ export function makeField(spec) {
  * come back having gone to its right, and the correction would introduce a
  * second error while fixing the first.
  *
- * In FIELD coordinates, deliberately. `toScreen` works in the drawn box, and
- * the drawn box is the whole field today but has already been cut once. What is
+ * In FIELD coordinates, deliberately. `toScreen` works in the drawn box, which
+ * is the whole field today but is a separate box and need not stay so. What is
  * being corrected here is where the robot was, not how it was drawn.
  *
  * @param {{x:number,y:number}} pos
@@ -384,9 +384,10 @@ export function mirrorPosition(pos) {
  *
  * ─── and it happens in DRAWN space, not field space ─────────────────────────
  *
- * The drawn region is cut at 0.756, so `x -> 1 - x` in field coordinates would
- * slide the visible window off to the far end and show the opponent's half. All
- * of this is about the centre of the PICTURE.
+ * The drawn box is the whole field today, so the two centres coincide — but
+ * were the picture ever cut short of the far wall, `x -> 1 - x` in field
+ * coordinates would slide the visible window off the end it shows. All of this
+ * is about the centre of the PICTURE.
  *
  * @param {number} u  0..1 across the drawn box
  * @param {number} v  0..1 down the drawn box

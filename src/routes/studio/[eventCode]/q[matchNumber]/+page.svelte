@@ -179,6 +179,7 @@
 				<Panel title="{side.colour === 'red' ? 'Red' : 'Blue'} alliance">
 					<ul class="seats {side.colour}">
 						{#each side.seats as seat}
+							{@const auto = autoLine(seat)}
 							<li class:uncovered={!seat.covered}>
 								<div class="seat-head">
 									<a class="team" href="{base}/studio/{eventCode}/team/{seat.teamNumber}/">
@@ -203,8 +204,8 @@
 											{/if}
 										{/each}
 									</dl>
-									{#if autoLine(seat)}
-										<p class="auto">{autoLine(seat)}</p>
+									{#if auto}
+										<p class="auto">{auto}</p>
 									{/if}
 									{#each seat.entries as e}
 										{#if e.observations?.comments?.trim() || e.observations?.strengths?.trim()}
