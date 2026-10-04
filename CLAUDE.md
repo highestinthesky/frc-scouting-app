@@ -811,14 +811,14 @@ sets `border-box` locally; changing it globally is its own release.
 
 Checked, not remembered. A new session should re-verify before trusting it.
 
-- **Production is at migration `0026`, without `0015`** (checked 2026-10-04
-  against `schema_migrations` and a full schema dump). `0016`–`0026` are
-  applied; `0011` and `0012` never were; `0013` was, then superseded by the
-  `0001`/`0008` re-run. All three live in `supabase/superseded/`. `0015` never
-  reached production, so `invites.expires_at` still defaults to 14 days, not
-  90. `0027` is unapplied.
+- **Production is at migration `0026`** (checked 2026-10-04 against
+  `schema_migrations` and a full schema dump). `0015`–`0026` are applied —
+  `0015` out of order, on 2026-10-04 after `0026`, because it had been missed;
+  until then invites expired in 14 days, not 90. `0011` and `0012` never were;
+  `0013` was, then superseded by the `0001`/`0008` re-run. All three live in
+  `supabase/superseded/`. `0027` is unapplied.
 - **The replica matches production exactly**, as of 2026-10-04: built with
-  `scripts/rebuild_prod_replica.sh` plus `0016`–`0026`, its `public` schema dump
+  `scripts/rebuild_prod_replica.sh` plus `0016`–`0026` (before `0015` landed), its `public` schema dump
   is line-for-line production's apart from comments and the order of ACL
   entries. `supabase/verify_0008_rerun.sql` is the quick check that the
   re-run is in a database.
