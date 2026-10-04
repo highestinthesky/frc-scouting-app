@@ -77,6 +77,18 @@
 	const onPublicRoute = $derived(PUBLIC_ROUTES.some((r) => isActive(r)));
 
 	/**
+	 * Routes that are about the device, not an event.
+	 *
+	 * Practice exists to be used BEFORE kickoff, when no scout is on any event and
+	 * the device has nothing to set up yet. Behind the session-setup gate it would
+	 * be unreachable for exactly the people it is for. Only that gate is lifted:
+	 * the sign-in guard above still applies, and so does every account state
+	 * below it (password change, orphaned). A signed-out device never gets here.
+	 */
+	const NEEDS_NO_EVENT = ['/practice'];
+	const needsNoEvent = $derived(NEEDS_NO_EVENT.some((r) => isActive(r)));
+
+	/**
 	 * Studio runs without the app shell.
 	 *
 	 * It is a separate application that happens to share a deployment, and the
@@ -244,7 +256,7 @@
 			<button type="button" class="gate-out" onclick={() => auth.signOut()}>Sign out</button>
 		</div>
 	</main>
-{:else if !session.isConfigured}
+{:else if !session.isConfigured && !(needsNoEvent && auth.signedIn)}
 	<SessionSetup />
 {:else if inStudio}
 	<!-- No app bar, no tab bar, no reminder banner. Studio owns its whole
@@ -257,8 +269,10 @@
 			     The controls after it are not, because a tap target that shrinks is a
 			     tap target that gets missed. -->
 			<div class="who">
-				<strong class="event">{session.eventCode}</strong>
-				<span class="sep">·</span>
+				{#if session.eventCode}
+					<strong class="event">{session.eventCode}</strong>
+					<span class="sep">·</span>
+				{/if}
 				<span class="name">{shellIdentity.name}</span>
 			</div>
 			<SyncPanel />
