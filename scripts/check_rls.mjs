@@ -355,6 +355,15 @@ const scout2B = await clientFor(scout2, EVENT_B);
 	const { error } = await anonA.from('entries').insert(entryRow(EVENT_A));
 	ok('anon cannot record an entry', denied(error), error?.code);
 	ok('anon cannot read the roster', (await visible(anonA, 'profiles', ROSTER)) <= 0);
+	// 0029: the grant itself, not only what RLS lets through. invites and
+	// profiles kept anon grants from before 0018, and RLS alone was hiding
+	// them, which no behavioural check above can tell apart from a missing grant.
+	const anonGrants = await sql(
+		`select table_name || ':' || privilege_type as g
+		   from information_schema.role_table_grants
+		  where table_schema = 'public' and grantee in ('anon', 'PUBLIC')`
+	);
+	ok('anon holds no privilege on any table', anonGrants.length === 0, anonGrants.map((r) => r.g).join(', '));
 	// 0028: knowing a username buys no address, signed in or not. The probe
 	// names a real account, so a pass is the grant refusing rather than the
 	// function finding nobody.
