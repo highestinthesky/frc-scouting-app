@@ -12,6 +12,11 @@
 // with this file and no other edit, nothing 2026-specific has leaked into them.
 // If one only works with 2026, it is wrong.
 //
+// That switch turns exactly one assertion red, on purpose: `seasons.test.mjs`
+// asserts CURRENT_SEASON is not this file, so the proof cannot be committed by
+// accident. Every other test passes the season it is written about explicitly
+// and must stay green.
+//
 // Nothing here is a game manual's number. Every value was picked to be unlike
 // its 2026 counterpart, and the obstacles are deliberately NOT mirrored — a
 // framework that assumes the field is symmetric would draw this one wrong.
@@ -86,6 +91,9 @@ export default {
 			doing: 'Parking',
 			hotkey: 'g',
 			icon: null,
+			// `place` already draws as P. Without its own letter the two would be one
+			// chip on the field, and buildSeason() refuses that.
+			letter: 'K',
 			tone: 'accent',
 			ends: true,
 			questions: [

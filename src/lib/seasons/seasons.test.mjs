@@ -14,7 +14,8 @@ import {
 	seasonFor,
 	currentSeason,
 	seasonForUnstamped,
-	buildSeason
+	buildSeason,
+	chipLetter
 } from './index.js';
 
 let pass = 0;
@@ -75,6 +76,8 @@ function ok(label, cond) {
 	ok('a cycle is grab then place', t.cycle?.from === 'grab' && t.cycle?.to === 'place');
 	ok('auto is 20 seconds', t.autoMs === 20_000);
 	ok('most actions have no icon', t.actions.filter((a) => a.icon === null).length === 4);
+	ok('and each draws its own letter',
+		t.actions.filter((a) => a.icon === null).map(chipLetter).join('') === 'GPDK');
 
 	const f = t.field;
 	ok('the field is squarer', Math.abs(f.FIELD_ASPECT - 480 / 360) < 1e-9 && Math.abs(f.FIELD_ASPECT - 1.333) < 1e-3);
@@ -231,6 +234,74 @@ rejects('year not an integer', (s) => (s.year = '2026'), 'year');
 rejects('unknown action role', (s) => (s.actions[0].role = 'endgame'), 'endgame');
 rejects('unknown question role', (s) => (s.actions[3].questions[0].role = 'best'), 'best');
 rejects('unknown feature kind', (s) => (s.field.features[0].kind = 'circle'), 'circle');
+
+// What a render reads without checking. Each of these is a blank button, a chip
+// drawn as nothing or a sheet with nothing to tap — or a throw mid-render on
+// the field, which is the worst place a season file can be wrong.
+rejects('action label empty', (s) => (s.actions[0].label = ''), "action 'grab' label");
+rejects('action label missing', (s) => delete s.actions[0].label, "action 'grab' label");
+rejects('action label whitespace', (s) => (s.actions[0].label = '  '), "action 'grab' label");
+rejects('action doing empty', (s) => (s.actions[1].doing = ''), "action 'place' doing");
+rejects('action doing not a string', (s) => (s.actions[1].doing = 7), "action 'place' doing");
+rejects('question ask empty', (s) => (s.actions[3].questions[0].ask = ''), "question 'spot' ask");
+rejects('option label empty', (s) => (s.actions[3].questions[0].options[0].label = ''), 'option "near" label');
+rejects('option says missing', (s) => delete s.actions[3].questions[0].options[1].says, 'option "far" says');
+rejects('question with no options', (s) => (s.actions[3].questions[0].options = []), "'spot' has no options");
+rejects('question with options missing', (s) => delete s.actions[3].questions[0].options, "'spot' has no options");
+rejects('a level option that is not a number',
+	(s) => (s.actions[3].questions[0].role = 'level'), 'option "near" is not a number');
+rejects('two questions of one role on an action', (s) => {
+	s.actions[3].questions[0].role = 'outcome';
+	s.actions[3].questions.push({ key: 'ok', ask: 'Did it?', role: 'outcome',
+		options: [{ value: true, label: 'Yes', says: 'did' }] });
+}, "more than one 'outcome' question ('ok')");
+ok('two questions with no role on one action are fine', (() => {
+	const s = valid();
+	s.actions[3].questions.push({ key: 'side', ask: 'Which side?',
+		options: [{ value: 'L', label: 'L', says: 'left' }] });
+	return buildSeason(s).actionByKey.park.questions.length === 2;
+})());
+
+for (const dim of ['lengthIn', 'widthIn', 'robotIn']) {
+	rejects(`field.${dim} zero`, (s) => (s.field[dim] = 0), `field.${dim}`);
+	rejects(`field.${dim} negative`, (s) => (s.field[dim] = -30), `field.${dim}`);
+	rejects(`field.${dim} a string`, (s) => (s.field[dim] = '300'), `field.${dim}`);
+	rejects(`field.${dim} missing`, (s) => delete s.field[dim], `field.${dim}`);
+}
+rejects('startDepth zero', (s) => (s.field.startDepth = 0), 'startDepth');
+rejects('startDepth a half', (s) => (s.field.startDepth = 0.5), 'startDepth');
+rejects('startDepth negative', (s) => (s.field.startDepth = -0.1), 'startDepth');
+rejects('startDepth a string', (s) => (s.field.startDepth = '0.2'), 'startDepth');
+rejects('startDepth missing', (s) => delete s.field.startDepth, 'startDepth');
+
+// ─── letter chips ──────────────────────────────────────────────────────────
+// An action with no icon is drawn as one character. Two that would draw the
+// same are two different things a robot is doing, indistinguishable on the
+// field — so it is a build failure, and `letter` is the way out.
+{
+	const b = buildSeason(valid());
+	ok('an icon-less action draws the first letter of its label', chipLetter(b.actionByKey.bumped) === 'B');
+	ok('upper-cased', chipLetter({ label: 'park' }) === 'P');
+	ok('its own letter wins when it has one', chipLetter({ label: 'Park', letter: 'K' }) === 'K');
+	ok('the letter survives the build', (() => {
+		const s = valid();
+		s.actions[3].letter = 'K';
+		return chipLetter(buildSeason(s).actionByKey.park) === 'K';
+	})());
+	ok('an action WITH an icon may share a letter with one without', (() => {
+		const s = valid();
+		s.actions[0].label = 'Bump'; // grab keeps its collect icon
+		return buildSeason(s) !== null;
+	})());
+}
+rejects('two icon-less actions on one letter', (s) => {
+	s.actions[0].icon = null;
+	s.actions[0].label = 'Bump';
+}, "'bumped' would both be drawn as 'B'");
+rejects('a letter that collides', (s) => (s.actions[3].letter = 'B'), "'park' would both be drawn as 'B'");
+rejects('a letter of two characters', (s) => (s.actions[3].letter = 'PK'), "action 'park' letter");
+rejects('an empty letter', (s) => (s.actions[3].letter = ''), "action 'park' letter");
+rejects('a letter that is not a string', (s) => (s.actions[3].letter = 7), "action 'park' letter");
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

@@ -35,7 +35,7 @@
 	// a replay passes the season its tracks were drawn on, because a track read
 	// on another season's field draws a plausible path in the wrong places.
 	import { toScreen, fromScreen } from '$lib/field.js';
-	import { currentSeason } from '$lib/seasons/index.js';
+	import { currentSeason, chipLetter } from '$lib/seasons/index.js';
 	import { positionAt, marksAt, trackDuration, describeAnswers } from '$lib/auto-track.js';
 
 	/**
@@ -420,9 +420,10 @@
 	/**
 	 * Which icon a mark draws.
 	 *
-	 * The action's own `icon` from the season, and an action with none draws the
-	 * first letter of its label — a season does not have to ship artwork to be
-	 * readable on the field.
+	 * The action's own `icon` from the season, and an action with none draws one
+	 * character — its `letter`, else the first letter of its label (`chipLetter`,
+	 * which buildSeason() has already checked is unique). A season does not have
+	 * to ship artwork to be readable on the field.
 	 *
 	 * The climb icon is the only one with variants, and they are exactly the two
 	 * questions an endgame of that shape asks, found by ROLE rather than by key:
@@ -436,7 +437,7 @@
 	function iconFor(mark) {
 		const action = actionOf(mark);
 		const kind = action?.icon ?? 'letter';
-		if (kind === 'letter') return { kind, letter: (action?.label ?? '?').charAt(0).toUpperCase() };
+		if (kind === 'letter') return { kind, letter: action ? chipLetter(action) : '?' };
 		if (kind !== 'climb') return { kind };
 		const level = action.questions?.find((q) => q.role === 'level');
 		const outcome = action.questions?.find((q) => q.role === 'outcome');

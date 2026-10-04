@@ -58,12 +58,17 @@ const SPECS = [season2026, seasonThrowaway];
  * as a fault. `ends` marks the endgame action: once pressed it runs to the
  * whistle and its questions are asked at once.
  *
+ * An action with no `icon` is drawn on the field as one character — `letter`
+ * if the season gives one, else the first letter of its label. See
+ * `chipLetter()`.
+ *
  * @typedef {{
  *   key: string,
  *   label: string,
  *   doing: string,
  *   hotkey: string,
  *   icon?: 'collect'|'score'|'fault'|'climb'|null,
+ *   letter?: string,
  *   tone: 'accent'|'success'|'warning',
  *   role?: 'fault',
  *   ends?: boolean,
@@ -128,6 +133,24 @@ const fail = (season, what) => {
 	throw new Error(`season ${season}: ${what}`);
 };
 
+/** A string with something in it. Everything a scout reads has to be one. */
+const isText = (v) => typeof v === 'string' && v.trim() !== '';
+/** A finite number above zero. */
+const isPositive = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
+
+/**
+ * The one character an icon-less action is drawn as on the field.
+ *
+ * Its own `letter` if the season gives one, else the first letter of its label.
+ * The same rule `buildSeason()` checks for collisions, so two chips that would
+ * read the same are a build failure rather than a guess on the field.
+ *
+ * @param {{label: string, letter?: string}} action
+ */
+export function chipLetter(action) {
+	return action.letter ?? action.label.charAt(0).toUpperCase();
+}
+
 /**
  * Validate a season spec and build it into a frozen Season.
  *
@@ -158,8 +181,16 @@ export function buildSeason(spec) {
 		if (!ICONS.has(a.icon ?? null)) fail(id, `action '${a.key}' has unknown icon '${a.icon}'`);
 		if (!TONES.has(a.tone)) fail(id, `action '${a.key}' has unknown tone '${a.tone}'`);
 		if (!ACTION_ROLES.has(a.role)) fail(id, `action '${a.key}' has unknown role '${a.role}'`);
+		// Rendered as-is on the rail, the chip and the stats. An empty one is a
+		// blank button, and a missing one throws mid-render on the field.
+		if (!isText(a.label)) fail(id, `action '${a.key}' label ${JSON.stringify(a.label)} is not a non-empty string`);
+		if (!isText(a.doing)) fail(id, `action '${a.key}' doing ${JSON.stringify(a.doing)} is not a non-empty string`);
+		if (a.letter !== undefined && !(typeof a.letter === 'string' && [...a.letter].length === 1 && a.letter.trim() !== '')) {
+			fail(id, `action '${a.key}' letter ${JSON.stringify(a.letter)} is not a single character`);
+		}
 
 		const qKeys = new Set();
+		const qRoles = new Set();
 		for (const q of a.questions ?? []) {
 			if (RESERVED_QUESTION_KEYS.has(q.key)) {
 				fail(id, `action '${a.key}' question key '${q.key}' is reserved by the interval`);
@@ -169,14 +200,44 @@ export function buildSeason(spec) {
 			if (!QUESTION_ROLES.has(q.role)) {
 				fail(id, `action '${a.key}' question '${q.key}' has unknown role '${q.role}'`);
 			}
+			// Generic code finds a question BY role — the climb icon's numeral is
+			// the `level` answer — so a second one of the same role is a coin toss.
+			if (q.role !== undefined) {
+				if (qRoles.has(q.role)) fail(id, `action '${a.key}' has more than one '${q.role}' question ('${q.key}')`);
+				qRoles.add(q.role);
+			}
+			if (!isText(q.ask)) fail(id, `action '${a.key}' question '${q.key}' ask ${JSON.stringify(q.ask)} is not a non-empty string`);
+			// A question with no options is a sheet with nothing to tap.
+			if (!Array.isArray(q.options) || q.options.length === 0) {
+				fail(id, `action '${a.key}' question '${q.key}' has no options`);
+			}
 			const values = new Set();
-			for (const o of q.options ?? []) {
+			for (const o of q.options) {
 				if (values.has(o.value)) {
 					fail(id, `action '${a.key}' question '${q.key}' has duplicate option value ${JSON.stringify(o.value)}`);
 				}
 				values.add(o.value);
+				const which = `action '${a.key}' question '${q.key}' option ${JSON.stringify(o.value)}`;
+				if (!isText(o.label)) fail(id, `${which} label ${JSON.stringify(o.label)} is not a non-empty string`);
+				if (!isText(o.says)) fail(id, `${which} says ${JSON.stringify(o.says)} is not a non-empty string`);
+				// "Best" is the highest number. A string level would never be one.
+				if (q.role === 'level' && !(typeof o.value === 'number' && Number.isFinite(o.value))) {
+					fail(id, `${which} is not a number, and '${q.key}' is a level`);
+				}
 			}
 		}
+	}
+
+	// An icon-less action is drawn as one character. Two that resolve to the same
+	// one are two different things a robot is doing, drawn identically.
+	const letters = new Map();
+	for (const a of actions) {
+		if ((a.icon ?? null) !== null) continue;
+		const letter = chipLetter(a);
+		if (letters.has(letter)) {
+			fail(id, `actions '${letters.get(letter)}' and '${a.key}' would both be drawn as '${letter}' — give one a letter`);
+		}
+		letters.set(letter, a.key);
 	}
 
 	const enders = actions.filter((a) => a.ends === true);
@@ -191,6 +252,17 @@ export function buildSeason(spec) {
 	}
 
 	// ─── field ───────────────────────────────────────────────────────────────
+	// The three dimensions every fraction is converted through. Zero or a string
+	// here is a field drawn at NaN, which renders as nothing and clamps nowhere.
+	for (const dim of ['lengthIn', 'widthIn', 'robotIn']) {
+		if (!isPositive(spec.field?.[dim])) fail(id, `field.${dim} ${JSON.stringify(spec.field?.[dim])} is not a positive number`);
+	}
+	// A fraction of the field from the robot's OWN wall. Half or more would let a
+	// red start reach blue's half, and nothing at all is what null says.
+	const depth = spec.field.startDepth;
+	if (depth !== null && !(typeof depth === 'number' && depth > 0 && depth < 0.5)) {
+		fail(id, `field.startDepth ${JSON.stringify(depth)} is not null or between 0 and 0.5`);
+	}
 	const bands = spec.field?.startBands ?? [];
 	if (bands.length === 0) fail(id, 'startBands is empty');
 	for (let i = 1; i < bands.length; i += 1) {
