@@ -355,6 +355,9 @@ const scout2B = await clientFor(scout2, EVENT_B);
 	const { error } = await anonA.from('entries').insert(entryRow(EVENT_A));
 	ok('anon cannot record an entry', denied(error), error?.code);
 	ok('anon cannot read the roster', (await visible(anonA, 'profiles', ROSTER)) <= 0);
+	// 0027: the one thing anon may do, and it reads nothing.
+	const { data: alive, error: aliveErr } = await anonA.rpc('keepalive');
+	ok('anon can call keepalive()', !aliveErr && alive === true, aliveErr?.message);
 }
 
 // ─── an auth user without a profile sees nothing ────────────────────────────

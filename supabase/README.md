@@ -23,6 +23,7 @@ Do not infer production state from the presence of a migration file.
 | `0018_revoke_from_anon.sql` | **Applied 2026-08-14** — grants, not behaviour |
 | `0019`–`0023` | Applied; account/event cutover complete |
 | `0024_username_sign_in_rate_limit.sql` | **Applied 2026-08-20** — before the function, per the ordering rule |
+| `0027_keepalive.sql` | **Not applied** (written 2026-10-04). Safe in either order: `scripts/keepalive.mjs` falls back to the 42501 probe until `keepalive()` exists, and says so in its log line |
 
 `username-sign-in` is deployed and ACTIVE (v1, `verify_jwt` **off** — it runs
 before a session exists and is itself the credential check). Smoke-tested

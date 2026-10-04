@@ -7,20 +7,21 @@
 // with no activity — nobody notices until the first scout of the next season
 // opens the app and every sync fails.
 //
-// It makes one PostgREST request as anon. Since 0020 anon can reach nothing, so
-// the answer a live database gives is `401` with Postgres's own `42501`
-// (permission denied): the request was parsed, planned and refused BY POSTGRES,
-// which is the round trip that counts. A `200` is accepted too, so a future
-// grant does not turn this red. Anything else — a paused project, a gateway
-// error, a network failure — exits non-zero, so a red run is the warning.
+// It calls `public.keepalive()` (0027) as anon: a query that succeeds and reads
+// nothing. A database that does not have the function yet answers PGRST202, and
+// then the ping falls back to the pre-0027 probe — reading `events`, which anon
+// cannot, and accepting Postgres's own 42501 as proof the database parsed and
+// refused it. The fallback is what lets this script ship before the migration is
+// on production, so the two halves cannot be pushed in the wrong order.
+//
+// Anything else — a paused project, a bad key, a gateway error, a network
+// failure — exits non-zero, so a red run is the warning.
 //
 // It reads no secret. The URL and anon key are the public ones the bundle
 // ships, read out of src/lib/supabase.js rather than copied, so there is one
 // place they live. SUPABASE_URL / SUPABASE_ANON_KEY override them.
 
 import { readFileSync } from 'node:fs';
-
-const TABLE = 'events';
 
 function shippedConfig() {
 	const src = readFileSync(new URL('../src/lib/supabase.js', import.meta.url), 'utf8');
@@ -37,30 +38,45 @@ if (!url || !key) {
 	process.exit(1);
 }
 
-const endpoint = `${url}/rest/v1/${TABLE}?select=id&limit=1`;
-let res;
-try {
-	res = await fetch(endpoint, {
-		headers: { apikey: key, Authorization: `Bearer ${key}` },
-		signal: AbortSignal.timeout(30_000)
-	});
-} catch (err) {
-	console.error(`keepalive: ${url} unreachable — ${err.message}`);
+async function get(path) {
+	let res;
+	try {
+		res = await fetch(`${url}${path}`, {
+			headers: { apikey: key, Authorization: `Bearer ${key}` },
+			signal: AbortSignal.timeout(30_000)
+		});
+	} catch (err) {
+		console.error(`keepalive: ${url} unreachable — ${err.message}`);
+		process.exit(1);
+	}
+	const text = await res.text();
+	let body = null;
+	try {
+		body = JSON.parse(text);
+	} catch {
+		// A paused project or a gateway error answers in HTML or plain text.
+	}
+	return { status: res.status, text, body };
+}
+
+function fail({ status, text }) {
+	console.error(`keepalive: ${url} answered ${status} — ${text.slice(0, 300)}`);
 	process.exit(1);
 }
 
-const text = await res.text();
-let body = null;
-try {
-	body = JSON.parse(text);
-} catch {
-	// A paused project or a gateway error answers in HTML or plain text.
+const rpc = await get('/rest/v1/rpc/keepalive');
+if (rpc.status === 200 && rpc.body === true) {
+	console.log(`keepalive: ${url} answered keepalive() — database is up`);
+	process.exit(0);
 }
+if (rpc.body?.code !== 'PGRST202') fail(rpc);
 
-const refusedByPostgres = (res.status === 401 || res.status === 403) && body?.code === '42501';
-if (res.ok || refusedByPostgres) {
-	console.log(`keepalive: ${url} answered ${res.status}${body?.code ? ` (${body.code})` : ''} — database is up`);
+const probe = await get('/rest/v1/events?select=id&limit=1');
+const refusedByPostgres = (probe.status === 401 || probe.status === 403) && probe.body?.code === '42501';
+if (probe.status === 200 || refusedByPostgres) {
+	console.log(
+		`keepalive: ${url} answered ${probe.status}${probe.body?.code ? ` (${probe.body.code})` : ''} — database is up (0027 not applied yet)`
+	);
 } else {
-	console.error(`keepalive: ${url} answered ${res.status} — ${text.slice(0, 300)}`);
-	process.exit(1);
+	fail(probe);
 }
