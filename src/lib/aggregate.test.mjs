@@ -14,7 +14,7 @@
 
 import { scopeEntries, summarizeEntries, teamProfile, matchReport, autoSummary } from './aggregate.js';
 import { encodeTrack } from './auto-track.js';
-import { seasonFor } from './seasons/index.js';
+import { seasonFor, currentSeason } from './seasons/index.js';
 
 const S2026 = seasonFor(2026);
 
@@ -207,7 +207,7 @@ function entry(eventCode, matchNumber, teamNumber, extra = {}) {
 					start: { x: 0.08, y },
 					samples: [{ x: 0.08, y }, { x: 0.4, y }],
 					intervals: acts.map((a, i) => ({ a, t0: i * 1000, t1: i * 1000 + 600 }))
-				})
+				}, S2026)
 			}
 		});
 
@@ -277,7 +277,7 @@ function entry(eventCode, matchNumber, teamNumber, extra = {}) {
 	const t = (eventCode, y) =>
 		entry(eventCode, 1, 254, {
 			allianceColor: 'red',
-			observations: { autoTrack: encodeTrack({ start: { x: 0.08, y } }) }
+			observations: { autoTrack: encodeTrack({ start: { x: 0.08, y } }, S2026) }
 		});
 	const p = teamProfile([t('2026onsum', 0.5), t('2026onto', 0.1), t('2025onsum', 0.9)], 254, '2026onsum');
 	ok('the event auto view sees this event only', p.auto.n === 1);
@@ -287,7 +287,7 @@ function entry(eventCode, matchNumber, teamNumber, extra = {}) {
 		p.auto.season === S2026 && p.autoSeason.season === S2026);
 	// An undated event has no season of its own; it is read on the current one.
 	ok('an undated event falls back to the current season',
-		teamProfile([t('practice', 0.5)], 254, 'practice').auto.season === S2026);
+		teamProfile([t('practice', 0.5)], 254, 'practice').auto.season === currentSeason());
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

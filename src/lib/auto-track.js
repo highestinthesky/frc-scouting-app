@@ -23,12 +23,13 @@
 // a robot's width, and on a field drawn 350 px wide one step is 1.4 px, well
 // under a thumb. Quantisation is not the limiting error here; the scout is.
 //
-// 150 samples × 2 bytes = 300 bytes, ~500 encoded with the intervals. A fully
-// covered 24-match event is about 70 KB. The plan raised database size as a
-// worry and the arithmetic does not support it — but it only does not support
-// it BECAUSE of this encoding. Storing 60 Hz unquantised JSON floats is 27 KB
-// per track, which would also have worked, and would have made entries.
-// observations a place where a 27 KB blob rides along on every sync tick.
+// 150 samples × 2 bytes = 300 bytes, 612 encoded with four intervals and the
+// season stamp. A fully covered 24-match event is about 86 KB. The plan raised
+// database size as a worry and the arithmetic does not support it — but it
+// only does not support it BECAUSE of this encoding. Storing 60 Hz unquantised
+// JSON floats is 27 KB per track, which would also have worked, and would have
+// made entries.observations a place where a 27 KB blob rides along on every
+// sync tick.
 //
 // ─── the track knows its season ────────────────────────────────────────────
 //
@@ -38,18 +39,45 @@
 // `seasons/2026.js` is where this year's answers live.
 //
 // A track is stamped with the year of the season it was recorded on, because a
-// track is positions on ONE field and words from ONE game's vocabulary. The
-// stamp is an additive key: TRACK_VERSION describes the byte layout, which did
-// not change, and an older decoder ignores a key it does not read.
+// track is positions on ONE field and words from ONE game's vocabulary.
+//
+// The stamp is NOT backward-compatible on its own, and `v` is what makes it
+// safe. A bundle cached before the stamp existed checks `v === 1`, ignores
+// `season`, and draws whatever it accepts on the 2026 field. So:
+//
+//   - a track of the season that claims unstamped tracks (2026) is written
+//     `v: 1` plus the stamp. An old bundle reads it on the 2026 field, which is
+//     the right one, and this build reads it on the season the stamp names.
+//   - a track of every other season is written `v: 2`, in the identical byte
+//     layout. An old bundle refuses it as a version it does not know — the only
+//     way a bundle that predates seasons can be told it does not have the field.
+//     A v2 track MUST carry its stamp; one without is refused here.
+//
+// This build does not lean on `v` to pick the field: a v1 track stamped 1999
+// still decodes as 1999. Only pre-stamp bundles rely on the version number.
 
 import { mirrorPosition } from './field.js';
 import { currentSeason, seasonFor, seasonForUnstamped } from './seasons/index.js';
 
 /**
- * Bump when the byte layout or the sample rate changes. NOT SCHEMA_VERSION, and
- * not the season either — the season is its own stamp, `season`, on the track.
+ * `v` on a stored track. NOT SCHEMA_VERSION, and not the season either — the
+ * season is its own stamp, `season`, on the track.
+ *
+ * `TRACK_VERSION` and `TRACK_VERSION_STAMPED` are ONE byte layout and one sample
+ * rate. They differ only in who can read them: 1 is read by every bundle that
+ * has ever shipped, 2 only by one that reads the stamp (see the header). A
+ * change to the layout or the sample rate takes the next number for every
+ * season, and every older decoder refuses it.
  */
 export const TRACK_VERSION = 1;
+export const TRACK_VERSION_STAMPED = 2;
+
+/**
+ * The `v` a track of this season is written with.
+ *
+ * @param {import('./seasons/index.js').Season} season
+ */
+const versionFor = (season) => (season.claimsUnstampedTracks ? TRACK_VERSION : TRACK_VERSION_STAMPED);
 
 /** Samples per second. See the header — this is a claim about people, not phones. */
 export const SAMPLE_HZ = 10;
@@ -178,7 +206,7 @@ export function encodeTrack(input, season = currentSeason()) {
 		bytes[i * 2 + 1] = quantize(samples[i]?.y);
 	}
 
-	const out = { v: TRACK_VERSION, hz: Number(input?.hz) || SAMPLE_HZ, season: season.year };
+	const out = { v: versionFor(season), hz: Number(input?.hz) || SAMPLE_HZ, season: season.year };
 	if (start) out.start = start;
 	if (samples.length) out.p = bytesToBase64(bytes);
 	if (intervals.length) out.s = intervals;
@@ -189,8 +217,8 @@ export function encodeTrack(input, season = currentSeason()) {
  * Read a stored track back.
  *
  * Returns null for anything that is not a track this build understands —
- * including a FUTURE version. Refusing to guess is deliberate: a v2 layout
- * decoded as v1 produces a plausible-looking path in the wrong places, which is
+ * including a FUTURE version. Refusing to guess is deliberate: a future layout
+ * decoded as this one produces a plausible-looking path in the wrong places, which is
  * worse than a gap, because a gap is visible.
  *
  * The same refusal covers a season this build does not have. A track's
@@ -200,9 +228,10 @@ export function encodeTrack(input, season = currentSeason()) {
  * a track stamped with an unregistered season decodes to null — invisible,
  * rather than convincingly misplaced.
  *
- * A track with no stamp predates the stamp, and is read on the season that
+ * A v1 track with no stamp predates the stamp, and is read on the season that
  * claims unstamped tracks (`seasonForUnstamped()`; 2026, the only game the
- * recorder knew before tracks carried their season).
+ * recorder knew before tracks carried their season). A v2 track with no stamp
+ * is refused. Any other `v` is refused.
  *
  * @param {unknown} raw
  * @returns {{v:number, hz:number, season: import('./seasons/index.js').Season,
@@ -213,9 +242,16 @@ export function encodeTrack(input, season = currentSeason()) {
 export function decodeTrack(raw) {
 	if (!raw || typeof raw !== 'object') return null;
 	const v = Number(raw.v);
-	if (v !== TRACK_VERSION) return null;
-
-	const season = raw.season == null ? seasonForUnstamped() : seasonFor(raw.season);
+	let season;
+	if (v === TRACK_VERSION) {
+		season = raw.season == null ? seasonForUnstamped() : seasonFor(raw.season);
+	} else if (v === TRACK_VERSION_STAMPED) {
+		// Written only with a stamp. One without has lost the one fact that says
+		// which field it is on, and the unstamped claim belongs to v1 alone.
+		season = raw.season == null ? null : seasonFor(raw.season);
+	} else {
+		return null;
+	}
 	if (!season) return null;
 
 	const hz = Number(raw.hz) || SAMPLE_HZ;

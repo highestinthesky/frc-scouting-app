@@ -2,13 +2,20 @@
 //   node src/lib/auto-track.test.mjs
 //
 // The size claim is asserted here rather than trusted. docs/adr-002 rejects the
-// plan's database-size worry on the arithmetic — "~500 bytes per robot per
-// match, ~70 KB for a fully covered event" — and that number is the entire
+// plan's database-size worry on the arithmetic — "612 bytes per robot per
+// match, about 86 KB for a fully covered event" — and that number is the entire
 // reason the replay was allowed back into the design. A claim a release rests
 // on should fail loudly when it stops being true.
+//
+// Every assertion written in 2026's words — collect, score, climb, a rung —
+// passes `S2026` to encodeTrack explicitly. Left to the default, they would be
+// asserting whatever CURRENT_SEASON is, and switching it to the throwaway to
+// prove the framework would turn this whole file red for the wrong reason. One
+// assertion below pins the default itself.
 
 import {
 	TRACK_VERSION,
+	TRACK_VERSION_STAMPED,
 	SAMPLE_HZ,
 	encodeTrack,
 	decodeTrack,
@@ -24,7 +31,7 @@ import {
 	flipTrack,
 	describeAnswers
 } from './auto-track.js';
-import { seasonFor, buildSeason } from './seasons/index.js';
+import { seasonFor, buildSeason, currentSeason } from './seasons/index.js';
 import fixtureSpec from './seasons/fixture.js';
 
 const S2026 = seasonFor(2026);
@@ -61,7 +68,7 @@ function synth(n = 150) {
 			{ a: 'collect', t0: 1200, t1: 2600 },
 			{ a: 'score', t0: 4100, t1: 5000 }
 		]
-	});
+	}, S2026);
 	const d = decodeTrack(t);
 
 	ok('the version is stamped', t.v === TRACK_VERSION);
@@ -99,7 +106,7 @@ function synth(n = 150) {
 			{ a: 'collect', t0: 6000, t1: 7200 },
 			{ a: 'score', t0: 8000, t1: 9000 }
 		]
-	});
+	}, S2026);
 	const bytes = JSON.stringify(t).length;
 	// 598 when this was pinned at 600; the season stamp (`"season":2026,`) is 14
 	// more. The bound moved by that much and no further — the ADR's figure is
@@ -114,7 +121,7 @@ function synth(n = 150) {
 
 // ─── partial records are a feature, not a degraded case ────────────────────
 {
-	const startOnly = encodeTrack({ start: { x: 0.2, y: 0.7 } });
+	const startOnly = encodeTrack({ start: { x: 0.2, y: 0.7 } }, S2026);
 	ok('start-only encodes', startOnly !== null);
 	ok('and carries no position track', startOnly.p === undefined);
 	const d = decodeTrack(startOnly);
@@ -122,15 +129,15 @@ function synth(n = 150) {
 	ok('its duration is zero, not an error', trackDuration(d) === 0);
 	ok('and it has no first movement to align on', firstMovementAt(d) === null);
 
-	const buttonsOnly = encodeTrack({ intervals: [{ a: 'score', t0: 100, t1: 900 }] });
+	const buttonsOnly = encodeTrack({ intervals: [{ a: 'score', t0: 100, t1: 900 }] }, S2026);
 	ok('buttons with no track is a real record', buttonsOnly !== null);
 	ok('and cycle stats still work on it', cycleStats(decodeTrack(buttonsOnly)).byAction.score.ms === 800);
 
 	// Blank stays blank. Nothing recorded must encode to nothing at all, so it
 	// stays out of the aggregates rather than entering them as a zero.
-	ok('nothing recorded is null', encodeTrack({}) === null);
-	ok('empty arrays are null', encodeTrack({ samples: [], intervals: [] }) === null);
-	ok('junk is null', encodeTrack(null) === null);
+	ok('nothing recorded is null', encodeTrack({}, S2026) === null);
+	ok('empty arrays are null', encodeTrack({ samples: [], intervals: [] }, S2026) === null);
+	ok('junk is null', encodeTrack(null, S2026) === null);
 	ok('decoding nothing is null', decodeTrack(null) === null && decodeTrack({}) === null);
 }
 
@@ -161,7 +168,7 @@ function synth(n = 150) {
 			{ a: 'collect', t0: 900, t1: 400 },    // ends before it starts
 			{ a: 'fault', t0: 200, t1: 700 }
 		]
-	});
+	}, S2026);
 	const d = decodeTrack(t);
 	ok('coordinates are clamped to the field', d.samples[0].x === 0 && d.samples[0].y === 1);
 	ok('only real actions survive', d.intervals.length === 1 && d.intervals[0].a === 'fault');
@@ -174,7 +181,7 @@ function synth(n = 150) {
 	const still = [];
 	for (let i = 0; i < 20; i += 1) still.push({ x: 0.3, y: 0.3 });
 	const then = still.concat([{ x: 0.5, y: 0.3 }, { x: 0.6, y: 0.3 }]);
-	const d = decodeTrack(encodeTrack({ start: { x: 0.3, y: 0.3 }, samples: then }));
+	const d = decodeTrack(encodeTrack({ start: { x: 0.3, y: 0.3 }, samples: then }, S2026));
 	ok('a robot that waits is not moving yet', firstMovementAt(d) === 2000);
 
 	// Thumb tremor is not movement. One quantisation step is 1/255; the threshold
@@ -182,20 +189,20 @@ function synth(n = 150) {
 	const jitter = [];
 	for (let i = 0; i < 20; i += 1) jitter.push({ x: 0.3 + (i % 2) * 0.002, y: 0.3 });
 	ok('a shaky thumb is not movement',
-		firstMovementAt(decodeTrack(encodeTrack({ start: { x: 0.3, y: 0.3 }, samples: jitter }))) === null);
+		firstMovementAt(decodeTrack(encodeTrack({ start: { x: 0.3, y: 0.3 }, samples: jitter }, S2026))) === null);
 }
 
 // ─── position at a moment ──────────────────────────────────────────────────
 {
 	const d = decodeTrack(
-		encodeTrack({ start: { x: 0, y: 0 }, samples: [{ x: 0, y: 0 }, { x: 1, y: 0 }] })
+		encodeTrack({ start: { x: 0, y: 0 }, samples: [{ x: 0, y: 0 }, { x: 1, y: 0 }] }, S2026)
 	);
 	ok('midway between two samples is interpolated', near(positionAt(d, 50).x, 0.5, 0.01));
 	ok('before the first sample holds the start', positionAt(d, -100).x === 0);
 	// A robot that stopped being recorded did not vanish. Dropping it mid-field
 	// looks like a robot that disappeared.
 	ok('after the last sample holds the last', near(positionAt(d, 99999).x, 1));
-	ok('a start-only track reports its start', positionAt(decodeTrack(encodeTrack({ start: { x: 0.4, y: 0.4 } })), 500).x === 0.4);
+	ok('a start-only track reports its start', positionAt(decodeTrack(encodeTrack({ start: { x: 0.4, y: 0.4 } }, S2026)), 500).x === 0.4);
 }
 
 // ─── cycles ────────────────────────────────────────────────────────────────
@@ -208,7 +215,7 @@ function synth(n = 150) {
 				{ a: 'collect', t0: 3000, t1: 3500 },
 				{ a: 'score', t0: 4000, t1: 4600 }
 			]
-		})
+		}, S2026)
 	);
 	const c = cycleStats(d);
 	ok('two collect-then-score pairs are two cycles', c.cycles === 2);
@@ -225,7 +232,7 @@ function synth(n = 150) {
 
 	// A preload is the one game piece every team scores, so counting score marks
 	// alone would count the thing that tells you nothing.
-	const preload = decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] }));
+	const preload = decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] }, S2026));
 	ok('a score with no collect before it is not a cycle', cycleStats(preload).cycles === 0);
 	ok('but it is still counted as a score', cycleStats(preload).byAction.score.count === 1);
 }
@@ -233,7 +240,7 @@ function synth(n = 150) {
 // ─── the route signature ───────────────────────────────────────────────────
 {
 	const mk = (acts) =>
-		decodeTrack(encodeTrack({ intervals: acts.map((a, i) => ({ a, t0: i * 1000, t1: i * 1000 + 500 })) }));
+		decodeTrack(encodeTrack({ intervals: acts.map((a, i) => ({ a, t0: i * 1000, t1: i * 1000 + 500 })) }, S2026));
 
 	ok('a signature reads as a sentence',
 		routeSignature(mk(['collect', 'score']), 'Middle') === 'Middle → collect → score');
@@ -249,7 +256,7 @@ function synth(n = 150) {
 	ok('a start-only record has no signature', routeSignature(mk([]), null) === null);
 	// A record with a start and no actions IS a route — the robot lined up there
 	// and did nothing, which is a fact about the robot.
-	const parked = decodeTrack(encodeTrack({ start: { x: 0.2, y: 0.2 } }));
+	const parked = decodeTrack(encodeTrack({ start: { x: 0.2, y: 0.2 } }, S2026));
 	ok('a start with no actions is still a route',
 		routeSignature(parked, 'Left') === 'Left → no actions');
 
@@ -270,7 +277,7 @@ function synth(n = 150) {
 
 // ─── reading it off an entry ───────────────────────────────────────────────
 {
-	const t = encodeTrack({ start: { x: 0.5, y: 0.5 } });
+	const t = encodeTrack({ start: { x: 0.5, y: 0.5 } }, S2026);
 	// 0.5 quantises to byte 128, which is 0.502 back — the test compares within
 	// the quantisation step rather than pretending the round trip is exact.
 	ok('a track is read from observations.autoTrack',
@@ -291,7 +298,7 @@ function synth(n = 150) {
 // would turn it into something false.
 {
 	const climb = (lvl) =>
-		decodeTrack(encodeTrack({ intervals: [{ a: 'climb', t0: 1000, t1: 4000, lvl }] }));
+		decodeTrack(encodeTrack({ intervals: [{ a: 'climb', t0: 1000, t1: 4000, lvl }] }, S2026));
 
 	ok('there are three rungs', S2026.actionByKey.climb.questions.find((q) => q.key === 'lvl').options.length === 3);
 	ok('a level survives the round trip', climb(2).intervals[0].lvl === 2);
@@ -307,7 +314,7 @@ function synth(n = 150) {
 	// Three states. `false` and absent are the pair that gets confused, and
 	// confusing them turns "nobody judged this climb" into "this climb failed".
 	const withOk = (ok) =>
-		decodeTrack(encodeTrack({ intervals: [{ a: 'climb', t0: 1000, t1: 4000, lvl: 2, ok }] }));
+		decodeTrack(encodeTrack({ intervals: [{ a: 'climb', t0: 1000, t1: 4000, lvl: 2, ok }] }, S2026));
 	ok('a successful climb round-trips as true', withOk(true).intervals[0].ok === true);
 	ok('a failed one round-trips as false', withOk(false).intervals[0].ok === false);
 	ok('and an unjudged one carries no answer at all',
@@ -318,10 +325,10 @@ function synth(n = 150) {
 	ok('only a boolean is accepted',
 		!('ok' in decodeTrack(encodeTrack({
 			intervals: [{ a: 'climb', t0: 1000, t1: 4000, ok: 'yes' }]
-		})).intervals[0]));
+		}, S2026)).intervals[0]));
 	// The level and the outcome are independent questions.
 	ok('a climb can succeed with no level recorded',
-		decodeTrack(encodeTrack({ intervals: [{ a: 'climb', t0: 1000, t1: 4000, ok: true }] }))
+		decodeTrack(encodeTrack({ intervals: [{ a: 'climb', t0: 1000, t1: 4000, ok: true }] }, S2026))
 			.intervals[0].ok === true);
 
 	// cycleStats reports the outcome the same three ways — the endgame's answers.
@@ -333,7 +340,7 @@ function synth(n = 150) {
 	const slipped = decodeTrack(encodeTrack({ intervals: [
 		{ a: 'climb', t0: 1000, t1: 2000, ok: false },
 		{ a: 'climb', t0: 3000, t1: 4000, ok: true }
-	] }));
+	] }, S2026));
 	ok('one failed attempt does not overrule a later success',
 		cycleStats(slipped).endgame.answers.ok === true);
 
@@ -341,13 +348,13 @@ function synth(n = 150) {
 	ok('the start of the climb is reported',
 		cycleStats(withOk(true)).endgame.startedAt === 1000);
 	ok('and is null when nothing climbed',
-		cycleStats(decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] })))
+		cycleStats(decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] }, S2026)))
 			.endgame.startedAt === null);
 	ok('two attempts report the FIRST',
 		cycleStats(slipped).endgame.startedAt === 1000);
 
 	ok('a track with no climb reports neither',
-		cycleStats(decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] }))).endgame.done === false);
+		cycleStats(decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500 }] }, S2026))).endgame.done === false);
 
 	// A rung that does not exist is not a rung.
 	ok('an invalid level is dropped, not stored', climb(9).intervals[0].lvl === undefined);
@@ -361,13 +368,13 @@ function synth(n = 150) {
 				{ a: 'climb', t0: 1000, t1: 2000, lvl: 3 },
 				{ a: 'climb', t0: 3000, t1: 4000, lvl: 1 }
 			]
-		})
+		}, S2026)
 	);
 	ok('the best rung is reported, not the last', cycleStats(twice).endgame.answers.lvl === 3);
 	ok('time climbing is summed across attempts', cycleStats(twice).byAction.climb.ms === 2000);
 
 	// A level only means something on a climb.
-	const scored = decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500, lvl: 2 }] }));
+	const scored = decodeTrack(encodeTrack({ intervals: [{ a: 'score', t0: 0, t1: 500, lvl: 2 }] }, S2026));
 	ok('a level on a non-climb is dropped', scored.intervals[0].lvl === undefined);
 
 	// In the signature without the level: "they climb" is a route, and splitting
@@ -389,7 +396,7 @@ function synth(n = 150) {
 		start: { x: 0.28, y: 0.25 },
 		samples: [{ x: 0.28, y: 0.25 }, { x: 0.6, y: 0.4 }],
 		intervals: [{ a: 'collect', t0: 100, t1: 600 }, { a: 'score', t0: 900, t1: 1500 }]
-	});
+	}, S2026);
 	const f = decodeTrack(flipTrack(t));
 
 	ok('the start turns end for end', near(f.start.x, 0.72, 0.005) && near(f.start.y, 0.75, 0.005));
@@ -416,12 +423,12 @@ function synth(n = 150) {
 	// Checked as an ordering that survives: two points on the same side stay on
 	// the same side of each other.
 	const two = decodeTrack(
-		flipTrack(encodeTrack({ samples: [{ x: 0.3, y: 0.2 }, { x: 0.3, y: 0.8 }] }))
+		flipTrack(encodeTrack({ samples: [{ x: 0.3, y: 0.2 }, { x: 0.3, y: 0.8 }] }, S2026))
 	);
 	ok('handedness survives the flip', two.samples[0].y > two.samples[1].y);
 
 	// Partial and absent records.
-	const startOnly = decodeTrack(flipTrack(encodeTrack({ start: { x: 0.1, y: 0.1 } })));
+	const startOnly = decodeTrack(flipTrack(encodeTrack({ start: { x: 0.1, y: 0.1 } }, S2026)));
 	ok('a start-only record flips', near(startOnly.start.x, 0.9, 0.005));
 	ok('nothing readable flips to null', flipTrack(null) === null && flipTrack({}) === null);
 	ok('a future version is refused rather than half-flipped',
@@ -434,8 +441,10 @@ function synth(n = 150) {
 // Read back on a different field it draws a plausible auto in the wrong
 // places, so the season is stamped on the track and decoding resolves it.
 {
-	const t = encodeTrack({ start: { x: 0.1, y: 0.4 } });
-	ok('a track is stamped with the current season by default', t.season === 2026);
+	ok('a track is stamped with the current season by default',
+		encodeTrack({ start: { x: 0.1, y: 0.4 } }).season === currentSeason().year);
+	const t = encodeTrack({ start: { x: 0.1, y: 0.4 } }, S2026);
+	ok('a 2026 track is stamped 2026', t.season === 2026);
 	ok('and the stamp sits after the cadence',
 		Object.keys(t).join() === 'v,hz,season,start');
 	const f = encodeTrack({ start: { x: 0.1, y: 0.4 } }, FIXTURE);
@@ -455,13 +464,38 @@ function synth(n = 150) {
 		readTrack({ observations: { autoTrack: { v: 1, hz: 10, season: 2031, start: { x: 0.1, y: 0.4 } } } }) === null);
 }
 
+// ─── what an old cached bundle can read ────────────────────────────────────
+//
+// A bundle cached before the stamp checks `v === 1`, ignores `season`, and
+// draws what it accepts on the 2026 field. So 2026 stays v1 — every bundle
+// reads it, on the right field — and every other season is v2 in the same byte
+// layout, which an old bundle refuses instead of drawing it in the wrong place.
+{
+	const t26 = encodeTrack({ start: { x: 0.1, y: 0.4 } }, S2026);
+	const t99 = encodeTrack({ start: { x: 0.1, y: 0.4 } }, FIXTURE);
+	ok('a 2026 track is written v1', t26.v === TRACK_VERSION && TRACK_VERSION === 1);
+	ok('a track of any other season is written v2', t99.v === TRACK_VERSION_STAMPED && TRACK_VERSION_STAMPED === 2);
+	ok('in the same byte layout', t99.start.x === t26.start.x && t99.start.y === t26.start.y);
+	ok('and this build reads it back', decodeTrack(t99)?.season === FIXTURE);
+	ok('a v2 track without its stamp is refused',
+		decodeTrack({ v: 2, hz: 10, start: { x: 0.1, y: 0.4 } }) === null);
+	ok('a v3 track is refused',
+		decodeTrack({ v: 3, hz: 10, season: 2026, start: { x: 0.1, y: 0.4 } }) === null);
+	// Only a pre-stamp bundle relies on `v` to pick the field. This build reads
+	// the stamp, so a v1 track that says 1999 is a 1999 track.
+	ok('a v1 track stamped 1999 still decodes as 1999',
+		decodeTrack({ v: 1, hz: 10, season: 1999, start: { x: 0.1, y: 0.4 } })?.season === FIXTURE);
+	ok('a flipped fixture track stays v2', flipTrack(t99).v === TRACK_VERSION_STAMPED);
+	ok('and a flipped 2026 one stays v1', flipTrack(t26).v === TRACK_VERSION);
+}
+
 // ─── the vocabulary comes from the season ──────────────────────────────────
 {
 	const ivs = [
 		{ a: 'grab', t0: 0, t1: 500 },
 		{ a: 'collect', t0: 600, t1: 1000 }
 	];
-	const in2026 = decodeTrack(encodeTrack({ intervals: ivs }));
+	const in2026 = decodeTrack(encodeTrack({ intervals: ivs }, S2026));
 	ok('a 2026 track loses an action 2026 does not have',
 		in2026.intervals.map((iv) => iv.a).join() === 'collect');
 	const inFixture = decodeTrack(encodeTrack({ intervals: ivs }, FIXTURE));
