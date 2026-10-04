@@ -458,6 +458,12 @@
 			{/if}
 		</section>
 	{/if}
+
+	<!-- Outside the loading branch: it needs no event, no schedule and no entries,
+	     so it should not wait on any of them. -->
+	<section>
+		<Button href="{base}/practice/">Practice</Button>
+	</section>
 </main>
 
 <style>
