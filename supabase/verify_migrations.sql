@@ -315,12 +315,14 @@ checks AS (
 
 	    SELECT CASE
 	               WHEN has_function_privilege('anon', 'public.email_for_username(text)', 'EXECUTE')
-	               THEN 'INFO' ELSE 'PASS'
+	                 OR has_function_privilege('authenticated', 'public.email_for_username(text)', 'EXECUTE')
+	               THEN 'FAIL' ELSE 'PASS'
 	           END,
 	           'legacy browser email lookup',
 	           CASE
 	               WHEN has_function_privilege('anon', 'public.email_for_username(text)', 'EXECUTE')
-	               THEN 'compatibility window OPEN — run rollout/revoke_email_for_username.sql only after PWA adoption'
+	                 OR has_function_privilege('authenticated', 'public.email_for_username(text)', 'EXECUTE')
+	               THEN 'OPEN to a browser role — 0028 has not run'
 	               ELSE 'closed — knowing a username no longer returns a real address'
 	           END
 	    WHERE to_regprocedure('public.consume_username_sign_in_attempt(text,integer,integer)') IS NOT NULL

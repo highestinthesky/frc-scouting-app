@@ -251,11 +251,8 @@ answer.
    way — returning `null` is only safe when the caller can recover. Currently
    nobody is affected; it is one drag-and-drop in Studio away.
 
-2. **`supabase/rollout/revoke_email_for_username.sql` is deliberately unapplied.**
-   It closes the anon email lookup. Run it only after the deployed PWA has
-   soaked, because a service worker can serve a pre-v0.76 bundle for a long time
-   and those clients still use the old path. It stays out of `migrations/` so
-   `db push` cannot fire it early.
+2. ~~The username email lookup gate~~ — applied 2026-10-04 as `0028`, on the
+   user's call after 45 days of soak.
 
 3. **The `/accounts` and `/insights/*` redirect stubs.** Kept so an installed
    PWA holding a pre-v0.73 bundle does not 404 mid-event. Retiring them is a

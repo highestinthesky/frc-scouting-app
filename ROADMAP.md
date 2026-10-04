@@ -894,11 +894,8 @@ Neither is blocked on any release and neither can be done from the codebase.
 
 - **Leaked password protection is still OFF** in the Supabase dashboard. Worth
   doing before accounts are handed to the team for the season.
-- **`supabase/rollout/revoke_email_for_username.sql`** is the final gate on the
-  username-privacy rollout and deliberately lives outside `migrations/`. The
-  client half has been live since v0.81; run it once satisfied no cached PWA is
-  still on the old bundle. Running it early locks out every cached client,
-  because a service worker can serve an old bundle long after a deploy.
+- ~~The username-privacy final gate~~ — done 2026-10-04 as `0028`. Browser
+  roles can no longer turn a username into an email address.
 
 ## Conditional work
 
