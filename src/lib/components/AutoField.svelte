@@ -26,21 +26,8 @@
 	// for ("either on their phone or computer"). setPointerCapture is what keeps a
 	// drag alive when the thumb slides off the SVG — without it a scout who
 	// overshoots the field edge drops the robot mid-recording.
-	import {
-		DRAWN,
-		DRAWN_ASPECT,
-		ROBOT_SIZE_IN,
-		FIELD_LENGTH_IN,
-		OBSTACLES,
-		FEATURES,
-		ALLIANCE_BANDS,
-		START_BANDS,
-		clampToField,
-		toDrawn,
-		fromDrawn,
-		toScreen,
-		fromScreen
-	} from '$lib/field.js';
+	import { toScreen, fromScreen } from '$lib/field.js';
+	import { currentSeason } from '$lib/seasons/index.js';
 	import { ACTIONS, CLIMB_LEVELS, positionAt, marksAt, trackDuration } from '$lib/auto-track.js';
 
 	/**
@@ -67,6 +54,20 @@
 		active = [],
 		onmove
 	} = $props();
+
+	const {
+		DRAWN,
+		DRAWN_ASPECT,
+		ROBOT_SIZE_IN,
+		LENGTH_IN: FIELD_LENGTH_IN,
+		OBSTACLES,
+		FEATURES,
+		ALLIANCE_BANDS,
+		START_BANDS,
+		clampToField,
+		toDrawn,
+		fromDrawn
+	} = currentSeason().field;
 
 	// The viewBox is in DRAWN units scaled to the picture's own aspect, so every
 	// coordinate below is a straight multiply and nothing has to remember which

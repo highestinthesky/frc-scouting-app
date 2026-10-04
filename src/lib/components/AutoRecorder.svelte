@@ -36,7 +36,8 @@
 		trackDuration,
 		cycleStats
 	} from '$lib/auto-track.js';
-	import { startZone, clampToStart } from '$lib/field.js';
+	import { currentSeason } from '$lib/seasons/index.js';
+	const { startZone, clampToStart } = currentSeason().field;
 
 	/**
 	 * @type {{

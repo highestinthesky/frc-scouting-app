@@ -29,7 +29,8 @@
 	import Stats from '$lib/components/studio/Stats.svelte';
 	import AutoReplay from '$lib/components/studio/AutoReplay.svelte';
 	import { readTrack, cycleStats } from '$lib/auto-track.js';
-	import { startZone } from '$lib/field.js';
+	import { currentSeason } from '$lib/seasons/index.js';
+	const { startZone } = currentSeason().field;
 
 	const eventCode = $derived(String(page.params.eventCode ?? '').toLowerCase());
 	const matchNumber = $derived(Number(page.params.matchNumber));

@@ -6,7 +6,9 @@ import { listEntries } from './db.js';
 import { allMetricStats, hasAnyMetrics } from './metrics.js';
 import { normalizeCode, sameSeason, seasonOf } from './event-rules.js';
 import { readTrack, cycleStats, clusterRoutes } from './auto-track.js';
-import { startZone } from './field.js';
+import { currentSeason } from './seasons/index.js';
+
+const { startZone } = currentSeason().field;
 
 /**
  * "Did the robot break down on this entry?"
