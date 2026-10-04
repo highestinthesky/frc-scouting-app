@@ -5,7 +5,7 @@ Applied in filename order, they rebuild it from nothing.
 
 ## Audited live state
 
-Verified against the live project on 2026-08-20: production is at `0024`,
+Verified against the live project on 2026-10-04: production is at `0027`,
 `AUTH_ENFORCED` is true, and the old `0011`–`0013` drafts live under
 `superseded/` rather than in the active sequence.
 Do not infer production state from the presence of a migration file.
@@ -27,7 +27,7 @@ Do not infer production state from the presence of a migration file.
 | `0024_username_sign_in_rate_limit.sql` | **Applied 2026-08-20** — before the function, per the ordering rule |
 | `0025_correct_entry_track.sql` | **Applied 2026-09-01** (`schema_migrations`, checked 2026-10-04) |
 | `0026_the_name_belongs_to_the_manager.sql` | **Applied 2026-09-02** (`schema_migrations`, checked 2026-10-04) |
-| `0027_keepalive.sql` | **Not applied** (written 2026-10-04). Safe in either order: `scripts/keepalive.mjs` falls back to the 42501 probe until `keepalive()` exists, and says so in its log line |
+| `0027_keepalive.sql` | **Applied 2026-10-04**, recorded as `20261004183523`. Rehearsed on the replica first; afterwards anon gets `true` from `keepalive()` and still 401 on every table. `scripts/keepalive.mjs` no longer falls back to the 42501 probe — a missing `keepalive()` now fails the run |
 
 `username-sign-in` is deployed and ACTIVE (v1, `verify_jwt` **off** — it runs
 before a session exists and is itself the credential check). Smoke-tested

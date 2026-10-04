@@ -292,6 +292,13 @@ Each of these produced a confident wrong answer before being caught:
   a convincing 2.08 contrast failure that does not exist. Set the theme through
   `theme.set()` and reload. Untransitioned properties are fine either way, which
   is why this hid: every other reading on the same page was correct.
+- **`supabase link` changes the local Postgres image.** It writes production's
+  version to `supabase/.temp/postgres-version`, and the next `supabase start`
+  or `db reset` uses that image instead of the CLI's default. Linked on
+  2026-10-04, the stack dropped from 17.6.1.156 to 17.6.1.111, and
+  `npm run test:rls` died with "Connection terminated unexpectedly". That was a
+  Postgres segfault, not a test failure. Delete the file to go back; the link
+  itself lives in `project-ref`.
 - **`setInterval` is not a clock.** A hidden tab throttles it and stops
   `requestAnimationFrame` outright — measured at zero rAF ticks in 500 ms. Code
   that counts ticks to measure time is wrong; ask `performance.now()` how much
@@ -807,16 +814,17 @@ missing `box-sizing` turns 2rem of padding into a rail that looks unpinned.
 **The app has no `box-sizing` reset.** Everything is `content-box`. Studio's rail
 sets `border-box` locally; changing it globally is its own release.
 
-## Live state, as of 2026-08-20
+## Live state, as of 2026-10-04
 
 Checked, not remembered. A new session should re-verify before trusting it.
 
-- **Production is at migration `0026`** (checked 2026-10-04 against
-  `schema_migrations` and a full schema dump). `0015`–`0026` are applied —
+- **Production is at migration `0027`** (checked 2026-10-04 against
+  `schema_migrations` and a full schema dump). `0015`–`0027` are applied —
   `0015` out of order, on 2026-10-04 after `0026`, because it had been missed;
   until then invites expired in 14 days, not 90. `0011` and `0012` never were;
   `0013` was, then superseded by the `0001`/`0008` re-run. All three live in
-  `supabase/superseded/`. `0027` is unapplied.
+  `supabase/superseded/`. `0027` landed 2026-10-04, after which
+  `scripts/keepalive.mjs` dropped its pre-0027 fallback.
 - **The replica matches production exactly**, as of 2026-10-04: built with
   `scripts/rebuild_prod_replica.sh` plus `0016`–`0026` (before `0015` landed), its `public` schema dump
   is line-for-line production's apart from comments and the order of ACL
@@ -825,7 +833,7 @@ Checked, not remembered. A new session should re-verify before trusting it.
 - **`AUTH_ENFORCED` is `true`** and the cutover is complete: no anonymous path
   exists in the database, and membership is the only thing granting access.
 - The `create-account` Edge Function is deployed and ACTIVE.
-- **Username privacy: server half is live, client half is not pushed.**
+- **Username privacy: both halves are live.**
   `0024` is applied and `username-sign-in` is deployed ACTIVE at
   `verify_jwt = false`, smoke-tested against production on 2026-08-20: 401 on a
   bad credential *without* an `Authorization` header (which is what proves both
@@ -835,18 +843,36 @@ Checked, not remembered. A new session should re-verify before trusting it.
   reaching GoTrue with `400 invalid_credentials` rather than an API-key error,
   which is the only thing separating "wrong password" from "the function's
   `SUPABASE_ANON_KEY` is broken and every login fails".
-  **The client that calls it is committed but unpushed** — until the user
-  pushes, browsers still sign in through the anon `email_for_username` path,
-  which is exactly why `0024` leaves that grant alone.
-- **The legacy anon lookup is still open, deliberately.**
+  The client shipped in v0.75 (`9e68e0f`, deployed 2026-08-20). Checked
+  2026-10-04: the live bundle references `username-sign-in` and never
+  `email_for_username`, and both Edge Functions are ACTIVE.
+- **The legacy lookup is still open, to anon AND authenticated.**
   `supabase/rollout/revoke_email_for_username.sql` is the final gate and stays
-  out of `migrations/`. Run it only after the pushed PWA has soaked; running it
-  early locks out every cached client, since a service worker can serve the old
-  bundle long after a deploy.
-- **Leaked password protection is still OFF** — a dashboard setting nobody but
-  the user can change, worth doing before accounts are handed out.
-- The Supabase MCP connection is available and is how migrations have been
-  applied; `mcp__plugin_supabase_supabase__*`, project ref `hhvpkgwgkuiemxyarsuk`.
+  out of `migrations/` until it runs. Running it early locks out cached clients,
+  since a service worker can serve the old bundle after a deploy. As of
+  2026-10-04 the client has soaked 45 days; the PWA is `autoUpdate` with
+  `skipWaiting`, so a stale bundle replaces itself on its first online open.
+  What could not be observed is whether any device still runs one: the auth
+  audit log is disabled and `pg_stat_statements` was reset that morning.
+  Applying it is the user's decision. Once it runs, it moves into
+  `migrations/` so the local stack and the replica match production.
+- **Production runs Postgres 17.6.1.111, and that image segfaults locally.**
+  Under `npm run test:rls` a backend dies on the first `reset_event_data` call
+  after a run of handled errors on the same pooled connection, every run; on
+  17.6.1.156 the suite passes 153/153. Single calls do not reproduce it, and
+  nothing shows it has happened on production: its 2026-10-04 01:32
+  stats reset was a full postmaster start, not crash recovery. Never probe for
+  it on production. Upgrading is a dashboard action with downtime, so it is
+  the user's call.
+- **Leaked password protection is still OFF** (the security advisor flagged it
+  on 2026-10-04) — a dashboard setting nobody but the user can change, worth
+  doing before accounts are handed out.
+- Migrations reach production through the Supabase MCP connection
+  (`mcp__plugin_supabase_supabase__*`) or the CLI: `supabase login`, `supabase
+  link --project-ref hhvpkgwgkuiemxyarsuk`, then `supabase db query --linked -f
+  <file>`. The CLI path does not record anything in `schema_migrations`, so
+  insert the row by hand; `0015` and `0027` were applied that way on
+  2026-10-04.
 
 **ADR-002 was rewritten on 2026-08-29** against `docs/auto-scouting-plan.md`,
 which is the team's own source document and had never been read when the ADR

@@ -8,14 +8,15 @@
 // opens the app and every sync fails.
 //
 // It calls `public.keepalive()` (0027) as anon: a query that succeeds and reads
-// nothing. A database that does not have the function yet answers PGRST202, and
-// then the ping falls back to the pre-0027 probe — reading `events`, which anon
-// cannot, and accepting Postgres's own 42501 as proof the database parsed and
-// refused it. The fallback is what lets this script ship before the migration is
-// on production, so the two halves cannot be pushed in the wrong order.
+// nothing. Anything else — a paused project, a bad key, a gateway error, a
+// network failure, the function missing — exits non-zero, so a red run is the
+// warning.
 //
-// Anything else — a paused project, a bad key, a gateway error, a network
-// failure — exits non-zero, so a red run is the warning.
+// There used to be a fallback: on PGRST202 (no such function) it read `events`
+// and took Postgres's 42501 refusal as proof of life, so the script could ship
+// before 0027 reached production. 0027 has been on production since
+// 2026-10-04, and from then on a missing keepalive() means something removed
+// it. Falling back would report that as a healthy run.
 //
 // It reads no secret. The URL and anon key are the public ones the bundle
 // ships, read out of src/lib/supabase.js rather than copied, so there is one
@@ -67,16 +68,6 @@ function fail({ status, text }) {
 const rpc = await get('/rest/v1/rpc/keepalive');
 if (rpc.status === 200 && rpc.body === true) {
 	console.log(`keepalive: ${url} answered keepalive() — database is up`);
-	process.exit(0);
-}
-if (rpc.body?.code !== 'PGRST202') fail(rpc);
-
-const probe = await get('/rest/v1/events?select=id&limit=1');
-const refusedByPostgres = (probe.status === 401 || probe.status === 403) && probe.body?.code === '42501';
-if (probe.status === 200 || refusedByPostgres) {
-	console.log(
-		`keepalive: ${url} answered ${probe.status}${probe.body?.code ? ` (${probe.body.code})` : ''} — database is up (0027 not applied yet)`
-	);
 } else {
-	fail(probe);
+	fail(rpc);
 }
