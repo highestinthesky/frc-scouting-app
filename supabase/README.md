@@ -18,11 +18,15 @@ Do not infer production state from the presence of a migration file.
 | `0009_picklist.sql` | Applied |
 | `0010_identity.sql` | Applied 2026-08-07 |
 | `0011`–`0013` | Superseded; never applied in this sequence |
+| `0001` + `0008` re-run | **Applied 2026-08-07, after `0013`** (`249cf23`). `verify_0008_rerun.sql` returns 9 PASS on production, checked 2026-10-04 |
+| `0015_invite_expiry.sql` | **Not applied** — checked 2026-10-04: `invites.expires_at` still defaults to 14 days |
 | `0016_real_emails.sql` | **Applied 2026-08-14** |
 | `0017_managed_accounts.sql` | **Applied 2026-08-14** |
 | `0018_revoke_from_anon.sql` | **Applied 2026-08-14** — grants, not behaviour |
 | `0019`–`0023` | Applied; account/event cutover complete |
 | `0024_username_sign_in_rate_limit.sql` | **Applied 2026-08-20** — before the function, per the ordering rule |
+| `0025_correct_entry_track.sql` | **Applied 2026-09-01** (`schema_migrations`, checked 2026-10-04) |
+| `0026_the_name_belongs_to_the_manager.sql` | **Applied 2026-09-02** (`schema_migrations`, checked 2026-10-04) |
 | `0027_keepalive.sql` | **Not applied** (written 2026-10-04). Safe in either order: `scripts/keepalive.mjs` falls back to the 42501 probe until `keepalive()` exists, and says so in its log line |
 
 `username-sign-in` is deployed and ACTIVE (v1, `verify_jwt` **off** — it runs
@@ -253,9 +257,10 @@ still parses fine.
 | `migrations/0024_username_sign_in_rate_limit.sql` | service-only email bridge and atomic rate buckets for private username authentication |
 | `functions/username-sign-in/index.ts` | pre-auth username/password exchange; returns tokens, never the resolved email |
 | `rollout/revoke_email_for_username.sql` | final compatibility gate; intentionally outside `migrations/` |
-| `0013_applied_superseded.sql` | applied to production 2026-08-07, then removed from the sequence — it ran after `0011` and undid the cutover. Superseded by `0001`. |
+| `superseded/0013_applied_superseded.sql` | applied to production 2026-08-07, then removed from the sequence — it ran after `0011` and undid the cutover. Superseded by `0001`. |
 | `verify_entries.sql` | drift assertions for `entries`, read-only |
 | `verify_migrations.sql` | did 0007/0008/0009 land? read-only |
+| `verify_0008_rerun.sql` | did the 2026-08-07 `0001`/`0008` re-run land? read-only; the replica check |
 
 `0010` and `0011` split what could have been one migration on purpose.
 

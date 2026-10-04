@@ -92,7 +92,11 @@ CREATE TABLE IF NOT EXISTS public.entries (
     -- checked production. Declaring it NOT NULL here would make 0001's one
     -- genuinely risky statement a silent no-op in every rehearsal — which is
     -- exactly the class of mistake this whole file exists to stop.
-    alliance_color  text,
+    --
+    -- The CHECK is on production (entries_alliance_color_check) and no SQL in
+    -- this repo creates it, so it came with the dashboard-built table. Found on
+    -- 2026-10-04 by diffing a full schema dump against the replica.
+    alliance_color  text CHECK (alliance_color IN ('red', 'blue')),
     scout_name      text NOT NULL,
     observations    jsonb NOT NULL DEFAULT '{}'::jsonb,
     -- The two defaults that should not be here. Reproduced deliberately: a
