@@ -220,9 +220,13 @@ nothing in auto, and it looks exactly like real data.
 
 ## Decision 5 — The field is season data, not an asset
 
-One field per season in `field.js`, checked in beside `METRIC_FIELDS`, with its
-own version. The January retune ritual gains a step: update the geometry, update
-the action set, update the legal region, bump `SCHEMA_VERSION`.
+One field per season, in that season's module under `src/lib/seasons/`
+(`seasons/2026.js` for REBUILT), with its own version; `field.js` is the
+geometry engine every season is built through (`makeField`) and names no game.
+A stored track carries the year of the season it was drawn on, and is read back
+on that season's field. The January retune ritual gains a step: add the
+season's module with its geometry, actions and legal region, flip
+`CURRENT_SEASON`, bump `SCHEMA_VERSION`.
 
 **Built from published dimensions, not traced from an image**, and that is the
 better outcome rather than a compromise. This decision originally asked for an
@@ -232,9 +236,10 @@ down. What must not drift is the geometry, and the way to guarantee that is for
 the picture and the collision test to read the *same numbers*. A trace would have
 put a bitmap on one side of that line and a hand-kept list on the other.
 
-So `field.js` holds the 2026 REBUILT field in inches, exactly as FIRST publishes
-it, and derives every fraction. Inches rather than fractions because `0.2435`
-cannot be checked against a game manual and `158.6` can.
+So `seasons/2026.js` holds the 2026 REBUILT field in inches, exactly as FIRST
+publishes it, and the engine in `field.js` derives every fraction. Inches rather
+than fractions because `0.2435` cannot be checked against a game manual and
+`158.6` can.
 
 Vector rather than a bitmap for the same reasons as before: it scales to any
 phone without a second file, and it is bytes rather than kilobytes in a bundle
