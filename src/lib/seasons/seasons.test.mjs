@@ -58,6 +58,54 @@ function ok(label, cond) {
 	ok('its field is frozen', Object.isFrozen(s.field) && Object.isFrozen(s.field.OBSTACLES) && Object.isFrozen(s.field.OBSTACLES[0]));
 }
 
+// ─── the throwaway ─────────────────────────────────────────────────────────
+// 1999 is registered so the framework has a season that is unlike 2026 in every
+// way it claims to support. Nothing selects it; these tests are its only caller.
+{
+	ok('every registered season builds', SEASON_YEARS.every((y) => seasonFor(y) !== null));
+
+	const t = seasonFor(1999);
+	ok('1999 is registered', t !== null && t.year === 1999 && t.name === 'THROWAWAY');
+	ok('and does not claim the unstamped tracks', seasonForUnstamped()?.year === 2026 && t.claimsUnstampedTracks === false);
+	ok('and is not the current season', CURRENT_SEASON !== 1999);
+	ok('five actions', t.actions.length === 5);
+	ok('on keys 2026 does not use', t.actions.map((a) => a.key).join(',') === 'grab,place,bumped,defend,park');
+	ok('the endgame is park', t.endgame?.key === 'park');
+	ok('the fault action is bumped', t.faultAction?.key === 'bumped');
+	ok('a cycle is grab then place', t.cycle?.from === 'grab' && t.cycle?.to === 'place');
+	ok('auto is 20 seconds', t.autoMs === 20_000);
+	ok('most actions have no icon', t.actions.filter((a) => a.icon === null).length === 4);
+
+	const f = t.field;
+	ok('the field is squarer', Math.abs(f.FIELD_ASPECT - 480 / 360) < 1e-9 && Math.abs(f.FIELD_ASPECT - 1.333) < 1e-3);
+	ok('there is no starting line', f.STARTING_LINE === null);
+
+	// No start depth: a start is only as constrained as any other position.
+	const far = f.clampToStart({ x: 0.9, y: 0.5 }, 'red');
+	ok('a red start is not pulled back toward its wall', far.x === 0.9 && far.y === 0.5);
+	const blueNear = f.clampToStart({ x: 0.1, y: 0.5 }, 'blue');
+	ok('nor is a blue one pulled back toward its own', blueNear.x === 0.1 && blueNear.y === 0.5);
+
+	// Half a robot either side of the pillar's own edges.
+	const hw = 0.06 / 2 + 30 / 480 / 2;
+	const hh = 0.08 / 2 + 30 / 360 / 2;
+	const pushed = f.clampToStart({ x: 0.35, y: 0.3 }, 'red');
+	ok('a start inside the pillar is pushed out of it',
+		Math.abs(pushed.x - 0.35) >= hw - 1e-9 || Math.abs(pushed.y - 0.3) >= hh - 1e-9);
+	const pushed2 = f.clampToField({ x: 0.35, y: 0.3 });
+	ok('and so is any other position',
+		Math.abs(pushed2.x - 0.35) >= hw - 1e-9 || Math.abs(pushed2.y - 0.3) >= hh - 1e-9);
+	const clear = f.clampToField({ x: 0.1, y: 0.9 });
+	ok('a position clear of everything stays put', clear.x === 0.1 && clear.y === 0.9);
+
+	// Same y, read from opposite ends: what is on red's left is on blue's right.
+	ok('y = 0.1 is far left for red', f.startZone({ x: 0.5, y: 0.1 }, 'red') === 'Far left');
+	ok('y = 0.1 is far right for blue', f.startZone({ x: 0.5, y: 0.1 }, 'blue') === 'Far right');
+	ok('four bands, not three', new Set([0.1, 0.35, 0.65, 0.9].map((y) => f.startZone({ x: 0.5, y }, 'red'))).size === 4);
+
+	ok('its obstacles are not mirrored', f.OBSTACLES[0].x !== 1 - f.OBSTACLES[1].x && f.OBSTACLES[0].y !== f.OBSTACLES[1].y);
+}
+
 // ─── the validator ─────────────────────────────────────────────────────────
 
 /** A minimal spec that builds. Every case below breaks exactly one thing. */

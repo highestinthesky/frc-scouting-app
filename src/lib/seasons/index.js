@@ -19,12 +19,13 @@
 
 import { makeField } from '../field.js';
 import season2026 from './2026.js';
+import seasonThrowaway from './fixture.js';
 
 /** The season new recordings are made on. The one line that switches seasons. */
 export const CURRENT_SEASON = 2026;
 
 /** Every season this build can read. Registering one is adding it here. */
-const SPECS = [season2026];
+const SPECS = [season2026, seasonThrowaway];
 
 /**
  * An answer to one follow-up question. `value` is what is stored; `label` is
@@ -62,7 +63,7 @@ const SPECS = [season2026];
  *   label: string,
  *   doing: string,
  *   hotkey: string,
- *   icon: 'collect'|'score'|'fault'|'climb'|null,
+ *   icon?: 'collect'|'score'|'fault'|'climb'|null,
  *   tone: 'accent'|'success'|'warning',
  *   role?: 'fault',
  *   ends?: boolean,
