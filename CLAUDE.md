@@ -857,14 +857,30 @@ Checked, not remembered. A new session should re-verify before trusting it.
   function treats a lookup error like an unknown username and returns 401
   either way. A device still on a pre-v0.75 bundle fails one sign-in, then
   updates itself.
-- **Production runs Postgres 17.6.1.111, and that image segfaults locally.**
-  Under `npm run test:rls` a backend dies on the first `reset_event_data` call
-  after a run of handled errors on the same pooled connection, every run; on
-  17.6.1.156 the suite passes 153/153. Single calls do not reproduce it, and
-  nothing shows it has happened on production: its 2026-10-04 01:32
-  stats reset was a full postmaster start, not crash recovery. Never probe for
-  it on production. Upgrading is a dashboard action with downtime, so it is
-  the user's call.
+- **Production runs Postgres 17.6.1.164** (aarch64), upgraded by the user
+  from the dashboard on 2026-10-04. 17.6.1.111 segfaulted locally under
+  `npm run test:rls`, every run. A backend died on the first `reset_event_data`
+  call after a run of handled errors on the same pooled connection. Single
+  calls never reproduced it, and nothing showed it had happened on production.
+  On 17.6.1.164 the suite passes 156/156, three runs out of three. The upgrade
+  was checked rather than assumed. Roles and schema dumps are byte-identical
+  before and after, and row counts in all fourteen tables match. 0008-rerun
+  fingerprint 9/9, every grant as before, keepalive, both Edge Functions and
+  GoTrue answering. There is no Supabase backup on this plan, so a full
+  logical dump was taken first.
+- **anon still holds table grants on `invites` and `profiles`** (on `invites`,
+  everything including SELECT; on `profiles`, everything but SELECT). They are
+  leftovers from the pre-0018 default ACL. RLS is on and neither table has an
+  anon policy, so a GET returns `200 []` and writes match nothing. PostgREST
+  exposes no TRUNCATE, so nothing is reachable. It is still the only place
+  anon's privileges rest on RLS alone rather than on a missing grant.
+  Unfixed as of 2026-10-04.
+- **Probing as anon from a shell: check the key is non-empty first.**
+  `grep -oE "… \|\| '…'"` on `src/lib/supabase.js` returned nothing in zsh,
+  and every request went out with no key. The 401s that came back were "No
+  API key found", read as "permission denied", and reported "anon still 401 on
+  every table" about tables anon can partly reach. `scripts/keepalive.mjs`
+  extracts the key correctly; copy that.
 - **Leaked password protection is still OFF** (the security advisor flagged it
   on 2026-10-04) — a dashboard setting nobody but the user can change, worth
   doing before accounts are handed out.
