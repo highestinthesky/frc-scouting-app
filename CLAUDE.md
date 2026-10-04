@@ -310,15 +310,14 @@ Each of these produced a confident wrong answer before being caught:
 - **Commit freely; leave `git push` to the user.** A push deploys.
 - **`ROADMAP.md` is the only plan document.** Update it rather than starting a
   second one — two earlier plans and a handoff were folded into it.
-- **Plan a version series before shipping into it.** Every `v0.7x` release is
-  enumerated in `ROADMAP.md` before any of them ships, and v0.8 does not begin
-  until the 7 series closes. This rule exists because v0.6 finished and the work
-  simply kept going into v0.67–v0.71 with no plan behind the numbers — which is
-  how a version number stops meaning anything.
-
-  A release may span several commits, and **an overhaul is allowed to stay on
-  `v0.x`** rather than forcing a major bump; the series is the unit of planning,
-  not the commit.
+- **A version number is a release, not a unit of work.** Work accumulates on a
+  branch across as many commits and sessions as it takes, and carries no number
+  while it is there. A number is assigned only when the user decides a branch is
+  good enough for production: it merges to `main`, takes the next number, gets a
+  line in `ROADMAP.md`'s release log, and the user pushes it. Commit subjects
+  carry no version, and plans are named by what they do. This replaced
+  numbering every piece of work up front (2026-10-04), which had stopped
+  meaning anything — see *How versions work* in `ROADMAP.md`.
 - Existing structure is a **baseplate**. Reorganising it aggressively is fine.
   The invariants below are what isn't negotiable.
 
@@ -920,7 +919,7 @@ read-only `/schedule` was never built.
 
 | | |
 |---|---|
-| `ROADMAP.md` | the single dependency-ordered plan; v0.82 shipped, **v0.83 is Studio reorganised and is specced for another model to build**, v0.9 is the season boundary before BIOCORE |
+| `ROADMAP.md` | the single dependency-ordered plan and the release log; v0.82 is the last release, the season boundary is in progress on `pre-kickoff`, and *Studio reorganised* is specced for another model to build |
 | `HANDOFF.md` | working preferences, environment traps, and the decisions still open |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/auto-scouting-plan.md` | interactive auto scouting as the team asked for it — the source document, reference not draft |

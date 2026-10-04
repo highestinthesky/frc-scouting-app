@@ -4,7 +4,7 @@ This is the single planning document. Older improvement drafts and handoff
 documents were folded into it; update this file instead of starting another
 plan.
 
-Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
+Last audited: 2026-10-04. In progress on branch `pre-kickoff`: the season boundary and practice mode.
 
 > **Live state is maintained in `CLAUDE.md`, not here.** A plan document and a
 > state document drift apart, and this file has already carried a "live state"
@@ -15,6 +15,24 @@ Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
 > is `true`, events are real rows with membership deciding access, and v0.76 is
 > shipped. One commit is unpushed.
 
+## How versions work
+
+**A version number is a release, not a unit of work.** Changes accumulate on a
+branch — any number of commits, across any number of sessions — and carry no
+number while they are there. When the user decides a branch is good enough for
+production, it is merged to `main`, takes the next number after the last
+release, gets a line in the release log below, and the user pushes it.
+
+Plans here are named by what they do, never by a number they have not earned
+yet. Changed 2026-10-04: until then every piece of work was numbered before it
+was built, and the numbers stopped meaning anything — two commits shipped as
+v0.82 while this file's v0.82 was something else, and the plan for v0.83–v0.87
+had to be renumbered twice.
+
+| Release | Branch | Merged | What it was |
+|---|---|---|---|
+| v0.82 | (pre-scheme) | 2026-09-01 | the last release numbered the old way |
+
 ## Where the app is now
 
 | Area | Current state |
@@ -24,12 +42,12 @@ Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
 | Metrics and manager analysis | Shipped across Insights, team detail, compare, CSV and picklist scoring |
 | Picklist and alliance selection | Shipped; cloud-synced picklist and live taken-team state |
 | Accounts and roles | Shipped; manager-created accounts and invite codes, three roles enforced in RLS |
-| Studio | Shipped v0.73–v0.74 and **being reorganised in v0.83** — five noun-named pages holding nine jobs, four of them split across two pages |
-| What a scout sees at an event | One page since v0.82; the event's full schedule is still missing (v0.85) |
-| Interactive auto scouting | Shipped in v0.81 — record, correct, replay, route clustering, action chips. **Field geometry is 2026 and hard-coded** (v0.9) |
+| Studio | Shipped v0.73–v0.74 and **to be reorganised** (*Studio reorganised*, below) — five noun-named pages holding nine jobs, four of them split across two pages |
+| What a scout sees at an event | One page since v0.82; the event's full schedule is still missing (*The scout's schedule*) |
+| Interactive auto scouting | Shipped in v0.81 — record, correct, replay, route clustering, action chips. **Field geometry is 2026 and hard-coded** (*The season boundary*) |
 | What happened in one match | Shipped in v0.81; reachable from Schedule and Coverage since v0.81.2 |
-| Surviving a season change | **Not built (v0.9).** `form-config.js` already generalises the scalar half; the spatial half does not |
-| Pit scouting and the team profile | Not built (v0.84) |
+| Surviving a season change | **Not built** (*The season boundary*). `form-config.js` already generalises the scalar half; the spatial half does not |
+| Pit scouting and the team profile | Not built (*Pit scouting*) |
 | Native apps | Paused — see *Deliberately not in v0.8* |
 | Used by a scout, ever | **No.** Every verification is synthetic pointer events from a console. The offseason was cancelled, so the first real use is a competition |
 
@@ -73,24 +91,22 @@ synthetic pointer events from a console.
 **The seven weeks after kickoff are the busiest of the team's year.** Anything
 unfinished on 9 January gets finished by people who are also building a robot,
 and then walks into that first event. So "at kickoff it is one file and a
-config" is not an aspiration for v0.9 — it is the requirement, and the work
+config" is not an aspiration for the season framework — it is the requirement, and the work
 before January has to earn it.
 
 ## v0.8 — the event series
 
-Enumerated in full before any of it ships, per the working agreement. The 7
-series closed with v0.76, so this is where the numbers resume.
+The last series planned under the old numbering, where every piece of work was
+given a version before it was built. v0.80–v0.82 shipped under it. What it had
+left — Studio reorganised, pit scouting, the scout's schedule, the comparison
+pair and the move to rohawks.org — is kept below under names rather than
+numbers; see *How versions work* at the top.
 
-**The charter: everything here is used *at* an event, by someone standing in a
-gym.** That is what decides both what is in the series and the order it lands
-in. A feature that is only interesting on a laptop at home is not in v0.8.
-
-**The target is the offseason event on 10–11 October 2026.** It is a rehearsal,
-and the point of a rehearsal is to find out what is broken — which is also the
-reason this series stays on the web. When a scout finds a bug on the Saturday
-morning, a push fixes it and they reload. Inside a native build the same fix
-waits on App Review. The web is not the fallback for a shakedown event; it is
-the correct answer.
+**Its charter still holds: everything here is used *at* an event, by someone
+standing in a gym.** Its target — a rehearsal at the offseason event on 10–11
+October 2026 — does not: the offseason was cancelled, so there is no rehearsal
+and the first real use is a competition. That is what moved the season
+framework and practice mode ahead of the rest.
 
 **Native is paused, not cancelled** — see *Deliberately not in v0.8* below.
 
@@ -354,7 +370,7 @@ right first.
 ### v0.82 — one scout page, and the name belongs to the manager ✅ shipped 2026-09-01
 
 Not what this number originally held. **The comparison pair below was v0.82 and
-was renumbered to v0.86 after the fact**, because two commits shipped under this
+was renumbered after the fact — it is *The comparison pair* below**, because two commits shipped under this
 number while the roadmap was not open. Recording it rather than quietly
 renumbering: a version number that means two things is the failure CLAUDE.md
 names, and the commits are pushed.
@@ -373,7 +389,7 @@ names, and the commits are pushed.
    `/register` no longer collects a name; `/studio/accounts` gained the rename,
    because it is now the only path.
 
-### v0.83 — Studio reorganised
+### Studio reorganised
 
 **The next release, and the one to build before anything else.** It is fully
 specifiable today, it has no dependency on the 2027 game, and the season
@@ -492,7 +508,7 @@ and have Run link across.
 - `/studio/event` as a route
 - `CoverageCheck` as a separate component
 - `/studio/insights/team/[n]` — the legacy redirect, once the PWA has cycled
-- **v0.84b is absorbed.** Getting to a replay was its own planned release; Home's
+- **The planned "getting to a replay" item is absorbed.** It was its own planned release; Home's
   Review tile and Review's index solve it, so it is deleted rather than deferred.
 
 #### Traps — read before writing anything
@@ -567,7 +583,7 @@ Reviewable in five steps rather than one diff:
 4. **Review** — new index; the two detail pages get a parent.
 5. **Home** — last, because every tile links to something that must exist first.
 
-### v0.84 — pit scouting and the team profile
+### Pit scouting and the team profile
 
 **Pit scouting is not a new surface.** `/studio/insights/team/[teamNumber]`
 already renders what the matches say about a team; pit answers are what the team
@@ -592,7 +608,7 @@ until after the first offseason, which removes the migration care that is
 normally the expensive half of adding a table here. That licence expires with
 the event.
 
-### v0.85 — the scout's schedule
+### The scout's schedule
 
 v0.73 step 2 planned a read-only `/schedule` and it was never built — there is
 no route for it. A scout sees the matches one of their own teams is in, on Home,
@@ -602,7 +618,7 @@ coverage maths rather than computing the same thing a second way.
 Last because it is the smallest and the only item in the series that can slip
 without costing anything on the day.
 
-### v0.86 — the comparison pair
+### The comparison pair
 
 Two questions, one table, **one release** — because they are the same rendering
 and building them apart is how `insights` ended up with the same shape under
@@ -647,7 +663,7 @@ already exists and already scrolls in its own wrapper.
 still not enough, that is the evidence a chart is needed — and `docs/adr-003-boards.md`
 is where the thinking already is.
 
-### v0.87 — the app moves to rohawks.org/app
+### The app moves to rohawks.org/app
 
 Off GitHub Pages and onto the team's own hosting, once the features are stable.
 
@@ -703,9 +719,9 @@ re-register. The one hard requirement is HTTPS — `deriveSessionId()` uses
   `@scout.invalid` accounts with it, and every account created since `0016` has a
   real address, so the urgent half of this problem disappears on its own. What
   remains is that there is no recovery flow in the UI at all — a fair thing to
-  carry into v0.9, and still the most immediate reason a second Edge Function
+  carry into the season work, and still the most immediate reason a second Edge Function
   gets written.
-- **A camera, and therefore Supabase Storage.** See v0.83.
+- **A camera, and therefore Supabase Storage.** See *Pit scouting*.
 - **True peer-to-peer sync.** Still not possible in a browser: iOS Safari has no
   Web Bluetooth and no local peer discovery, and WebRTC needs a signalling server
   — which needs the internet the feature exists to avoid. It belongs to the
@@ -715,10 +731,10 @@ re-register. The one hard requirement is HTTPS — `deriveSessionId()` uses
 - **Scout reliability**, considered and rejected as superficial.
 - **The season retune.** January's ritual, not this series'.
 
-## v0.9 — the season boundary
+## The season boundary
 
 **The framework series, and the one with a deadline it does not control.**
-Specced 2026-09-01; build after v0.83, finish before 9 January.
+Specced 2026-09-01; finish before 9 January.
 
 ### What already survives a season change — do not rebuild these
 
@@ -772,7 +788,7 @@ the current model is shaped for the wrong thing in three places.
 
 ### The steps
 
-1. **v0.90 — `seasons/`.** `field.js` becomes `seasons/2026.js` plus a loader
+1. **`seasons/`.** `field.js` becomes `seasons/2026.js` plus a loader
    and nothing else changes.
 
    **Prove it by adding a deliberately weird throwaway season and switching to
@@ -781,7 +797,7 @@ the current model is shaped for the wrong thing in three places.
    copy of 2026 proves nothing, and January is the wrong week to discover that.
    The throwaway season stays in the repo as a test fixture.
 
-2. **v0.91 — the season on the track.** `FIELD_VERSION`'s own comment reads
+2. **The season on the track.** `FIELD_VERSION`'s own comment reads
    *"Dates the picture; stored on nothing"*, and `FIELD_SEASON` is read by
    exactly one line — a test asserting it is 2026. A stored track carries `v`
    for its byte layout and nothing about which field it was drawn on, so a 2026
@@ -792,11 +808,11 @@ the current model is shaped for the wrong thing in three places.
    tracks are test data and are not being kept. It is still worth doing now
    rather than in 2028, because doing it while the code is open is nearly free.
 
-3. **v0.92 — lift the vocabulary.** Actions, the cycle definition, the endgame
+3. **Lift the vocabulary.** Actions, the cycle definition, the endgame
    and the auto duration into the season module; the rail, the chips and the
    icons drive from it. Shaped for actions that carry answers, per above.
 
-4. **v0.93 — the BIOCORE field.** Blocked until 9 January. If the three above
+4. **The BIOCORE field.** Blocked until 9 January. If the three above
    are right, this is one file plus a `form-config.js` edit. **That is the test
    of everything above it.**
 
@@ -860,7 +876,7 @@ Login may require a network. Recording may not.
 
 ## Retuning at kickoff
 
-**Superseded in shape by v0.9**, which exists to make this list shorter. Until
+**Superseded in shape by the season boundary**, which exists to make this list shorter. Until
 that ships, this is what a January actually costs; after it, steps 1–2 become
 one module under `seasons/`.
 
@@ -868,7 +884,7 @@ one module under `seasons/`.
 2. **Replace the field geometry**, and re-check the coordinate normalisation.
    Spatial observations store field-absolute fractions, so a new field with
    different proportions silently moves every mark recorded against the old one.
-   v0.91 is what stops that being silent.
+   The season stamp on a track is what stops that being silent.
 3. Bump `SCHEMA_VERSION`.
 4. Run the full test and build checks before deploying.
 
@@ -1039,7 +1055,7 @@ labelled Scouting moved to Studio; `/insights/*` became `/studio/insights/*`;
 Accounts left Settings. Every old path redirects, because a cached PWA or a
 bookmark must not 404 on the morning of an event.
 
-**Step 2's read-only `/schedule` was never built.** It is v0.84.
+**Step 2's read-only `/schedule` was never built.** It is *The scout's schedule*.
 
 #### v0.74 — Studio becomes its own application, visually ✅
 

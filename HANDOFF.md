@@ -615,21 +615,12 @@ is `0021` exactly — the body being right is what makes the grant look fine.
    `null` and never `0` — "climbed, rung unknown" and "did not climb" are
    different facts.
 
-### Where v0.8 stands
+### Where the plan stands
 
-`ROADMAP.md` enumerates six releases. **v0.80 and v0.81 are done.** Remaining:
-
-- **v0.82 — the comparison pair.** Transpose `compare` so metrics are rows and
-  teams are columns. Its old item 6, the pre-match view, moved into v0.81's match
-  page; what is left here is that the match page swaps in the transposed table
-  once it exists.
-- **v0.83 — pit scouting**, as a second section on the team page.
-- **v0.84 — the scout's schedule**, the smallest item and the only one that can
-  slip without costing anything on the day.
-- **v0.85 — the move to `rohawks.org/app`.**
-
-The series targets the offseason on **10–11 October 2026**, and everything in it
-is used at an event by someone standing in a gym.
+`ROADMAP.md` is current; this section used to restate it and went stale twice.
+Versions are now assigned on release rather than up front — see *How versions
+work* there. The offseason event was cancelled, so nothing in the plan is
+aimed at a rehearsal any more.
 
 ### Two things only the user can do
 
