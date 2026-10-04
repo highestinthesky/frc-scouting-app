@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Rebuild a local database to PRODUCTION's real shape — not the repo's.
 #
-# The difference, and the whole reason this exists: `supabase db reset
-# --version NNNN` applies 0001, and production has never run 0001.
+# The difference, and the whole reason this exists: `supabase db reset` applies
+# 0001 FIRST, against an empty schema. Production ran it last, against the
+# dashboard-built table and a pre-hardening 0008, and the order shows.
 #
 # Sequence mirrors what the live project actually received:
 #   live_baseline.sql   the dashboard-built entries table, defects included
@@ -11,6 +12,16 @@
 #   0009                applied historically
 #   0010                applied 2026-08-07
 #   0013                applied 2026-08-07
+#   0001, 0008          re-run 2026-08-07, after 0013 (249cf23)
+#
+# The re-run was missing until 2026-10-04, so this built production as it stood
+# for twenty minutes. 0015..0027 still applied cleanly on top, without the
+# profiles guard triggers or the super clauses on three policies, so 0026's
+# rename guard was defined and never called. A replica that is wrong but
+# accepts every migration looks exactly like one that is right; the check is
+# supabase/verify_0008_rerun.sql run against both.
+#
+# Stops at production's state as of 2026-08-07; apply 0015 onward on top.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,11 +49,16 @@ cd "$ROOT" || exit 1
 # work — it needs a matching migration file — and any --version that does exist
 # applies 0001, which is the whole thing being avoided. Dropping the schema
 # leaves auth intact, which 0008 needs for its profiles FK.
+#
+# Recreated with production's owner and ACL — pg_database_owner, USAGE to
+# PUBLIC — not a bare CREATE SCHEMA's, which a schema diff reports as drift.
 docker exec $C psql -U postgres -d postgres -q -c "
   DROP SCHEMA public CASCADE;
-  CREATE SCHEMA public;
+  CREATE SCHEMA public AUTHORIZATION pg_database_owner;
+  COMMENT ON SCHEMA public IS 'standard public schema';
+  GRANT USAGE ON SCHEMA public TO PUBLIC;
   GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-  GRANT ALL ON SCHEMA public TO postgres;
+  GRANT USAGE ON SCHEMA public TO postgres;
   DELETE FROM auth.users;" >/dev/null 2>&1
 
 # Production's PRIVILEGE DEFAULTS, not just its tables.
@@ -68,6 +84,11 @@ docker exec $C psql -U postgres -d postgres -q -c "
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
+  -- postgres granting itself what it already owns: inert, and on production,
+  -- so a schema diff against the live project comes out empty.
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO postgres;
   " >/dev/null 2>&1
 
 run "live_baseline (dashboard-built entries)" supabase/live_baseline.sql || exit 1
@@ -82,5 +103,7 @@ run "0008 (pre-hardening, d5cb14e)" "$ORIG_0008" || exit 1
 run "0009_picklist"  supabase/migrations/0009_picklist.sql  || exit 1
 run "0010_identity"  supabase/migrations/0010_identity.sql  || exit 1
 run "0013 (applied out of band, superseded by 0001)" supabase/superseded/0013_applied_superseded.sql || exit 1
+run "0001 (corrective re-run)"     supabase/migrations/0001_entries.sql || exit 1
+run "0008 (corrected, re-run)"     supabase/migrations/0008_auth.sql    || exit 1
 echo
 echo "Rebuilt to production's shape as of 2026-08-07."
