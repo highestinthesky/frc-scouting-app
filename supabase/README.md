@@ -5,7 +5,7 @@ Applied in filename order, they rebuild it from nothing.
 
 ## Audited live state
 
-Verified against the live project on 2026-10-04: production is at `0027`,
+Verified against the live project on 2026-10-04: production is at `0028`,
 `AUTH_ENFORCED` is true, and the old `0011`–`0013` drafts live under
 `superseded/` rather than in the active sequence.
 Do not infer production state from the presence of a migration file.
@@ -28,6 +28,7 @@ Do not infer production state from the presence of a migration file.
 | `0025_correct_entry_track.sql` | **Applied 2026-09-01** (`schema_migrations`, checked 2026-10-04) |
 | `0026_the_name_belongs_to_the_manager.sql` | **Applied 2026-09-02** (`schema_migrations`, checked 2026-10-04) |
 | `0027_keepalive.sql` | **Applied 2026-10-04**, recorded as `20261004183523`. Rehearsed on the replica first; afterwards anon gets `true` from `keepalive()` and still 401 on every table. `scripts/keepalive.mjs` no longer falls back to the 42501 probe — a missing `keepalive()` now fails the run |
+| `0028_revoke_email_for_username.sql` | **Applied 2026-10-04**, recorded as `20261004193845`, on the user's call after 45 days of soak. Anon now gets 42501 from the lookup, and only `service_role` holds the grant |
 
 `username-sign-in` is deployed and ACTIVE (v1, `verify_jwt` **off** — it runs
 before a session exists and is itself the credential check). Smoke-tested
@@ -256,7 +257,7 @@ still parses fine.
 | `migrations/0012_passphrase_cleanup.sql` | drops the inert `has_manager_token()` and `manager_token` — **not applied; after 0011 has soaked** |
 | `migrations/0024_username_sign_in_rate_limit.sql` | service-only email bridge and atomic rate buckets for private username authentication |
 | `functions/username-sign-in/index.ts` | pre-auth username/password exchange; returns tokens, never the resolved email |
-| `rollout/revoke_email_for_username.sql` | final compatibility gate; intentionally outside `migrations/` |
+| `migrations/0028_revoke_email_for_username.sql` | the final username-privacy gate; lived in `rollout/` until it ran |
 | `superseded/0013_applied_superseded.sql` | applied to production 2026-08-07, then removed from the sequence — it ran after `0011` and undid the cutover. Superseded by `0001`. |
 | `verify_entries.sql` | drift assertions for `entries`, read-only |
 | `verify_migrations.sql` | did 0007/0008/0009 land? read-only |

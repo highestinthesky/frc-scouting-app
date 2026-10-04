@@ -99,9 +99,10 @@ the username and password, resolves `auth.users.email` through the service-only
 `email_for_username` grant, performs the GoTrue password exchange and returns
 only a token pair. The browser installs it with `setSession()` and never receives
 an email merely for knowing a username. `0024` owns its atomic IP+username rate
-limit. The anon grant on the old lookup remains only for the cached-PWA rollout
-window; `supabase/rollout/revoke_email_for_username.sql` is the explicit final
-gate and must not move into `migrations/` before adoption is verified.
+limit. The old browser path is closed: `0028` revoked the lookup from anon and
+authenticated on 2026-10-04 and left it to `service_role` alone, which is all
+the function needs. It waited in `supabase/rollout/` until then, so `db push`
+could not fire it before cached clients had moved over.
 
 ### Design system
 
@@ -818,8 +819,8 @@ sets `border-box` locally; changing it globally is its own release.
 
 Checked, not remembered. A new session should re-verify before trusting it.
 
-- **Production is at migration `0027`** (checked 2026-10-04 against
-  `schema_migrations` and a full schema dump). `0015`–`0027` are applied —
+- **Production is at migration `0028`** (checked 2026-10-04 against
+  `schema_migrations` and a full schema dump). `0015`–`0028` are applied —
   `0015` out of order, on 2026-10-04 after `0026`, because it had been missed;
   until then invites expired in 14 days, not 90. `0011` and `0012` never were;
   `0013` was, then superseded by the `0001`/`0008` re-run. All three live in
@@ -846,16 +847,16 @@ Checked, not remembered. A new session should re-verify before trusting it.
   The client shipped in v0.75 (`9e68e0f`, deployed 2026-08-20). Checked
   2026-10-04: the live bundle references `username-sign-in` and never
   `email_for_username`, and both Edge Functions are ACTIVE.
-- **The legacy lookup is still open, to anon AND authenticated.**
-  `supabase/rollout/revoke_email_for_username.sql` is the final gate and stays
-  out of `migrations/` until it runs. Running it early locks out cached clients,
-  since a service worker can serve the old bundle after a deploy. As of
-  2026-10-04 the client has soaked 45 days; the PWA is `autoUpdate` with
-  `skipWaiting`, so a stale bundle replaces itself on its first online open.
-  What could not be observed is whether any device still runs one: the auth
-  audit log is disabled and `pg_stat_statements` was reset that morning.
-  Applying it is the user's decision. Once it runs, it moves into
-  `migrations/` so the local stack and the replica match production.
+- **The legacy lookup is closed** — `0028`, applied 2026-10-04 on the user's
+  call after 45 days of soak. It had been open to `authenticated` as well as
+  anon. On production afterwards, anon gets 42501 from the lookup, and the
+  grant sits with `service_role` alone. Rehearsed first on the local stack,
+  where `username-sign-in` signed a real account in (200, tokens only) and
+  refused a wrong password (401). That end-to-end run is the evidence the
+  function still works. A bogus credential cannot show it, because the
+  function treats a lookup error like an unknown username and returns 401
+  either way. A device still on a pre-v0.75 bundle fails one sign-in, then
+  updates itself.
 - **Production runs Postgres 17.6.1.111, and that image segfaults locally.**
   Under `npm run test:rls` a backend dies on the first `reset_event_data` call
   after a run of handled errors on the same pooled connection, every run; on

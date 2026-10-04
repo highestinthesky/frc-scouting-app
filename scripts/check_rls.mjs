@@ -355,6 +355,15 @@ const scout2B = await clientFor(scout2, EVENT_B);
 	const { error } = await anonA.from('entries').insert(entryRow(EVENT_A));
 	ok('anon cannot record an entry', denied(error), error?.code);
 	ok('anon cannot read the roster', (await visible(anonA, 'profiles', ROSTER)) <= 0);
+	// 0028: knowing a username buys no address, signed in or not. The probe
+	// names a real account, so a pass is the grant refusing rather than the
+	// function finding nobody.
+	for (const [label, client] of [['anon', anonA], ['a scout', scoutA]]) {
+		const { data: addr, error: addrErr } = await client.rpc('email_for_username', {
+			p_username: scout2.username
+		});
+		ok(`${label} cannot resolve a username to an email`, denied(addrErr) && !addr, addrErr?.code ?? addr);
+	}
 	// 0027: the one thing anon may do, and it reads nothing.
 	const { data: alive, error: aliveErr } = await anonA.rpc('keepalive');
 	ok('anon can call keepalive()', !aliveErr && alive === true, aliveErr?.message);
@@ -723,7 +732,11 @@ const scout2B = await clientFor(scout2, EVENT_B);
 	// browser cannot reach this AND is not permitted to try".
 	for (const fn of [
 		'create_managed_profile(uuid,uuid,text,text,text,public.app_role)',
-		'username_taken(text)'
+		'username_taken(text)',
+		// 0028. username-sign-in resolves the address as service_role and hands
+		// back only tokens; a browser role holding this grant can turn any
+		// username into a real email address.
+		'email_for_username(text)'
 	]) {
 		const [{ anon_x, auth_x, svc_x }] = await sql(
 			`select has_function_privilege('anon',          'public.${fn}', 'EXECUTE') as anon_x,

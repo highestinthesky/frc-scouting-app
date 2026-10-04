@@ -115,10 +115,8 @@ Live project `hhvpkgwgkuiemxyarsuk`, verified 2026-08-20.
 **The cutover is complete.** `AUTH_ENFORCED` is `true`, `session_id` and the
 manager passphrase are gone, and membership is the only thing granting access.
 
-Two things are deliberately still open: `anon` retains EXECUTE on
-`email_for_username` for cached clients — `supabase/rollout/revoke_email_for_username.sql`
-is the final gate and stays out of `migrations/` — and leaked-password protection
-is off in the dashboard.
+The username email lookup is closed to browsers (`0028`, 2026-10-04).
+Leaked-password protection is still off in the dashboard.
 
 Four accounts still hold `<username>@scout.invalid` addresses from before `0016`.
 They sign in normally but can never receive recovery mail.
