@@ -250,6 +250,11 @@
 				if (k in found.values) merged[k] = found.values[k];
 			}
 			values = merged;
+			// The restored draft is now the baseline. Against the pre-fill it
+			// counted as typed in, so merely opening the form saved it again with
+			// a fresh savedAt — a draft that never aged out while it kept being
+			// opened, re-pushed to the server on every visit.
+			openedWith = $state.snapshot(values);
 			restoredDraft = true;
 		} catch (_e) {
 			// A broken draft must never block recording. Worst case is retyping.

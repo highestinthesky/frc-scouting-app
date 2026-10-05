@@ -75,6 +75,10 @@ export function hasContent(values, blank) {
 /**
  * Drop what is stale or surplus. Newest kept.
  *
+ * Drafts and tombstones are capped separately. Every save writes a tombstone,
+ * so under one shared cap a form left open while the scout recorded eight more
+ * matches was pushed out by the tombstones of those eight.
+ *
  * @param {Record<string, {values: object, savedAt: number}>} map
  * @param {number} [now]
  * @returns {Record<string, {values: object, savedAt: number}>}
@@ -82,9 +86,10 @@ export function hasContent(values, blank) {
 export function pruneDrafts(map, now = Date.now()) {
 	const rows = Object.entries(map ?? {})
 		.filter(([, d]) => d && Number.isFinite(d.savedAt) && now - d.savedAt < DRAFT_MAX_AGE_MS)
-		.sort((a, b) => b[1].savedAt - a[1].savedAt)
-		.slice(0, DRAFT_MAX);
-	return Object.fromEntries(rows);
+		.sort((a, b) => b[1].savedAt - a[1].savedAt);
+	const drafts = rows.filter(([, d]) => !d.cleared).slice(0, DRAFT_MAX);
+	const tombstones = rows.filter(([, d]) => d.cleared).slice(0, DRAFT_MAX);
+	return Object.fromEntries([...drafts, ...tombstones]);
 }
 
 /**
