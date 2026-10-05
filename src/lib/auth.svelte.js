@@ -38,7 +38,7 @@ import { session } from './session.svelte.js';
 // Same direction: db.js never imports this module, which is the invariant that
 // keeps recording working without auth. auth calls db; db never calls auth.
 import { claimEntriesForAccount } from './db.js';
-import { scoutRef } from './scout-identity.js';
+import { scoutRef, scoutNameOnSignIn } from './scout-identity.js';
 
 /**
  * Does the app REQUIRE an account yet?
@@ -637,17 +637,20 @@ async function claimRecordedEntries(profile) {
 }
 
 /**
- * Fill the local scout name from the account, but only if it is empty.
+ * Fill the local scout name from the account — when it is blank, or when it
+ * belongs to a different account that signed in on this device before.
  *
  * Signing in used to leave you typing your own name into Settings anyway, on
  * every device, with nothing checking that you spelled it the way the manager
  * did. The account already knows it.
  *
- * Only when EMPTY, and that restriction is load-bearing. `scout_name` is still
- * the join key for assignments, per-match overrides and targeted reminders, so
- * overwriting a name a device already had would silently detach it from
- * everything addressed to the old spelling. A blank one is joined to nothing,
- * which makes it free to fill.
+ * Never over a name that is this account's, or that nobody owns. `scout_name`
+ * is still the join key for assignments, per-match overrides and targeted
+ * reminders, so overwriting a person's own name would silently detach it from
+ * everything addressed to the old spelling. What this no longer does is keep
+ * the LAST person's name: it was only ever filled when blank, so the second
+ * scout to sign in on a shared phone recorded every match under the first
+ * scout's name. scoutNameOnSignIn() holds the rule and its tests.
  *
  * "First Last" rather than the username because that is what a manager types
  * into the assignment editor, and because resolveScout() matches on exactly
@@ -655,9 +658,19 @@ async function claimRecordedEntries(profile) {
  * this same account.
  */
 async function adoptScoutName(profile) {
-	if (session.scoutName?.trim()) return;
 	const name = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || profile.username;
-	if (name) await session.update({ scoutName: name });
+	const patch = scoutNameOnSignIn(
+		{ name: session.scoutName, account: session.scoutNameAccount },
+		profile.id,
+		name
+	);
+	if (!patch) return;
+	// A new name means the old one's assignments are someone else's. Sync
+	// re-pulls this account's on its next tick; until then, none beats theirs.
+	if (patch.scoutName !== undefined && session.scoutName?.trim()) {
+		patch.assignedTeams = [];
+	}
+	await session.update(patch);
 }
 
 function rememberAuthIdentity(data) {
