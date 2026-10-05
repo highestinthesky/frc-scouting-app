@@ -213,7 +213,7 @@ has already finished and simply cannot paint.
 Key a match on TBA's own `match.key` (`2026nyny_sf10m1`), never on
 `match_number`: the SET number is the part that makes it unique.
 
-`npm test` runs 22 unit suites plus 2 checkers. The checkers are the important
+`npm test` runs 27 unit suites plus 2 checkers. The checkers are the important
 ones, and neither is a unit test:
 
 - **`check_components.mjs`** reads *emitted* CSS, not source, because Svelte's
@@ -378,7 +378,12 @@ A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — se
   thing the encoding rests on. The recorder therefore fills forward to
   `performance.now()` rather than counting `setInterval` ticks: a backgrounded
   tab throttles the interval, and the first version recorded 52 seconds and would
-  have decoded as 15 seconds of motion at three times the true speed.
+  have decoded as 15 seconds of motion at three times the true speed. It samples
+  the initial position at Start, and Stop/Escape also fills to the current clock
+  before closing held actions. Reviewing keeps the track's recorded `hz`;
+  editing an answer must not change the positions' timestamps. Only a new
+  recording returns to `SAMPLE_HZ`. `recorder.test.mjs` exercises the compiled
+  component script against a controlled clock.
 - **An end of the field is coloured by the alliance that owns it, not by who is
 looking.** The engine in `field.js` fixes the convention — "Red stands at x = 0" — so near is
 red and far is blue, and `AutoField` takes no `allianceColor` at all. The tint

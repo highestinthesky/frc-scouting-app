@@ -6,6 +6,11 @@ plan.
 
 Last audited: 2026-10-04. Done on branch `pre-kickoff`, unpushed: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January.
 
+Completion audit: saved-track edits preserve their recorded sample rate, and
+Stop/Escape fills samples and closes held actions using the current clock,
+including when the timer has not ticked or was throttled. `recorder.test.mjs`
+exercises these cases with the compiled Svelte script and a controlled clock.
+
 > **Live state is maintained in `CLAUDE.md`, not here.** A plan document and a
 > state document drift apart, and this file has already carried a "live state"
 > block that stayed frozen at 2026-08-07 through nine migrations and two whole

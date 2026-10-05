@@ -65,7 +65,10 @@
 
 	/** The length of auto. The recorder stops itself. */
 	const autoMs = $derived(season.autoMs);
-	const STEP_MS = 1000 / SAMPLE_HZ;
+	// Reviewing keeps the cadence written on the track. Changing an answer must
+	// not change the timestamps of the positions that were already recorded.
+	let hz = $state(SAMPLE_HZ);
+	const STEP_MS = $derived(1000 / hz);
 	/** The most samples a recording can hold. Derived, so it cannot disagree. */
 	const MAX_SAMPLES = $derived(Math.round(autoMs / STEP_MS));
 
@@ -165,6 +168,7 @@
 			const d = decodeTrack(value);
 			if (d) {
 				season = d.season;
+				hz = d.hz;
 				start = d.start;
 				here = d.start;
 				samples = d.samples.map((s) => ({ x: s.x, y: s.y }));
@@ -178,7 +182,7 @@
 
 	const zone = $derived(season.field.startZone(start, allianceColor));
 	const preview = $derived(
-		decodeTrack(encodeTrack({ start, samples, intervals, hz: SAMPLE_HZ }, season))
+		decodeTrack(encodeTrack({ start, samples, intervals, hz }, season))
 	);
 	const stats = $derived(preview ? cycleStats(preview) : null);
 	const duration = $derived(preview ? trackDuration(preview) : 0);
@@ -187,7 +191,7 @@
 	const atScrub = $derived(preview ? positionAt(preview, scrub) : null);
 
 	function emit() {
-		onchange?.(encodeTrack({ start, samples, intervals, hz: SAMPLE_HZ }, season));
+		onchange?.(encodeTrack({ start, samples, intervals, hz }, season));
 	}
 
 	function place(pos) {
@@ -242,6 +246,8 @@
 		here = start;
 		phase = 'live';
 		startedAt = performance.now();
+		// Capture t = 0 before the first drag or delayed timer can move it.
+		sampleToNow();
 		timer = setInterval(tick, STEP_MS);
 	}
 
@@ -261,8 +267,8 @@
 	// So each tick asks the clock how many samples SHOULD exist by now and fills
 	// forward to that index. A late tick writes several samples; a skipped one is
 	// caught up by the next. The index and the time cannot drift apart.
-	function tick() {
-		elapsed = performance.now() - startedAt;
+	function sampleToNow() {
+		elapsed = Math.min(performance.now() - startedAt, autoMs);
 		// Held at the last known position. A robot that is not being dragged has
 		// not vanished — it is standing still, which is a real thing a robot does
 		// in auto and a real thing to record. Filling the gap this way is also the
@@ -272,12 +278,22 @@
 		const want = Math.min(MAX_SAMPLES, Math.floor(elapsed / STEP_MS) + 1);
 		while (samples.length < want) samples.push(at);
 		samples = samples;
+	}
+
+	function tick() {
+		if (phase !== 'live') return;
+		sampleToNow();
 		// `autoMs` is read here, on every tick, rather than captured when the timer
 		// started: it is the season's, and the season is state.
 		if (elapsed >= autoMs) finish();
 	}
 
 	function finish() {
+		if (phase !== 'live') return;
+		// Stop/Escape can arrive between ticks, including before the first one or
+		// after a hidden tab has throttled the timer. Fill to the clock before
+		// closing held actions, so neither positions nor action tails are lost.
+		sampleToNow();
 		if (timer) clearInterval(timer);
 		timer = null;
 		// Clamped, for the same reason the sampler fills to a clock: a throttled
@@ -489,6 +505,7 @@
 		// A new recording is made on the current season, whatever the one being
 		// thrown away was recorded on.
 		season = currentSeason();
+		hz = SAMPLE_HZ;
 		emit();
 	}
 
