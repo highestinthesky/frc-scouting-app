@@ -896,22 +896,30 @@ missing `box-sizing` turns 2rem of padding into a rail that looks unpinned.
 **The app has no `box-sizing` reset.** Everything is `content-box`. Studio's rail
 sets `border-box` locally; changing it globally is its own release.
 
-## Live state, as of 2026-10-04
+## Live state, as of 2026-10-05
 
 Checked, not remembered. A new session should re-verify before trusting it.
 
-- **Production is at migration `0029`** (checked 2026-10-04 against
-  `schema_migrations` and a full schema dump). `0015`–`0029` are applied —
+- **Production is at migration `0030`** (`0029` checked 2026-10-04 against
+  `schema_migrations` and a full schema dump; `0030` applied and checked
+  2026-10-05). `0015`–`0030` are applied —
   `0015` out of order, on 2026-10-04 after `0026`, because it had been missed;
   until then invites expired in 14 days, not 90. `0011` and `0012` never were;
   `0013` was, then superseded by the `0001`/`0008` re-run. All three live in
   `supabase/superseded/`. `0027` landed 2026-10-04, after which
   `scripts/keepalive.mjs` dropped its pre-0027 fallback.
-- **`0030` is written and NOT applied** (2026-10-04). It is the one
-  migration that may follow its client: `account-state.js` treats a missing
-  `reminder_dismissals`/`entry_drafts` table as "device only", which is how
-  dismissals and drafts behaved before. Until it lands they are scoped per
-  account on each device but do not cross devices.
+- **`0030` is applied** (2026-10-05, recorded as `account_state`), ahead of
+  the v0.84 client. It was the one migration that could follow its client:
+  `account-state.js` treats a missing `reminder_dismissals`/`entry_drafts`
+  table as "device only". Checked afterwards: both tables have RLS on with one
+  policy each, anon holds nothing on any table, and the security advisor raised
+  nothing new.
+- **`authenticated` holds `TRUNCATE`, `TRIGGER` and `REFERENCES` on every
+  table created since `0018`** (`events`, `event_scouts`, `picklist`, both
+  `0030` tables), beyond what each migration grants. That comes from
+  production's default ACL, which `0018` narrowed for anon only. PostgREST
+  exposes no TRUNCATE, so nothing reaches it through the API, but `TRUNCATE`
+  ignores RLS. Narrowing it is a migration of its own.
 - **The replica matches production exactly**, as of 2026-10-04: built with
   `scripts/rebuild_prod_replica.sh` plus `0016`–`0026` (before `0015` landed), its `public` schema dump
   is line-for-line production's apart from comments and the order of ACL
@@ -974,6 +982,13 @@ Checked, not remembered. A new session should re-verify before trusting it.
   <file>`. The CLI path does not record anything in `schema_migrations`, so
   insert the row by hand; `0015` and `0027` were applied that way on
   2026-10-04.
+- **`apply_migration` answers `declined` to any SQL containing a `DROP`**,
+  in every permission mode, without showing the user anything. The server asks
+  for its own confirmation on destructive statements, and in the desktop app
+  that request never reaches the user. It cost four attempts on `0030`, which
+  went through once its two `DROP POLICY IF EXISTS` lines (no-ops on tables
+  that did not exist yet) were left out. A migration whose `DROP` is real has
+  to go through the CLI.
 
 **ADR-002 was rewritten on 2026-08-29** against `docs/auto-scouting-plan.md`,
 which is the team's own source document and had never been read when the ADR

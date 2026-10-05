@@ -38,7 +38,7 @@ had to be renumbered twice.
 |---|---|---|---|
 | v0.82 | (pre-scheme) | 2026-09-01 | the last release numbered the old way |
 | v0.83 | `pre-kickoff` | 2026-10-04 | season modules, stamped auto tracks, practice mode, and recorder timing fixes |
-| v0.84 | `ios-readiness` | 2026-10-05 | iPhone/WebKit fixes, sync that loses and stales nothing, and dismissals, drafts and the scout name following the account (`0030` written, not yet applied) |
+| v0.84 | `ios-readiness` | 2026-10-05 | iPhone/WebKit fixes, sync that loses and stales nothing, and dismissals, drafts and the scout name following the account (`0030` applied 2026-10-05) |
 
 ## Where the app is now
 
