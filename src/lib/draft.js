@@ -27,7 +27,13 @@ export const DRAFT_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 /** Keep the recent few. A scout has one form open; this is slack, not capacity. */
 export const DRAFT_MAX = 8;
 
-const keyFor = (eventCode) => `draft:entry:${eventCode || 'none'}`;
+// ─── whose drafts ──────────────────────────────────────────────────────────
+//
+// Keyed by account as well as event. The key used to be the event alone, so the
+// next scout to sign in on a shared phone reopened the last one's half-typed
+// form as their own. `owner` is the account id, or null signed out; the drafts
+// also follow the account to its other devices through account-state.js.
+const keyFor = (eventCode, owner) => `draft:entry:${eventCode || 'none'}:${owner || 'anon'}`;
 
 /**
  * Which draft a form is. Derived from what the form was opened for, so it stays
@@ -86,9 +92,24 @@ export function pruneDrafts(map, now = Date.now()) {
  * @param {string} eventCode
  * @returns {Promise<Record<string, {values: object, savedAt: number}>>}
  */
-export async function loadDrafts(eventCode) {
-	const stored = await getSetting(keyFor(eventCode));
+export async function loadDrafts(eventCode, owner = null) {
+	const stored = await getSetting(keyFor(eventCode, owner));
 	return pruneDrafts(stored?.drafts ?? {});
+}
+
+/**
+ * The record for one form — a draft, a tombstone (`cleared: true`, written when
+ * its entry was saved), or null. account-state.js needs the tombstone to tell a
+ * stale server copy from a newer one.
+ *
+ * @param {string} eventCode
+ * @param {string} slot
+ * @param {string|null} [owner]
+ * @returns {Promise<{values: object|null, savedAt: number, cleared?: boolean}|null>}
+ */
+export async function loadDraftRecord(eventCode, slot, owner = null) {
+	const drafts = await loadDrafts(eventCode, owner);
+	return drafts[slot] ?? null;
 }
 
 /**
@@ -96,11 +117,12 @@ export async function loadDrafts(eventCode) {
  *
  * @param {string} eventCode
  * @param {string} slot
+ * @param {string|null} [owner]
  * @returns {Promise<{values: object, savedAt: number}|null>}
  */
-export async function loadDraft(eventCode, slot) {
-	const drafts = await loadDrafts(eventCode);
-	return drafts[slot] ?? null;
+export async function loadDraft(eventCode, slot, owner = null) {
+	const record = await loadDraftRecord(eventCode, slot, owner);
+	return record && !record.cleared && record.values ? record : null;
 }
 
 /**
@@ -114,22 +136,27 @@ export async function loadDraft(eventCode, slot) {
  * @param {string} slot
  * @param {object} values
  */
-export async function saveDraft(eventCode, slot, values) {
-	const drafts = await loadDrafts(eventCode);
-	drafts[slot] = { values, savedAt: Date.now() };
-	await setSetting(keyFor(eventCode), { drafts: pruneDrafts(drafts) });
+export async function saveDraft(eventCode, slot, values, owner = null, savedAt = Date.now()) {
+	const drafts = await loadDrafts(eventCode, owner);
+	drafts[slot] = { values, savedAt };
+	await setSetting(keyFor(eventCode, owner), { drafts: pruneDrafts(drafts) });
 }
 
 /**
  * Forget one form's draft. Called on a successful submit, never on cancel — an
  * accidental back press is the case this whole module exists for.
  *
+ * Leaves a tombstone rather than deleting. The draft also lives on the server,
+ * and if deleting it there fails — no signal at the moment of saving — the
+ * server's copy would otherwise come back into this form as if unsaved. The
+ * tombstone is newer, so it wins (pickDraft), and it ages out like any draft.
+ *
  * @param {string} eventCode
  * @param {string} slot
+ * @param {string|null} [owner]
  */
-export async function clearDraft(eventCode, slot) {
-	const drafts = await loadDrafts(eventCode);
-	if (!(slot in drafts)) return;
-	delete drafts[slot];
-	await setSetting(keyFor(eventCode), { drafts });
+export async function clearDraft(eventCode, slot, owner = null) {
+	const drafts = await loadDrafts(eventCode, owner);
+	drafts[slot] = { values: null, savedAt: Date.now(), cleared: true };
+	await setSetting(keyFor(eventCode, owner), { drafts: pruneDrafts(drafts) });
 }

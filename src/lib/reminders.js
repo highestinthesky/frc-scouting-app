@@ -9,17 +9,22 @@
 //     predicted_time and the scout is watching at least one team in it,
 //     emit a synthetic reminder with a stable id so dismissal persists.
 //
-// Dismissal is local-only: an object {id → expiresAt-ISO} in IndexedDB.
-// We prune entries whose expiry has passed so the map doesn't grow
-// forever.
+// Dismissals are kept per account — an object {id → {e: eventCode, x:
+// expiresAt-ISO}} in IndexedDB under that account's key — and mirrored to the
+// server so they follow the account to its other devices (account-state.js).
+// Entries whose expiry has passed are pruned so the map doesn't grow forever.
 
 import { createSupabaseClient } from './supabase.js';
 import { eventIdForCode } from './events.js';
 import { getSetting, setSetting } from './db.js';
 import { reminderTarget } from './planning-rows.js';
 import { teamsInMatch } from './tba.js';
+import { stillMatters } from './account-state-rules.js';
 
-const DISMISSED_KEY = 'dismissedReminders';
+// Per account. This was one key for the whole device, so the next scout to sign
+// in on a shared phone had the last one's dismissals hiding reminders meant for
+// them. The old key is left unread: whose dismissals they were is unknowable.
+const dismissedKey = (owner) => `dismissedReminders:${owner || 'anon'}`;
 
 // ─── Supabase-backed reminders ─────────────────────────────────────────────
 
@@ -157,46 +162,54 @@ function matchStartMs(m) {
 // ─── Local dismissal tracking ──────────────────────────────────────────────
 
 /**
- * Get the set of reminder IDs the user has dismissed on this device.
- * Returns a Set for fast lookup; under the hood we persist an object keyed
- * by id so we can prune by expiry.
+ * Every dismissal this account has on this device.
  *
- * @returns {Promise<Set<string>>}
+ * @param {string|null} owner  account id, or null signed out
+ * @returns {Promise<Record<string, {e?: string|null, x?: string|null}>>}
  */
-export async function getDismissedIds() {
-	const raw = await getSetting(DISMISSED_KEY);
-	if (!raw || typeof raw !== 'object') return new Set();
-	return new Set(Object.keys(raw));
+export async function getDismissed(owner) {
+	const raw = await getSetting(dismissedKey(owner));
+	return raw && typeof raw === 'object' ? raw : {};
+}
+
+/** Replace this account's dismissals on this device. */
+export async function setDismissed(owner, map) {
+	await setSetting(dismissedKey(owner), map ?? {});
 }
 
 /**
- * Mark a reminder as dismissed on this device.
+ * Mark a reminder dismissed for this account on this device.
  *
  * @param {string} id
  * @param {string} [expiresAt]  optional ISO; used for pruning
+ * @param {string|null} [owner]
+ * @param {string|null} [eventCode]
  */
-export async function dismissReminder(id, expiresAt) {
-	const raw = (await getSetting(DISMISSED_KEY)) ?? {};
-	raw[id] = expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-	await setSetting(DISMISSED_KEY, raw);
+export async function dismissReminder(id, expiresAt, owner = null, eventCode = null) {
+	const raw = await getDismissed(owner);
+	raw[id] = {
+		e: eventCode || null,
+		x: expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+	};
+	await setDismissed(owner, raw);
 }
 
 /**
  * Prune dismissal entries whose expires_at is in the past. Cheap to call
  * on app load to keep the map tidy.
+ *
+ * @param {string|null} [owner]
  */
-export async function pruneDismissed() {
-	const raw = await getSetting(DISMISSED_KEY);
-	if (!raw || typeof raw !== 'object') return;
-	const nowIso = new Date().toISOString();
+export async function pruneDismissed(owner = null) {
+	const raw = await getDismissed(owner);
 	let changed = false;
-	for (const [id, exp] of Object.entries(raw)) {
-		if (!exp || exp < nowIso) {
+	for (const [id, d] of Object.entries(raw)) {
+		if (!stillMatters(d?.x)) {
 			delete raw[id];
 			changed = true;
 		}
 	}
-	if (changed) await setSetting(DISMISSED_KEY, raw);
+	if (changed) await setDismissed(owner, raw);
 }
 
 function mapErr(err, action) {
