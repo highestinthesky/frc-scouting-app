@@ -627,7 +627,7 @@ also meant the second scout to sign in on a shared phone recorded every match
 under the first scout's name. `session.scoutNameAccount` records whose name it
 is; `scoutNameOnSignIn()` in `scout-identity.js` holds the rule and its tests.
 
-**Sync, as of `ios-readiness`.** Four rules, each the fix for a way an entry
+**Sync, as of `ios-readiness`.** Six rules, most of them the fix for a way an entry
 went missing or stale without anything saying so (`sync.svelte.js`,
 `sync-rules.js`):
 
@@ -643,6 +643,17 @@ went missing or stale without anything saying so (`sync.svelte.js`,
   order and a strict watermark skipped late commits forever.
 - **A push marks a row clean only at the revision it sent** (`rev`). An edit
   saved mid-push used to be cleared, never sent, then overwritten by the echo.
+- **The overlap stops once the watermark settles** (`watermarkSettled()`).
+  Measured back from the newest row *seen*, it never moved while nothing new
+  arrived, so every device re-downloaded the last burst of rows every tick
+  indefinitely. A read begun `PULL_OVERLAP_MS` (monotonic) after the watermark
+  moved proves nothing can still commit behind it; later pulls go strict. A
+  reset (`scopeGen`) also stops an in-flight pull writing its watermark back
+  over "Sync now" or an event switch.
+- **`createSupabaseClient()` keeps one client per event** and passes
+  `accessToken`, so supabase-js builds no GoTrueClient for it. Each call used
+  to build one, and each GoTrueClient adds a `visibilitychange` listener that
+  is never removed: ~500 leaked clients an hour from the 30-second tick alone.
 
 Sign-in and sign-out re-resolve the event and backfill from scratch;
 sign-out and Clear entries call `flush()` and report the unsent count.

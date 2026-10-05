@@ -37,7 +37,14 @@ import { pullScheduleIfStale } from './tba.js';
 import { pullAndApplyForScout } from './assignments.js';
 import { reminders } from './reminders.svelte.js';
 import { session } from './session.svelte.js';
-import { entryWritePayloads, pullFrom, pageAfter, laterOf, PULL_PAGE } from './sync-rules.js';
+import {
+	entryWritePayloads,
+	pullFrom,
+	pageAfter,
+	laterOf,
+	watermarkSettled,
+	PULL_PAGE
+} from './sync-rules.js';
 import { auth } from './auth.svelte.js';
 
 const POLL_INTERVAL_MS = 3000;
@@ -81,6 +88,18 @@ let polling = false;
 /** ISO of the newest row pulled — pull queries advance from here. Reset
  * whenever the event code changes. */
 let lastSeenAt = null;
+/** performance.now() when lastSeenAt last advanced. See watermarkSettled(). */
+let watermarkMovedAt = /** @type {number|null} */ (null);
+/** A read has proved nothing can still commit behind lastSeenAt, so pulls may
+ * ask for strictly newer rows instead of re-reading the overlap. */
+let watermarkFirm = false;
+/**
+ * Bumped whenever the watermark is thrown away — a new event, a new account,
+ * "Sync now". A pull already in flight captured the old value and must not
+ * write its watermark back over the reset: it would land the new scope on the
+ * old scope's position, and every row older than that would never arrive.
+ */
+let scopeGen = 0;
 /** Cached on first call; stable for the device. */
 let cachedClientId = null;
 /**
@@ -94,20 +113,8 @@ let inflight = /** @type {Promise<void>|null} */ (null);
  *  threshold so the very first tick after (re)connecting checks them once. */
 let ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
 
-/**
- * Cache of Supabase clients keyed by event id. Each unique event we
- * push to gets its own client (because the x-session-id header is set
- * at construction time). Cheap to keep around.
- */
-const clientCache = new Map();
-function clientFor(sessionId) {
-	let c = clientCache.get(sessionId);
-	if (!c) {
-		c = createSupabaseClient(sessionId);
-		clientCache.set(sessionId, c);
-	}
-	return c;
-}
+/** The client for an event. createSupabaseClient() keeps one per event. */
+const clientFor = (sessionId) => createSupabaseClient(sessionId);
 
 /** Boot the sync layer. Called once from the layout. */
 export async function init() {
@@ -141,7 +148,7 @@ export async function setEventCode(eventCode) {
 		: navigator.onLine
 			? 'connecting'
 			: 'offline';
-	lastSeenAt = null; // do a full backfill whenever the scope changes
+	resetWatermark(); // do a full backfill whenever the scope changes
 	// New event = check schedule/assignments on the next tick, not 30s from now.
 	ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
 	if (typeof window !== 'undefined') {
@@ -180,7 +187,7 @@ export function kick() {
  */
 export function resync() {
 	if (!syncState.eventCode) return;
-	lastSeenAt = null;
+	resetWatermark();
 	// User explicitly asked for a full refresh — include schedule + assignments
 	// in that, even if we just polled them.
 	ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
@@ -237,6 +244,14 @@ function scheduleTick(delay) {
 	timer = setTimeout(tick, delay);
 }
 
+/** Forget how far the pull has got, so the next one backfills from scratch. */
+function resetWatermark() {
+	lastSeenAt = null;
+	watermarkMovedAt = null;
+	watermarkFirm = false;
+	scopeGen += 1;
+}
+
 /** Who this device is signed in as, for scoping sync; null when signed out. */
 function currentAccount() {
 	return auth.signedIn ? (auth.userId ?? 'signed-in') : null;
@@ -258,7 +273,7 @@ function accountChanged() {
 	if (who === syncedAs) return false;
 	syncedAs = who;
 	syncState.sessionId = null;
-	lastSeenAt = null;
+	resetWatermark();
 	ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
 	return true;
 }
@@ -306,7 +321,11 @@ async function runTick() {
 		// was shown "Waiting to upload: Nothing" while holding six unsent entries.
 		// That is the exact moment the count exists to reassure them, and it was
 		// the one moment it was wrong.
-		await refreshPendingCount();
+		//
+		// The scan it takes is the outbox too. pushOutbox() used to run its own, so
+		// every tick read and deserialised the whole entries table twice — auto
+		// tracks included — to arrive at the same list.
+		const unsynced = await refreshPendingCount();
 
 		if (typeof navigator !== 'undefined' && !navigator.onLine) {
 			syncState.status = 'offline';
@@ -325,7 +344,7 @@ async function runTick() {
 				return;
 			}
 		}
-		await pushOutbox();
+		await pushOutbox(unsynced ?? (await getUnsyncedEntries()));
 		await pullInbox();
 		// Best-effort: keep the cached schedule and this scout's assigned
 		// teams in sync with whatever the manager has published. Throttled
@@ -367,16 +386,28 @@ async function runTick() {
  */
 async function refreshPendingCount() {
 	try {
-		syncState.pendingCount = (await getUnsyncedEntries()).length;
+		const unsynced = await getUnsyncedEntries();
+		syncState.pendingCount = unsynced.length;
+		return unsynced;
 	} catch {
 		// A failed read must not take the tick down; the count is information, not
 		// a precondition for syncing.
+		return null;
 	}
 }
 
-async function pushOutbox() {
-	const unsynced = await getUnsyncedEntries();
+async function pushOutbox(unsynced) {
 	syncState.pendingCount = unsynced.length;
+	// One lookup per event per tick, not one per row. eventIdForCode() caches a
+	// resolved id but deliberately not a null, so every row queued for an event
+	// this device cannot reach asked the server again — twenty entries waiting on
+	// a membership meant twenty identical requests every three seconds, each
+	// answering "no".
+	const ids = new Map();
+	const idFor = (code) => {
+		if (!ids.has(code)) ids.set(code, eventIdForCode(code));
+		return ids.get(code);
+	};
 	let waiting = 0;
 	let firstError = null;
 	for (const local of unsynced) {
@@ -386,7 +417,7 @@ async function pushOutbox() {
 		// waited behind it for the rest of the event, retried and refused every
 		// three seconds. Now the others go up and the error is still reported.
 		try {
-			if (!(await pushOne(local))) waiting += 1;
+			if (!(await pushOne(local, await idFor(local.eventCode)))) waiting += 1;
 		} catch (error) {
 			waiting += 1;
 			firstError ??= error;
@@ -402,11 +433,11 @@ async function pushOutbox() {
  * Push one queued row. True once the server has answered for it; false when it
  * has to wait for an event this device can reach.
  */
-async function pushOne(local) {
+async function pushOne(local, sid) {
 	// An entry's eventCode field is its source of truth — we push to
 	// THAT event's scope, not the user's currently-selected one. This
 	// way switching events doesn't strand entries from a previous one.
-	const sid = await eventIdForCode(local.eventCode);
+	// `sid` is that event's id, resolved by the caller.
 	// No id means the event does not exist or this device is not on it. Skip
 	// rather than fail: the row stays queued locally and goes up the moment a
 	// manager creates the event or adds this scout to it. Nothing is lost.
@@ -652,7 +683,13 @@ export async function correctEntryTrack(entry, track) {
 }
 
 async function pullInbox() {
-	const client = clientFor(syncState.sessionId);
+	// Captured once. setEventCode() can swap the scope while this is awaiting a
+	// page, and a pull that switched events halfway would record one event's
+	// position as the other's.
+	const sid = syncState.sessionId;
+	const gen = scopeGen;
+	const readAt = performance.now();
+	const client = clientFor(sid);
 	// Watermark on updated_at, not created_at. created_at never moves, so an
 	// edited row sorts below every watermark and is never returned again —
 	// a peer's correction would be invisible forever. updated_at is set
@@ -662,19 +699,24 @@ async function pullInbox() {
 	// Reaching back by PULL_OVERLAP_MS, and paging by (updated_at, id): see
 	// sync-rules.js. The stamp is when a write STARTED, so a strict "after the
 	// newest row I have seen" skipped rows that committed late — permanently.
-	const from = pullFrom(lastSeenAt);
+	//
+	// Once the watermark is firm the reach-back has done its job and the pull
+	// asks only for what is newer. See watermarkSettled().
+	const firm = watermarkFirm && !!lastSeenAt;
+	const from = firm ? lastSeenAt : pullFrom(lastSeenAt);
 	let cursor = { ts: from, id: null };
 	let newest = lastSeenAt;
 	for (;;) {
 		let q = client
 			.from('entries')
 			.select('*')
-			.eq('event_id', syncState.sessionId)
+			.eq('event_id', sid)
 			.order('updated_at', { ascending: true })
 			.order('id', { ascending: true })
 			.limit(PULL_PAGE);
 		const after = pageAfter(cursor);
 		if (after) q = q.or(after);
+		else if (cursor.ts && firm) q = q.gt('updated_at', cursor.ts);
 		else if (cursor.ts) q = q.gte('updated_at', cursor.ts);
 		const { data, error } = await q;
 		if (error) throw error;
@@ -690,7 +732,19 @@ async function pullInbox() {
 	// Only once every page has landed. A pull that fails halfway keeps the old
 	// watermark and re-reads from there, rather than recording progress it did
 	// not make.
-	lastSeenAt = newest;
+	//
+	// And only if the scope it read is still the scope. A reset while this was in
+	// flight — "Sync now" pressed mid-tick, an event switch — asked for a
+	// backfill; writing this watermark over it would quietly cancel that.
+	if (gen !== scopeGen) return;
+	if (newest !== lastSeenAt) {
+		lastSeenAt = newest;
+		// The pull has finished, so the server's clock is past `newest` by now.
+		watermarkMovedAt = performance.now();
+		watermarkFirm = false;
+	} else if (!firm && watermarkSettled(watermarkMovedAt, readAt)) {
+		watermarkFirm = true;
+	}
 }
 
 /** Bring one pulled row into IndexedDB. Idempotent: the overlap re-reads rows. */

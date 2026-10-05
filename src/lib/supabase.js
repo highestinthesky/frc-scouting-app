@@ -87,46 +87,47 @@ export function createSupabaseClient(sessionId, opts = {}) {
 	if (!isUuid(sessionId)) {
 		throw new Error('Supabase client requires a valid session id.');
 	}
-	const headers = { 'x-session-id': sessionId };
-	return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-		auth: {
-			// Event clients never own or persist an auth session. Their fetch
-			// wrapper below asks the single auth client for its current token on
-			// every request. Reading the same storage key here only captures the
-			// session when this client is constructed; cached event clients would
-			// otherwise keep sending a token from before the latest refresh.
-			persistSession: false,
-			autoRefreshToken: false,
-			detectSessionInUrl: false
-		},
-		global: { headers, fetch: fetchWithCurrentAuth }
-	});
+	// One client per event, for the life of the tab.
+	//
+	// This built a new client on every call, and 24 call sites call it — four of
+	// them on every 30-second sync tick (schedule, assignments, overrides,
+	// reminders). Each one came with its own GoTrueClient, and a GoTrueClient in
+	// a browser adds a `visibilitychange` listener to `window` that nothing ever
+	// removes. So no client was ever collected: roughly 500 an hour, every one of
+	// them woken each time the phone was unlocked or the tab came back, and a
+	// "Multiple GoTrueClient instances" warning for each in the console. Only the
+	// sync layer kept a cache; everything else leaked.
+	let client = clients.get(sessionId);
+	if (!client) {
+		client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+			// The token comes from the one auth client, asked at request time — not at
+			// construction, so a cached client sees sign-in, sign-out and every
+			// refresh. Supplying it this way also means supabase-js builds no auth
+			// client of its own at all, which is what the leak above was made of.
+			// No session answers null, and the request goes out under the anon key.
+			accessToken: currentAccessToken,
+			global: { headers: { 'x-session-id': sessionId } }
+		});
+		clients.set(sessionId, client);
+	}
+	return client;
 }
 
+/** @type {Map<string, import('@supabase/supabase-js').SupabaseClient>} */
+const clients = new Map();
+
 /**
- * Supabase's data client starts each request with the anon-key Authorization
- * header. Replace it with the access token owned by the current auth client,
- * when one exists. With no session (the pre-cutover legacy path), leaving the
- * header alone intentionally keeps anonymous event-code sync working.
- *
- * This runs at request time, not client-construction time, so a cached event
- * client immediately sees sign-in, sign-out and token refreshes.
+ * The current user's access token, or null when nobody is signed in. A failed
+ * read is null too: the request goes out under the anon key, is refused by RLS,
+ * and the sync layer retries once auth recovers.
  */
-async function fetchWithCurrentAuth(input, init = {}) {
+async function currentAccessToken() {
 	try {
 		const { data } = await getAuthClient().auth.getSession();
-		const token = data.session?.access_token;
-		if (token) {
-			const headers = new Headers(init.headers);
-			headers.set('authorization', `Bearer ${token}`);
-			return fetch(input, { ...init, headers });
-		}
+		return data.session?.access_token ?? null;
 	} catch (_error) {
-		// A refresh/read failure must not break the legacy anonymous path. The
-		// request will either work under the additive policies or be rejected
-		// after cutover and retried by the sync layer when auth recovers.
+		return null;
 	}
-	return fetch(input, init);
 }
 
 // ─── auth ──────────────────────────────────────────────────────────────────
