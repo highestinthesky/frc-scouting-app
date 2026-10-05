@@ -4,7 +4,7 @@ This is the single planning document. Older improvement drafts and handoff
 documents were folded into it; update this file instead of starting another
 plan.
 
-Last audited: 2026-10-04. Done on branch `pre-kickoff`, unpushed: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January.
+Last audited: 2026-10-04. Included in v0.83 from `pre-kickoff`: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January.
 
 Completion audit: saved-track edits preserve their recorded sample rate, and
 Stop/Escape fills samples and closes held actions using the current clock,
@@ -37,6 +37,7 @@ had to be renumbered twice.
 | Release | Branch | Merged | What it was |
 |---|---|---|---|
 | v0.82 | (pre-scheme) | 2026-09-01 | the last release numbered the old way |
+| v0.83 | `pre-kickoff` | 2026-10-04 | season modules, stamped auto tracks, practice mode, and recorder timing fixes |
 
 ## Where the app is now
 
@@ -49,10 +50,10 @@ had to be renumbered twice.
 | Accounts and roles | Shipped; manager-created accounts and invite codes, three roles enforced in RLS |
 | Studio | Shipped v0.73–v0.74 and **to be reorganised** (*Studio reorganised*, below) — five noun-named pages holding nine jobs, four of them split across two pages |
 | What a scout sees at an event | One page since v0.82; the event's full schedule is still missing (*The scout's schedule*) |
-| Interactive auto scouting | Shipped in v0.81 — record, correct, replay, route clustering, action chips. The field, actions, questions, cycle, endgame and auto length are season data in `seasons/2026.js` (branch `pre-kickoff`) |
+| Interactive auto scouting | Shipped in v0.81 — record, correct, replay, route clustering, action chips. v0.83 moves the field, actions, questions, cycle, endgame and auto length into season data in `seasons/2026.js` |
 | What happened in one match | Shipped in v0.81; reachable from Schedule and Coverage since v0.81.2 |
-| Surviving a season change | Built on `pre-kickoff`, unpushed (*The season boundary*): a season is one module, `CURRENT_SEASON` is the switch, tracks carry their season, and the throwaway 1999 season proves the swap. `form-config.js` remains the scalar half |
-| Practice mode | Built on `pre-kickoff`, unpushed: `/practice`, the recorder on the current season with nothing kept, reachable before a device has an event |
+| Surviving a season change | v0.83 (*The season boundary*): a season is one module, `CURRENT_SEASON` is the switch, tracks carry their season, and the throwaway 1999 season proves the swap. `form-config.js` remains the scalar half |
+| Practice mode | v0.83: `/practice`, the recorder on the current season with nothing kept, reachable before a device has an event |
 | Pit scouting and the team profile | Not built (*Pit scouting*) |
 | Native apps | Paused — see *Deliberately not in v0.8* |
 | Used by a scout, ever | **No.** Every verification is synthetic pointer events from a console. The offseason was cancelled, so the first real use is a competition |
