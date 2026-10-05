@@ -136,7 +136,7 @@
 		width: 100%;
 		min-width: 0;
 		font: inherit;
-		font-size: var(--fs-md);
+		font-size: var(--fs-control);
 		color: var(--text-primary);
 		background: var(--bg-card);
 		border: 1px solid var(--border-strong);

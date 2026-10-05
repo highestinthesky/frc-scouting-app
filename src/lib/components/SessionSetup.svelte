@@ -81,7 +81,7 @@
 <style>
 	.setup {
 		max-width: 28rem;
-		margin: var(--space-6) auto;
+		margin: calc(var(--space-6) + var(--safe-top)) auto var(--space-6);
 		padding: var(--space-6) var(--space-5);
 	}
 	h1 { margin: 0 0 var(--space-5); }

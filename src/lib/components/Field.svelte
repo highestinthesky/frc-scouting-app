@@ -400,9 +400,14 @@
 		cursor: pointer;
 		touch-action: manipulation;
 	}
-	.ct-btn:hover:not(:disabled) {
-		background: var(--accent-soft);
-		border-color: var(--accent);
+	/* Hover only where a pointer can actually hover. A phone applies :hover on
+	   tap and keeps it until the next tap elsewhere, so the "+" just pressed
+	   stayed tinted — on a counter, where it reads as "still pressed". */
+	@media (hover: hover) {
+		.ct-btn:hover:not(:disabled) {
+			background: var(--accent-soft);
+			border-color: var(--accent);
+		}
 	}
 	.ct-btn:active:not(:disabled) { transform: scale(0.94); }
 	.ct-btn:disabled { opacity: 0.35; cursor: default; }
@@ -454,10 +459,12 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.tag-pill:hover {
-		background: var(--accent-soft);
-		color: var(--accent);
-		border-color: var(--accent);
+	@media (hover: hover) {
+		.tag-pill:hover {
+			background: var(--accent-soft);
+			color: var(--accent);
+			border-color: var(--accent);
+		}
 	}
 
 	/* ── defense-entry ────────────────────────────────────────────── */

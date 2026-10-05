@@ -630,6 +630,8 @@
 	.handover code {
 		font-family: ui-monospace, monospace;
 		font-size: var(--fs-md);
+		/* One tap selects the whole password. WebKit only honours the prefix. */
+		-webkit-user-select: all;
 		user-select: all;
 	}
 	.handover-warn { margin: 0; color: var(--text-muted); font-size: var(--fs-sm); }
