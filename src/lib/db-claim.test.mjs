@@ -16,7 +16,10 @@ import {
 	addEntry,
 	claimEntriesForAccount,
 	getOrCreateClientId,
-	getUnsyncedEntries
+	getUnsyncedEntries,
+	clearEntries,
+	getPullWatermark,
+	setPullWatermark
 } from './db.js';
 
 let pass = 0;
@@ -92,6 +95,34 @@ ok(
 
 ok('no account is a no-op', (await claimEntriesForAccount('', 'x')) === 0);
 ok('a null account is a no-op', (await claimEntriesForAccount(null)) === 0);
+
+// ─── the pull position kept across launches ─────────────────────────────────
+//
+// It means "every row up to here is on this device", so it is only as true as
+// the rows are still here. Clearing them must clear it, or every one of them
+// stays on the server and is never downloaded again.
+{
+	const a = 'profile-1|11111111-1111-4111-8111-111111111111';
+	const b = 'profile-2|11111111-1111-4111-8111-111111111111';
+	ok('nothing saved reads as no position', (await getPullWatermark(a)) === null);
+	await setPullWatermark(a, '2026-10-05T12:00:05.123456+00:00');
+	await setPullWatermark(b, '2026-10-05T09:00:00+00:00');
+	ok('a position reads back exactly, microseconds included',
+		(await getPullWatermark(a)) === '2026-10-05T12:00:05.123456+00:00');
+	ok('another account at the same event keeps its own',
+		(await getPullWatermark(b)) === '2026-10-05T09:00:00+00:00');
+	await setPullWatermark(b, null);
+	ok('null forgets one scope', (await getPullWatermark(b)) === null);
+	ok('and leaves the others', (await getPullWatermark(a)) !== null);
+	await setPullWatermark(b, 'not a time');
+	ok('an unreadable position reads as none, so the pull backfills', (await getPullWatermark(b)) === null);
+
+	ok('precondition: there are entries to clear', (await db.entries.count()) > 0);
+	await clearEntries();
+	ok('clearing entries clears them', (await db.entries.count()) === 0);
+	ok('and forgets every pull position with them', (await getPullWatermark(a)) === null);
+	ok('the device id survives a clear', (await getOrCreateClientId()) === mine);
+}
 
 await db.close();
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

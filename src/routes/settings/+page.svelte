@@ -3,8 +3,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { session } from '$lib/session.svelte.js';
-	import { clearEntries } from '$lib/db.js';
-	import { flush, resync } from '$lib/sync.svelte.js';
+	import { flush, resync, clearLocalEntries } from '$lib/sync.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
 	import EventPicker from '$lib/components/EventPicker.svelte';
@@ -102,7 +101,7 @@
 			danger: true
 		});
 		if (!ok) return;
-		await clearEntries();
+		await clearLocalEntries();
 		// Straight back down. Clearing used to leave the device without its own
 		// synced entries for good: the pull skipped rows this device recorded,
 		// and it only re-read the event on a cold start.

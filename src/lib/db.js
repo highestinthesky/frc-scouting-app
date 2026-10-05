@@ -68,7 +68,9 @@ db.version(3).stores({
 // variable, so a reload, a PWA relaunch or an event-code change re-pulls the
 // entire event. While it runs the outbox is stalled behind it and the sync
 // indicator reads "connecting" — the app looks broken at exactly the moment a
-// scout opens it to record.
+// scout opens it to record. (A cold start now resumes from a saved position —
+// see getPullWatermark — but an event switch, a new account, Sync now and
+// Clear entries still backfill, so the index still earns its place.)
 db.version(4).stores({
 	entries:
 		'++id, eventCode, matchNumber, teamNumber, scoutName, createdAt, remoteId, ' +
@@ -199,9 +201,55 @@ export async function deleteEntry(id) {
 	return db.entries.delete(id);
 }
 
-/** Wipe all entries (used after a confirmed export, if the user wants). */
+/**
+ * Wipe all entries, and with them the record of how far the pull has got.
+ *
+ * The two go together because the second describes the first. The sync layer
+ * keeps its pull position across launches (see getPullWatermark), and that
+ * position means "every row up to here is already on this device". Clearing
+ * the rows and keeping the position would leave every one of them on the
+ * server and never downloaded again.
+ */
 export async function clearEntries() {
-	return db.entries.clear();
+	return db.transaction('rw', db.entries, db.settings, async () => {
+		await db.entries.clear();
+		await db.settings.delete(PULL_WATERMARKS);
+	});
+}
+
+// ─── the pull position, across launches ────────────────────────────────────
+//
+// One updated_at per (account, event): the newest server row this device has
+// applied for that account at that event. The sync layer resumes from it
+// rather than re-downloading the whole event on every cold start. Keyed by
+// account as well as event because a shared device holds the rows the LAST
+// account pulled, and a new account backfills as itself.
+
+const PULL_WATERMARKS = 'pull-watermarks';
+
+/**
+ * @param {string} scope  `${account}|${eventId}`
+ * @returns {Promise<string|null>}
+ */
+export async function getPullWatermark(scope) {
+	const all = await getSetting(PULL_WATERMARKS);
+	const at = all?.[scope];
+	return typeof at === 'string' && Number.isFinite(Date.parse(at)) ? at : null;
+}
+
+/**
+ * Record a pull position, or forget it with null.
+ *
+ * @param {string} scope
+ * @param {string|null} at
+ */
+export async function setPullWatermark(scope, at) {
+	return db.transaction('rw', db.settings, async () => {
+		const all = { ...((await getSetting(PULL_WATERMARKS)) ?? {}) };
+		if (at) all[scope] = at;
+		else delete all[scope];
+		await setSetting(PULL_WATERMARKS, all);
+	});
 }
 
 /** Read a setting value (or undefined if not set). */

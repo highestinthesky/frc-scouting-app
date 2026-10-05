@@ -148,9 +148,21 @@ const ok = (name, cond, detail = '') => {
 	const editSrc = readFileSync(path.join(here, '../routes/scouting/edit/+page.svelte'), 'utf8');
 
 	ok('event clients fetch the current auth-client session for each request',
-		/fetchWithCurrentAuth[\s\S]*?getAuthClient\(\)\.auth\.getSession\(\)/.test(supabaseSrc));
-	ok('event clients do not persist a second, stale auth session',
-		/persistSession:\s*false[\s\S]*?fetch:\s*fetchWithCurrentAuth/.test(supabaseSrc));
+		/accessToken:\s*currentAccessToken/.test(supabaseSrc) &&
+			/async function currentAccessToken[\s\S]*?getAuthClient\(\)\.auth\.getSession\(\)/.test(supabaseSrc));
+	// With `accessToken` supplied, supabase-js builds no auth client for an event
+	// client at all — no second session to go stale, and no window listener per
+	// client. Configuring one alongside would bring both back.
+	{
+		const factory = supabaseSrc.slice(
+			supabaseSrc.indexOf('export function createSupabaseClient'),
+			supabaseSrc.indexOf('const clients = new Map()')
+		);
+		ok('event clients do not own a second, stale auth session',
+			factory.length > 0 && !/persistSession|autoRefreshToken|auth:\s*\{/.test(factory));
+		ok('event clients are built once per event, not once per call',
+			/clients\.get\(sessionId\)[\s\S]*?clients\.set\(sessionId, client\)/.test(factory));
+	}
 	ok('an orphaned signed-in user is allowed to remain on the registration route',
 		/onRegisterRoute\s*&&\s*!auth\.orphaned/.test(layoutSrc));
 	ok('the registration form supports finishing an orphaned account',

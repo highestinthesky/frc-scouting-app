@@ -16,6 +16,7 @@ import {
 	pullFrom,
 	pageAfter,
 	laterOf,
+	watermarkSettled,
 	PULL_OVERLAP_MS
 } from './sync-rules.js';
 
@@ -198,6 +199,17 @@ const localRow = (over = {}) => ({
 	ok('compared as times, not text, across offset spellings',
 		laterOf('2026-10-04T12:00:05Z', '2026-10-04T12:00:05.5+00:00') === '2026-10-04T12:00:05.5+00:00');
 	ok('nothing seen yet takes the first stamp', laterOf(null, '2026-10-04T12:00:01+00:00') === '2026-10-04T12:00:01+00:00');
+}
+
+// The overlap is measured back from the newest row SEEN, so with nothing new it
+// never moved and the last burst of rows came down on every tick for good. It
+// settles once a read began a full overlap after the watermark last moved.
+{
+	ok('nothing seen yet never settles', watermarkSettled(null, 1e9) === false);
+	ok('a young watermark keeps reaching back', watermarkSettled(1000, 1000 + PULL_OVERLAP_MS - 1) === false);
+	ok('a read a full overlap later settles it', watermarkSettled(1000, 1000 + PULL_OVERLAP_MS) === true);
+	ok('a read that began BEFORE the watermark moved proves nothing', watermarkSettled(5000, 1000) === false);
+	ok('an unreadable clock never settles', watermarkSettled(1000, NaN) === false);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);
