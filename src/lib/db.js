@@ -186,7 +186,8 @@ export async function claimEntriesForAccount(profileId, displayName = '') {
 				// sends the new attribution up. A row that was never pushed has a null
 				// remoteId and is already in that set; setting the flag is harmless
 				// there and necessary for one that was.
-				pendingSync: true
+				pendingSync: true,
+				rev: (row.rev ?? 0) + 1
 			});
 		}
 	});
@@ -258,13 +259,24 @@ export async function getUnsyncedEntries() {
  * the dirty flag. Clearing matters — a row left dirty is retried on every
  * 3-second tick forever.
  */
-export async function markEntrySynced(localId, remoteId, submittedBy = undefined) {
-	const patch = { remoteId, pendingSync: false };
-	// The INSERT response is authoritative for attribution. Migration 0011
-	// stamps auth.uid() server-side, so persist what Postgres actually accepted
-	// rather than the claim the pre-cutover client sent.
-	if (submittedBy !== undefined) patch.submittedBy = submittedBy;
-	return db.entries.update(localId, patch);
+export async function markEntrySynced(localId, remoteId, submittedBy = undefined, sentRev = undefined) {
+	return db.entries
+		.where(':id')
+		.equals(localId)
+		.modify((row) => {
+			row.remoteId = remoteId;
+			// Clean only if the row is still the revision that was sent. A push
+			// reads the row, waits on the network, and then lands here; an edit
+			// saved in between bumped `rev`, and clearing the flag anyway meant
+			// that edit never went up — and the pull's echo of the old values
+			// then overwrote it on screen, since a clean row takes the server's
+			// copy. Still dirty, it goes out on the next tick.
+			if ((row.rev ?? 0) === (sentRev ?? 0)) row.pendingSync = false;
+			// The INSERT response is authoritative for attribution. Migration 0011
+			// stamps auth.uid() server-side, so persist what Postgres actually accepted
+			// rather than the claim the pre-cutover client sent.
+			if (submittedBy !== undefined) row.submittedBy = submittedBy;
+		});
 }
 
 /**
@@ -284,6 +296,21 @@ export async function applyRemoteUpdate(localId, fields) {
 	if (!shouldApplyRemote(local, fields)) return false;
 	await db.entries.update(localId, fields);
 	return true;
+}
+
+/**
+ * Mirror a change the server has already made, without queueing a push.
+ *
+ * For writes that went through an RPC — correct_entry_track() merges one key
+ * server-side precisely so that this device's possibly-stale copy of the rest
+ * of the row is never sent. Routing the local mirror through updateEntry()
+ * flagged the row and pushed that whole copy anyway on the next tick.
+ *
+ * @param {number} localId
+ * @param {object} fields
+ */
+export async function mirrorServerChange(localId, fields) {
+	return db.entries.update(localId, fields);
 }
 
 /** The local row holding a given remote UUID, or undefined. */
@@ -321,7 +348,17 @@ export async function updateEntry(id, patch) {
 	// Always flag the row for re-push. Leaving this to callers is how the
 	// original bug survived: /edit patched the row and the sync layer had no
 	// way to know it had changed.
-	return db.entries.update(id, { ...patch, pendingSync: true });
+	//
+	// And bump `rev`, so a push already in flight with the previous revision
+	// cannot mark this one clean — see markEntrySynced().
+	return db.entries
+		.where(':id')
+		.equals(typeof id === 'string' ? Number(id) : id)
+		.modify((row) => {
+			Object.assign(row, patch);
+			row.pendingSync = true;
+			row.rev = (row.rev ?? 0) + 1;
+		});
 }
 
 /**
