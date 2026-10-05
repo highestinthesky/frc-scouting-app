@@ -4,7 +4,7 @@ This is the single planning document. Older improvement drafts and handoff
 documents were folded into it; update this file instead of starting another
 plan.
 
-Last audited: 2026-10-04. Included in v0.83 from `pre-kickoff`: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January. v0.84 from `ios-readiness`: see the native iOS notes under *Deliberately not in v0.8*, and the sync rules in `CLAUDE.md`.
+Last audited: 2026-10-04. Included in v0.83 from `pre-kickoff`: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January. v0.84 from `ios-readiness`: see the native iOS notes under *Deliberately not in v0.8*, and the sync rules in `CLAUDE.md`. v0.85: the sync rules in `CLAUDE.md`, rules five to eight.
 
 Completion audit: saved-track edits preserve their recorded sample rate, and
 Stop/Escape fills samples and closes held actions using the current clock,
@@ -39,6 +39,7 @@ had to be renumbered twice.
 | v0.82 | (pre-scheme) | 2026-09-01 | the last release numbered the old way |
 | v0.83 | `pre-kickoff` | 2026-10-04 | season modules, stamped auto tracks, practice mode, and recorder timing fixes |
 | v0.84 | `ios-readiness` | 2026-10-05 | iPhone/WebKit fixes, sync that loses and stales nothing, and dismissals, drafts and the scout name following the account (`0030` applied 2026-10-05) |
+| v0.85 | `claude/happy-fermi-q6ndj5` | 2026-10-05 | sync traffic: settled pulls download nothing, a relaunch resumes instead of re-downloading the event, one client per event (no leaked listeners), deletes that cannot race an upload, and `sync.test.mjs` running the real sync layer. No migration |
 
 ## Where the app is now
 
