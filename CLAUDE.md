@@ -643,6 +643,14 @@ went missing or stale without anything saying so (`sync.svelte.js`,
 Sign-in and sign-out re-resolve the event and backfill from scratch;
 sign-out and Clear entries call `flush()` and report the unsent count.
 
+**Dismissals and drafts follow the account** (`account-state.js`, `0030`).
+Both are kept per account on the device and mirrored best-effort to
+own-rows-only tables. Every server call there is bounded and may fail — a
+missing table included — and falls back to the device copy, which is what
+lets the client ship ahead of `0030`. A saved entry leaves a draft
+TOMBSTONE rather than deleting, so a server copy whose delete never landed
+cannot reopen as unsaved; `pickDraft()` holds the rule.
+
 `0023` narrows how often that can happen rather than lifting the rule. The
 invite now carries the name the manager typed and `redeem_invite` uses it over
 whatever the redeemer sends, so a profile and the assignments agree by
@@ -895,6 +903,11 @@ Checked, not remembered. A new session should re-verify before trusting it.
   `0013` was, then superseded by the `0001`/`0008` re-run. All three live in
   `supabase/superseded/`. `0027` landed 2026-10-04, after which
   `scripts/keepalive.mjs` dropped its pre-0027 fallback.
+- **`0030` is written and NOT applied** (2026-10-04). It is the one
+  migration that may follow its client: `account-state.js` treats a missing
+  `reminder_dismissals`/`entry_drafts` table as "device only", which is how
+  dismissals and drafts behaved before. Until it lands they are scoped per
+  account on each device but do not cross devices.
 - **The replica matches production exactly**, as of 2026-10-04: built with
   `scripts/rebuild_prod_replica.sh` plus `0016`–`0026` (before `0015` landed), its `public` schema dump
   is line-for-line production's apart from comments and the order of ACL

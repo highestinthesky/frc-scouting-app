@@ -4,7 +4,7 @@ This is the single planning document. Older improvement drafts and handoff
 documents were folded into it; update this file instead of starting another
 plan.
 
-Last audited: 2026-10-04. Included in v0.83 from `pre-kickoff`: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January.
+Last audited: 2026-10-04. Included in v0.83 from `pre-kickoff`: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January. v0.84 from `ios-readiness`: see the native iOS notes under *Deliberately not in v0.8*, and the sync rules in `CLAUDE.md`.
 
 Completion audit: saved-track edits preserve their recorded sample rate, and
 Stop/Escape fills samples and closes held actions using the current clock,
@@ -38,6 +38,7 @@ had to be renumbered twice.
 |---|---|---|---|
 | v0.82 | (pre-scheme) | 2026-09-01 | the last release numbered the old way |
 | v0.83 | `pre-kickoff` | 2026-10-04 | season modules, stamped auto tracks, practice mode, and recorder timing fixes |
+| v0.84 | `ios-readiness` | 2026-10-04 | iPhone/WebKit fixes, sync that loses and stales nothing, and dismissals, drafts and the scout name following the account (`0030` written, not yet applied) |
 
 ## Where the app is now
 
