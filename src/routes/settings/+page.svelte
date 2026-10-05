@@ -4,6 +4,7 @@
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { session } from '$lib/session.svelte.js';
 	import { clearEntries } from '$lib/db.js';
+	import { flush, resync } from '$lib/sync.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
 	import EventPicker from '$lib/components/EventPicker.svelte';
@@ -28,7 +29,7 @@
 	async function adoptAccountName() {
 		saving = true;
 		try {
-			await session.update({ scoutName: auth.displayName });
+			await session.update({ scoutName: auth.displayName, scoutNameAccount: auth.profile?.id ?? null });
 			scoutName = auth.displayName;
 			savedMsg = 'This device now records as your account name.';
 		} finally {
@@ -44,7 +45,9 @@
 		savedMsg = '';
 		try {
 			// The event is the picker's to set — this form only owns the name now.
-			await session.update({ scoutName: scoutName.trim() });
+			// Typed by hand, signed out: a name no account owns, so the next
+			// sign-in leaves it alone unless it is that account's own name.
+			await session.update({ scoutName: scoutName.trim(), scoutNameAccount: null });
 			savedMsg = 'Saved.';
 		} finally {
 			saving = false;
@@ -52,32 +55,59 @@
 	}
 
 
+	const entries = (n) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
+	let flushing = $state(false);
+
+	// Both of these make what is on this phone harder to reach, so each sends
+	// what it can first and then says exactly what did not go — a count, not a
+	// "may". A scout told "entries stay on the phone" will sign out with six
+	// unsent matches and assume they went.
 	async function signOut() {
-		const ok = await dialog.confirm({
-			title: 'Sign out of this device?',
-			body:
-				'Entries already recorded stay on the phone and sync when you sign ' +
-				'back in.\n\nSign in again before your next event — the app needs a ' +
-				'connection for that, and a venue is a poor place to discover it.',
-			confirmLabel: 'Sign out'
-		});
+		flushing = true;
+		const waiting = await flush().finally(() => (flushing = false));
+		const again =
+			'Sign in again before your next event — the app needs a connection for ' +
+			'that, and a venue is a poor place to discover it.';
+		const ok = await dialog.confirm(
+			waiting > 0
+				? {
+						title: `Sign out with ${entries(waiting)} unsent?`,
+						body:
+							`${entries(waiting)} ${waiting === 1 ? 'has' : 'have'} not reached your team. ` +
+							`${waiting === 1 ? 'It stays' : 'They stay'} on this phone and send${waiting === 1 ? 's' : ''} under whoever signs in on it next.\n\n` +
+							again,
+						confirmLabel: 'Sign out anyway'
+					}
+				: {
+						title: 'Sign out of this device?',
+						body: 'Everything recorded here has reached your team.\n\n' + again,
+						confirmLabel: 'Sign out'
+					}
+		);
 		if (!ok) return;
 		await auth.signOut();
 	}
 
 	async function clearAll() {
+		flushing = true;
+		const waiting = await flush().finally(() => (flushing = false));
 		const ok = await dialog.confirm({
-			title: 'Clear every entry on this device?',
+			title: waiting > 0 ? `Clear ${entries(waiting)} that never sent?` : 'Clear every entry on this device?',
 			body:
-				'This cannot be undone.\n\n' +
-				'Entries already synced to your team are unaffected — this only ' +
-				'empties this phone. Export a CSV first if you want a copy.',
+				(waiting > 0
+					? `${entries(waiting)} ${waiting === 1 ? 'has' : 'have'} not reached your team and will be lost. `
+					: '') +
+				"Your team's entries for this event download again.",
 			confirmLabel: 'Clear entries',
 			danger: true
 		});
 		if (!ok) return;
 		await clearEntries();
-		clearMsg = 'All entries cleared.';
+		// Straight back down. Clearing used to leave the device without its own
+		// synced entries for good: the pull skipped rows this device recorded,
+		// and it only re-read the event on a cold start.
+		resync();
+		clearMsg = 'Cleared. Downloading this event again.';
 	}
 
 </script>
@@ -109,14 +139,14 @@
 			     job, and Settings is left with the one control that belongs to this
 			     device. -->
 			<div class="acct-actions">
-				<Button onclick={signOut}>Sign out</Button>
+				<Button onclick={signOut} disabled={flushing}>{flushing ? 'Sending…' : 'Sign out'}</Button>
 			</div>
 		{:else if auth.orphaned}
 			<p class="muted">
 				Signed in as <strong>{auth.authEmail}</strong>, but account setup is incomplete.
 				<a href="{base}/register/">Redeem an invite</a> to finish.
 			</p>
-			<Button onclick={signOut}>Sign out</Button>
+			<Button onclick={signOut} disabled={flushing}>{flushing ? 'Sending…' : 'Sign out'}</Button>
 		{:else}
 			<p class="muted">
 				Not signed in. <a href="{base}/">Sign in</a> or
@@ -197,7 +227,7 @@
 	<section>
 		<h2>Danger zone</h2>
 		<p class="muted">Wipes every entry on this device. Synced copies are unaffected.</p>
-		<Button variant="danger" onclick={clearAll}>Clear all entries</Button>
+		<Button variant="danger" onclick={clearAll} disabled={flushing}>Clear all entries</Button>
 		{#if clearMsg}<small class="muted ok">{clearMsg}</small>{/if}
 	</section>
 </main>
