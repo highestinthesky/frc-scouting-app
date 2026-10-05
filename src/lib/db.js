@@ -78,6 +78,28 @@ db.version(4).stores({
 });
 
 /**
+ * Ask the browser not to evict this origin's storage, once per page load.
+ *
+ * An unsynced entry exists only here, and storage is "best effort" by default:
+ * the browser may clear it under pressure. (Safari's separate seven-day cap on
+ * a site nobody has visited is not what this answers — installing to the home
+ * screen, or the native app, is.) Asked at the first save
+ * because that is the moment the device starts holding something that cannot
+ * be recreated. Never awaited and never allowed to throw — the answer changes
+ * nothing about whether the entry is written.
+ */
+let persistenceAsked = false;
+function requestPersistence() {
+	if (persistenceAsked) return;
+	persistenceAsked = true;
+	try {
+		globalThis.navigator?.storage?.persist?.().catch(() => {});
+	} catch {
+		/* no storage manager — nothing to ask */
+	}
+}
+
+/**
  * Add a new scouting entry. New rows are stamped with a stable per-device
  * `clientId` and a null `remoteId` — the sync layer fills the `remoteId` in
  * once the row is pushed to Supabase.
@@ -87,6 +109,7 @@ db.version(4).stores({
  */
 export async function addEntry(entry) {
 	const clientId = await getOrCreateClientId();
+	requestPersistence();
 	return db.entries.add({
 		...entry,
 		createdAt: new Date().toISOString(),

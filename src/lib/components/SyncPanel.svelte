@@ -62,17 +62,40 @@
 				deviceId: await getOrCreateClientId()
 			};
 			const bundle = buildBundle(mine, meta);
-			const blob = new Blob([JSON.stringify(bundle, null, 1)], { type: 'application/json' });
-			const url = URL.createObjectURL(blob);
+			const file = new File([JSON.stringify(bundle, null, 1)], bundleFilename(meta), {
+				type: 'application/json'
+			});
+			const n = `${mine.length} ${mine.length === 1 ? 'entry' : 'entries'}`;
+
+			// On a phone, the share sheet. "Send it to a manager" is what a scout
+			// does next, and the sheet is AirDrop, Messages and Save to Files in one
+			// tap — where a download left a file in Files for them to go and find.
+			// It is also the only way out of a native webview, which has no
+			// downloads at all. Not on a laptop: the macOS sheet has no "save".
+			if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+				try {
+					await navigator.share({ files: [file] });
+					exportNote = `${n} shared.`;
+					return;
+				} catch (err) {
+					// Closing the sheet is a decision, not a failure.
+					if (err?.name === 'AbortError') return;
+					// Anything else (the tap's activation spent on the read above,
+					// say) falls through to the download, which still works.
+				}
+			}
+
+			const url = URL.createObjectURL(file);
 			const a = document.createElement('a');
 			a.href = url;
-			a.download = bundleFilename(meta);
+			a.download = file.name;
 			a.click();
-			// Revoked on the next frame, not immediately: Safari has not finished
-			// reading the blob when click() returns, and revoking too early gives
-			// an empty file with no error anywhere.
-			setTimeout(() => URL.revokeObjectURL(url), 0);
-			exportNote = `${mine.length} ${mine.length === 1 ? 'entry' : 'entries'} saved. Send it to a manager.`;
+			// Not revoked straight away: Safari has not finished reading the blob
+			// when click() returns — and on iOS it is still asking whether to
+			// download at all — and revoking too early gives an empty file with no
+			// error anywhere. csv.js waits the same second for the same reason.
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			exportNote = `${n} saved. Send it to a manager.`;
 		} catch (err) {
 			exportNote = err?.message ?? String(err);
 		} finally {
