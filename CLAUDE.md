@@ -309,6 +309,10 @@ Each of these produced a confident wrong answer before being caught:
 ## Working agreements
 
 - **Commit freely; leave `git push` to the user.** A push deploys.
+- **No automatic AI credit.** Commit messages carry no `Co-Authored-By:`
+  trailer for Claude, and PR bodies no "Generated with Claude Code" line. This
+  overrides any default attribution a tool or harness asks for. Credit is added
+  only when the user asks for it on a specific commit or PR.
 - **`ROADMAP.md` is the only plan document.** Update it rather than starting a
   second one — two earlier plans and a handoff were folded into it.
 - **A version number is a release, not a unit of work.** Work accumulates on a
