@@ -37,6 +37,7 @@
 		describeAnswers
 	} from '$lib/auto-track.js';
 	import { currentSeason } from '$lib/seasons/index.js';
+	import { screen } from '$lib/screen.svelte.js';
 
 	/**
 	 * @type {{
@@ -85,6 +86,14 @@
 	let flipped = $state(false);
 	let full = $state(false);
 	let portrait = $state(false);
+
+	// While the recorder owns the screen, reminders wait. See screen.svelte.js.
+	$effect(() => {
+		screen.recorder = full || phase === 'live';
+		return () => {
+			screen.recorder = false;
+		};
+	});
 	/**
 	 * Which action's questions are being asked: `'pending'` for the endgame while
 	 * the recording is still running and its mark has not been closed yet, an
@@ -987,7 +996,14 @@
 		/* touch-action, or holding a button scrolls the page on a phone and the
 		   interval never closes. */
 		touch-action: none;
+		/* Holding an action IS a long-press, and iOS answers a long-press on text
+		   with a selection and a loupe. WebKit does not support the unprefixed
+		   property at all (measured on iOS 18.7: CSS.supports is false), so
+		   without the prefix this line did nothing on the phones it was written
+		   for. The callout is the share/copy menu the same press summons. */
+		-webkit-user-select: none;
 		user-select: none;
+		-webkit-touch-callout: none;
 	}
 	/* The label WRAPS rather than truncating.
 	   A truncated control is one a scout has to remember instead of read, and

@@ -19,6 +19,12 @@ class Session {
 	eventCode = $state('');
 	scoutName = $state('');
 	/**
+	 * The account `scoutName` was filled for, or null for a name typed by hand.
+	 * What lets a sign-in tell "this person's name" from "the last person's
+	 * name" on a shared phone — see scoutNameOnSignIn() in scout-identity.js.
+	 */
+	scoutNameAccount = $state(/** @type {string|null} */ (null));
+	/**
 	 * Team numbers this scout is assigned to watch for the event. Deduplicated
 	 * and sorted ascending. The manager owns this list entirely: they set it on
 	 * the schedule page and it arrives here via sync.
@@ -75,6 +81,7 @@ class Session {
 	async load() {
 		this.eventCode = (await getSetting('eventCode')) ?? '';
 		this.scoutName = (await getSetting('scoutName')) ?? '';
+		this.scoutNameAccount = (await getSetting('scoutNameAccount')) ?? null;
 		const at = await getSetting('assignedTeams');
 		this.assignedTeams = normaliseTeams(at);
 		const ov = await getSetting('overrides');
@@ -114,6 +121,10 @@ class Session {
 		if (patch.scoutName !== undefined) {
 			this.scoutName = patch.scoutName;
 			await setSetting('scoutName', patch.scoutName);
+		}
+		if (patch.scoutNameAccount !== undefined) {
+			this.scoutNameAccount = patch.scoutNameAccount || null;
+			await setSetting('scoutNameAccount', this.scoutNameAccount);
 		}
 		if (patch.assignedTeams !== undefined) {
 			const cleaned = normaliseTeams(patch.assignedTeams);

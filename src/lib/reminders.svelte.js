@@ -3,7 +3,8 @@
 // Combines three sources into one consumable list:
 //   1. Server-pulled (manager-authored) reminders from Supabase
 //   2. Auto-generated reminders from the cached schedule + assignments
-//   3. Local dismissals (from IndexedDB) to filter both out
+//   3. This account's dismissals — kept on the device, mirrored to the server
+//      so they follow the account (account-state.js) — to filter both out
 //
 // Components import `reminders` and read `reminders.visible` reactively.
 // Sync layer calls `reminders.pull()` on its throttled tick.
@@ -14,10 +15,15 @@ import { rowScout, sameScout } from './scout-identity.js';
 import {
 	listReminders,
 	autoReminders,
-	getDismissedIds,
+	getDismissed,
 	dismissReminder,
 	pruneDismissed
 } from './reminders.js';
+import { dismissedFor } from './account-state-rules.js';
+import { syncDismissals, pushDismissal } from './account-state.js';
+
+/** Whose dismissals apply: the signed-in account, or nobody's ('anon'). */
+const owner = () => (auth.signedIn ? (auth.userId ?? null) : null);
 import { getCachedSchedule, qualMatches } from './tba.js';
 
 class RemindersStore {
@@ -59,12 +65,29 @@ class RemindersStore {
 
 	/** Boot — call once from the layout. */
 	async init() {
-		await pruneDismissed();
-		this.dismissed = await getDismissedIds();
+		await this.loadDismissed();
 		await this.refreshSchedule();
 		if (typeof window !== 'undefined') {
 			setInterval(() => (this.now = new Date()), 60_000);
+			// The set that applies changes the moment the account or the event does
+			// — not on the next 30-second pull, which would show the last scout's
+			// dismissals to the next one in the meantime.
+			$effect.root(() => {
+				$effect(() => {
+					void auth.userId;
+					void auth.signedIn;
+					void session.eventCode;
+					this.loadDismissed();
+				});
+			});
 		}
+	}
+
+	/** Read this account's dismissals for this event off the device. */
+	async loadDismissed() {
+		const who = owner();
+		await pruneDismissed(who);
+		this.dismissed = dismissedFor(await getDismissed(who), session.eventCode);
 	}
 
 	/** Re-read the local schedule cache (e.g. after a sync pull). */
@@ -85,14 +108,23 @@ class RemindersStore {
 			// Don't disturb the rest of the sync tick over reminders.
 			console.warn('reminders pull failed', e);
 		}
+		// Dismissals made on this account's other devices, and this device's
+		// that never reached the server. Best effort; see account-state.js.
+		if (await syncDismissals(session.eventCode, owner())) await this.loadDismissed();
 	}
 
-	/** Mark a reminder dismissed locally and persist to IndexedDB. */
+	/** Dismiss for this account: on this device now, on its others shortly. */
 	async dismiss(id, expiresAt) {
-		await dismissReminder(id, expiresAt);
+		const who = owner();
+		const event = session.eventCode || null;
+		// One expiry for both copies. A reminder with none still gets a day, here
+		// and on the server — a null there would never be pruned.
+		const until = expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+		await dismissReminder(id, until, who, event);
 		const next = new Set(this.dismissed);
 		next.add(id);
 		this.dismissed = next;
+		void pushDismissal(event, who, id, until);
 	}
 }
 

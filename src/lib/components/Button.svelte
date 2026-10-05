@@ -121,18 +121,11 @@
 		color: var(--on-accent);
 		border-color: var(--accent);
 	}
-	.primary:hover:not(:disabled) {
-		background: var(--accent-hover);
-		border-color: var(--accent-hover);
-	}
 
 	.secondary {
 		background: var(--bg-card);
 		color: var(--text-primary);
 		border-color: var(--border-strong);
-	}
-	.secondary:hover:not(:disabled) {
-		background: var(--bg-subtle);
 	}
 
 	.ghost {
@@ -140,18 +133,31 @@
 		color: var(--accent);
 		border-color: transparent;
 	}
-	.ghost:hover:not(:disabled) {
-		background: var(--bg-subtle);
-	}
 
 	.danger {
 		background: var(--bg-card);
 		color: var(--danger);
 		border-color: var(--danger);
 	}
-	.danger:hover:not(:disabled) {
-		background: var(--danger);
-		color: var(--on-accent);
+
+	/* Hover only where a pointer can actually hover. On a phone :hover is
+	   applied by the tap and stays until the next one, so a Button kept its
+	   hover fill after being pressed — and a danger Button stayed solid red. */
+	@media (hover: hover) {
+		.primary:hover:not(:disabled) {
+			background: var(--accent-hover);
+			border-color: var(--accent-hover);
+		}
+		.secondary:hover:not(:disabled) {
+			background: var(--bg-subtle);
+		}
+		.ghost:hover:not(:disabled) {
+			background: var(--bg-subtle);
+		}
+		.danger:hover:not(:disabled) {
+			background: var(--danger);
+			color: var(--on-accent);
+		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {

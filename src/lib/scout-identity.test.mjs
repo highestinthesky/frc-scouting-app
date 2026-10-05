@@ -10,7 +10,8 @@ import {
 	rowScout,
 	sameScout,
 	resolveScout,
-	identityFields
+	identityFields,
+	scoutNameOnSignIn
 } from './scout-identity.js';
 
 let pass = 0;
@@ -132,6 +133,37 @@ const ok = (name, cond, detail = '') => {
 	ok('an entry write uses submitted_by', entry.submitted_by === 'uuid-a');
 	ok('an entry write carries no profile_id column', !Object.hasOwn(entry, 'profile_id'));
 	ok('an entry write still carries the name', entry.scout_name === 'Ning');
+}
+
+// ─── the device's name belongs to an account ───────────────────────────────
+//
+// session.scoutName outlived sign-out and was only filled when blank, so the
+// second scout to sign in on a shared phone recorded under the first scout's
+// name — the join key for assignments, overrides and reminders — and saw the
+// first scout's assignments instead of their own.
+{
+	const A = 'acct-a';
+	const B = 'acct-b';
+	const fill = scoutNameOnSignIn({ name: '', account: null }, A, 'Ada Lovelace');
+	ok('a blank device takes the account name and records whose it is',
+		fill?.scoutName === 'Ada Lovelace' && fill?.scoutNameAccount === A);
+
+	ok('the same account signing in again leaves its name alone',
+		scoutNameOnSignIn({ name: 'Ada L', account: A }, A, 'Ada Lovelace') === null);
+
+	const swap = scoutNameOnSignIn({ name: 'Ada Lovelace', account: A }, B, 'Rey Ortiz');
+	ok('a different account replaces the last one\'s name',
+		swap?.scoutName === 'Rey Ortiz' && swap?.scoutNameAccount === B);
+
+	ok('a name nobody owns is not overwritten — it may be what a manager typed',
+		scoutNameOnSignIn({ name: 'Ning', account: null }, A, 'Haolun Ning') === null);
+	const claim = scoutNameOnSignIn({ name: ' ada lovelace ', account: null }, A, 'Ada Lovelace');
+	ok('an unowned name that IS the account name is claimed without being rewritten',
+		claim && !('scoutName' in claim) && claim.scoutNameAccount === A);
+
+	ok('an account with no name changes nothing',
+		scoutNameOnSignIn({ name: 'Ada Lovelace', account: A }, B, '') === null);
+	ok('no account changes nothing', scoutNameOnSignIn({ name: '', account: null }, null, 'X') === null);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

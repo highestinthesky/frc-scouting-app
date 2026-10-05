@@ -30,14 +30,14 @@ import {
 	// once a withdrawal has succeeded somewhere, which that same bug prevented.
 	// One bug hid two.
 	deleteEntry,
-	updateEntry
+	mirrorServerChange
 } from './db.js';
 import { SCHEMA_VERSION } from './form-config.js';
 import { pullScheduleIfStale } from './tba.js';
 import { pullAndApplyForScout } from './assignments.js';
 import { reminders } from './reminders.svelte.js';
 import { session } from './session.svelte.js';
-import { entryWritePayloads } from './sync-rules.js';
+import { entryWritePayloads, pullFrom, pageAfter, laterOf, PULL_PAGE } from './sync-rules.js';
 import { auth } from './auth.svelte.js';
 
 const POLL_INTERVAL_MS = 3000;
@@ -83,6 +83,13 @@ let polling = false;
 let lastSeenAt = null;
 /** Cached on first call; stable for the device. */
 let cachedClientId = null;
+/**
+ * The account the current sync scope was resolved for: a user id, or null when
+ * signed out. See accountChanged().
+ */
+let syncedAs = /** @type {string|null|undefined} */ (undefined);
+/** The tick in progress, so flush() can wait for it instead of skipping. */
+let inflight = /** @type {Promise<void>|null} */ (null);
 /** Tick counter for the schedule/assignments throttle. Starts at the
  *  threshold so the very first tick after (re)connecting checks them once. */
 let ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
@@ -122,6 +129,7 @@ export async function setEventCode(eventCode) {
 		syncState.status = 'idle';
 		return;
 	}
+	syncedAs = currentAccount();
 	syncState.sessionId = await resolveEventId(next);
 	// 'idle' rather than 'connecting' when there is nothing to connect TO. A
 	// spinner that never resolves is the failure this whole reason field exists
@@ -229,7 +237,64 @@ function scheduleTick(delay) {
 	timer = setTimeout(tick, delay);
 }
 
-async function tick() {
+/** Who this device is signed in as, for scoping sync; null when signed out. */
+function currentAccount() {
+	return auth.signedIn ? (auth.userId ?? 'signed-in') : null;
+}
+
+/**
+ * Drop the resolved scope when the account changes, and report whether it did.
+ *
+ * Signing out cleared the event-id cache but left syncState.sessionId and the
+ * watermark in place, so a signed-out device went on polling a scope it could
+ * no longer read — and reported "Sync problem" instead of "not signed in". A
+ * different account signing in then inherited the last one's scope and
+ * watermark, and RLS answering an empty list for an event it is not on read as
+ * "Synced". Every account change now re-resolves the event and backfills it
+ * from scratch, as that account.
+ */
+function accountChanged() {
+	const who = currentAccount();
+	if (who === syncedAs) return false;
+	syncedAs = who;
+	syncState.sessionId = null;
+	lastSeenAt = null;
+	ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
+	return true;
+}
+
+/**
+ * Run a tick now and wait for it, then report what is still waiting.
+ *
+ * For moments that are about to make local data harder to reach — signing out,
+ * clearing the device — so they can send what they can first and say honestly
+ * what they could not. Bounded, because a venue with no signal must not hang a
+ * button: after `timeoutMs` it reports the count as it stands.
+ *
+ * @param {number} [timeoutMs]
+ * @returns {Promise<number>} entries still not on the server
+ */
+export async function flush(timeoutMs = 8000) {
+	if (syncState.eventCode) {
+		const run = (async () => {
+			if (inflight) await inflight;
+			await tick();
+		})();
+		await Promise.race([run, new Promise((r) => setTimeout(r, timeoutMs))]);
+	}
+	await refreshPendingCount();
+	return syncState.pendingCount;
+}
+
+function tick() {
+	if (inflight) return inflight;
+	inflight = runTick().finally(() => {
+		inflight = null;
+	});
+	return inflight;
+}
+
+async function runTick() {
 	if (polling) return;
 	polling = true;
 	try {
@@ -248,6 +313,7 @@ async function tick() {
 			return;
 		}
 		if (!syncState.eventCode) return;
+		accountChanged();
 		// The id may not have resolved when the code was set — a device that opens
 		// the app signed out, or before its membership was added, gets null there
 		// and would otherwise stay paused until the code was re-entered. Retry
@@ -311,74 +377,100 @@ async function refreshPendingCount() {
 async function pushOutbox() {
 	const unsynced = await getUnsyncedEntries();
 	syncState.pendingCount = unsynced.length;
+	let waiting = 0;
+	let firstError = null;
 	for (const local of unsynced) {
-		// An entry's eventCode field is its source of truth — we push to
-		// THAT event's scope, not the user's currently-selected one. This
-		// way switching events doesn't strand entries from a previous one.
-		const sid = await eventIdForCode(local.eventCode);
-		// No id means the event does not exist or this device is not on it. Skip
-		// rather than fail: the row stays queued locally and goes up the moment a
-		// manager creates the event or adds this scout to it. Nothing is lost.
-		if (!sid) continue;
-		const client = clientFor(sid);
-		const row = {
-			// One key. This was a dual write during 0019's expand window; 0020
-			// dropped session_id and the client dropped it in the same commit.
-			event_id: sid,
-			event_code: local.eventCode,
-			match_number: local.matchNumber,
-			team_number: local.teamNumber,
-			alliance_color: local.allianceColor,
-			scout_name: local.scoutName,
-			observations: local.observations ?? {},
-			// Stamp the version the row was actually recorded under. This was
-			// hardcoded to 2 and drifted when the counter fields bumped it to 3,
-			// so every synced entry claimed to predate metrics it contained.
-			// Prefer the entry's own stamp; fall back to the current shape for
-			// rows written before db.js started recording one.
-			schema_version: local.schemaVersion ?? SCHEMA_VERSION,
-			client_id: local.clientId ?? cachedClientId,
-			created_at: local.createdAt
-		};
-		// The authenticated account on the first successful sync owns the
-		// server attribution. This is necessarily not always the person who held
-		// a shared/offline device when the form was recorded: no signed request
-		// happened then, and trusting a stored client claim would be forgeable.
-		const payloads = entryWritePayloads(row, auth.profile?.id);
-
-		// A row we've already pushed and since edited takes the UPDATE path.
-		// Without this branch the edit never left the device: the cloud row
-		// kept its original values and every teammate stayed wrong, while the
-		// editor's own screen showed the change saved and synced.
-		if (local.remoteId) {
-			const result = await pushUpdate(client, local, payloads);
-			if (result.clean) {
-				await markEntrySynced(local.id, local.remoteId, result.submittedBy);
-			}
-			continue;
+		// One row's failure is that row's problem. This loop used to throw on the
+		// first error, so a single entry the server refused — a constraint, a
+		// policy — sat at the front of the queue and every entry recorded after it
+		// waited behind it for the rest of the event, retried and refused every
+		// three seconds. Now the others go up and the error is still reported.
+		try {
+			if (!(await pushOne(local))) waiting += 1;
+		} catch (error) {
+			waiting += 1;
+			firstError ??= error;
 		}
-
-		const { data, error } = await client
-			.from('entries')
-			.insert(payloads.insert)
-			.select('id, submitted_by')
-			.single();
-		if (error) {
-			// Postgres unique_violation — server already has this row (a peer
-			// pushed it, or our previous tick raced the round-trip). Adopt the
-			// existing remote id and move on.
-			if (error.code === '23505') {
-				const found = await findRemoteTwin(client, sid, local);
-				if (found?.id) {
-					await markEntrySynced(local.id, found.id, found.submitted_by);
-					continue;
-				}
-			}
-			throw error;
-		}
-		await markEntrySynced(local.id, data.id, data.submitted_by);
 	}
-	syncState.pendingCount = 0;
+	// What is actually still waiting, not 0. Rows skipped for an event this
+	// device cannot reach were reported as sent until the next tick recounted.
+	syncState.pendingCount = waiting;
+	if (firstError) throw firstError;
+}
+
+/**
+ * Push one queued row. True once the server has answered for it; false when it
+ * has to wait for an event this device can reach.
+ */
+async function pushOne(local) {
+	// An entry's eventCode field is its source of truth — we push to
+	// THAT event's scope, not the user's currently-selected one. This
+	// way switching events doesn't strand entries from a previous one.
+	const sid = await eventIdForCode(local.eventCode);
+	// No id means the event does not exist or this device is not on it. Skip
+	// rather than fail: the row stays queued locally and goes up the moment a
+	// manager creates the event or adds this scout to it. Nothing is lost.
+	if (!sid) return false;
+	const client = clientFor(sid);
+	const row = {
+		// One key. This was a dual write during 0019's expand window; 0020
+		// dropped session_id and the client dropped it in the same commit.
+		event_id: sid,
+		event_code: local.eventCode,
+		match_number: local.matchNumber,
+		team_number: local.teamNumber,
+		alliance_color: local.allianceColor,
+		scout_name: local.scoutName,
+		observations: local.observations ?? {},
+		// Stamp the version the row was actually recorded under. This was
+		// hardcoded to 2 and drifted when the counter fields bumped it to 3,
+		// so every synced entry claimed to predate metrics it contained.
+		// Prefer the entry's own stamp; fall back to the current shape for
+		// rows written before db.js started recording one.
+		schema_version: local.schemaVersion ?? SCHEMA_VERSION,
+		client_id: local.clientId ?? cachedClientId,
+		created_at: local.createdAt
+	};
+	// The authenticated account on the first successful sync owns the
+	// server attribution. This is necessarily not always the person who held
+	// a shared/offline device when the form was recorded: no signed request
+	// happened then, and trusting a stored client claim would be forgeable.
+	const payloads = entryWritePayloads(row, auth.profile?.id);
+
+	// A row we've already pushed and since edited takes the UPDATE path.
+	// Without this branch the edit never left the device: the cloud row
+	// kept its original values and every teammate stayed wrong, while the
+	// editor's own screen showed the change saved and synced.
+	if (local.remoteId) {
+		const result = await pushUpdate(client, local, payloads);
+		// `clean: false` means pushUpdate re-homed the row itself (the cloud copy
+		// was gone, so it inserted and marked it); either way it is done.
+		if (result.clean) {
+			await markEntrySynced(local.id, local.remoteId, result.submittedBy, local.rev);
+		}
+		return true;
+	}
+
+	const { data, error } = await client
+		.from('entries')
+		.insert(payloads.insert)
+		.select('id, submitted_by')
+		.single();
+	if (error) {
+		// Postgres unique_violation — server already has this row (a peer
+		// pushed it, or our previous tick raced the round-trip). Adopt the
+		// existing remote id and move on.
+		if (error.code === '23505') {
+			const found = await findRemoteTwin(client, sid, local);
+			if (found?.id) {
+				await markEntrySynced(local.id, found.id, found.submitted_by, local.rev);
+				return true;
+			}
+		}
+		throw error;
+	}
+	await markEntrySynced(local.id, data.id, data.submitted_by, local.rev);
+	return true;
 }
 
 /**
@@ -425,13 +517,13 @@ async function pushUpdate(client, local, payloads) {
 			if (insErr.code === '23505') {
 				const twin = await findRemoteTwin(client, payloads.update.event_id, local);
 				if (twin?.id) {
-					await markEntrySynced(local.id, twin.id, twin.submitted_by);
+					await markEntrySynced(local.id, twin.id, twin.submitted_by, local.rev);
 					return { clean: false, submittedBy: twin.submitted_by };
 				}
 			}
 			throw insErr;
 		}
-		await markEntrySynced(local.id, ins.id, ins.submitted_by);
+		await markEntrySynced(local.id, ins.id, ins.submitted_by, local.rev);
 		return { clean: false, submittedBy: ins.submitted_by };
 	}
 	return { clean: true, submittedBy: data[0]?.submitted_by };
@@ -549,11 +641,13 @@ export async function correctEntryTrack(entry, track) {
 		return { ok: false, message: error.message };
 	}
 	// Merge locally in the same shape the function used, so the two cannot
-	// disagree until the next pull confirms it.
+	// disagree until the next pull confirms it. Mirrored, not queued: queueing
+	// would push this device's whole copy of the row and undo the point of the
+	// RPC.
 	const next = { ...(entry.observations ?? {}) };
 	if (track) next.autoTrack = track;
 	else delete next.autoTrack;
-	await updateEntry(entry.id, { observations: next });
+	await mirrorServerChange(entry.id, { observations: next });
 	return { ok: true };
 }
 
@@ -564,62 +658,86 @@ async function pullInbox() {
 	// a peer's correction would be invisible forever. updated_at is set
 	// server-side by a trigger (migration 0007), so it is consistent across
 	// devices whose clocks are not.
-	let q = client
-		.from('entries')
-		.select('*')
-		.eq('event_id', syncState.sessionId)
-		.order('updated_at', { ascending: true });
-	if (lastSeenAt) q = q.gt('updated_at', lastSeenAt);
-	const { data, error } = await q;
-	if (error) throw error;
-	for (const remoteRow of data ?? []) {
-		// A withdrawn entry arrives as an ordinary changed row carrying a tombstone,
-		// which is the whole reason deletion is a stamp rather than a DELETE: a row
-		// that simply stopped being returned would be indistinguishable from one
-		// that had not changed, and every device holding it would keep it forever.
-		if (remoteRow.deleted_at) {
-			const local = await getEntryByRemoteId(remoteRow.id);
-			if (local) {
-				await deleteEntry(local.id);
-				syncState.inboundChanges += 1;
-			}
-			// The watermark still has to advance past it, or this row is re-fetched
-			// on every tick for the rest of the event.
-			lastSeenAt = remoteRow.updated_at ?? lastSeenAt;
-			continue;
+	//
+	// Reaching back by PULL_OVERLAP_MS, and paging by (updated_at, id): see
+	// sync-rules.js. The stamp is when a write STARTED, so a strict "after the
+	// newest row I have seen" skipped rows that committed late — permanently.
+	const from = pullFrom(lastSeenAt);
+	let cursor = { ts: from, id: null };
+	let newest = lastSeenAt;
+	for (;;) {
+		let q = client
+			.from('entries')
+			.select('*')
+			.eq('event_id', syncState.sessionId)
+			.order('updated_at', { ascending: true })
+			.order('id', { ascending: true })
+			.limit(PULL_PAGE);
+		const after = pageAfter(cursor);
+		if (after) q = q.or(after);
+		else if (cursor.ts) q = q.gte('updated_at', cursor.ts);
+		const { data, error } = await q;
+		if (error) throw error;
+		const rows = data ?? [];
+		for (const remoteRow of rows) {
+			await applyPulledRow(remoteRow);
+			newest = laterOf(newest, remoteRow.updated_at);
 		}
-		const fields = {
-			eventCode: remoteRow.event_code,
-			matchNumber: remoteRow.match_number,
-			teamNumber: remoteRow.team_number,
-			allianceColor: remoteRow.alliance_color,
-			scoutName: remoteRow.scout_name,
-			observations: remoteRow.observations ?? {},
-			// Carry the peer's stamp rather than re-deriving it. Their entry
-			// may predate a field this device already has.
-			schemaVersion: remoteRow.schema_version ?? null,
-			createdAt: remoteRow.created_at,
-			clientId: remoteRow.client_id,
-			submittedBy: remoteRow.submitted_by ?? null
-		};
+		if (rows.length < PULL_PAGE) break;
+		const last = rows[rows.length - 1];
+		cursor = { ts: last.updated_at, id: last.id };
+	}
+	// Only once every page has landed. A pull that fails halfway keeps the old
+	// watermark and re-reads from there, rather than recording progress it did
+	// not make.
+	lastSeenAt = newest;
+}
 
-		// Our own writes echo back. Skip them — but only after the watermark
-		// advances below, or we would re-fetch them on every tick.
-		if (remoteRow.client_id !== cachedClientId) {
-			// Do we already hold this row? If so it is an edit, not an arrival.
-			const existing = await getEntryByRemoteId(remoteRow.id);
-			if (existing) {
-				const applied = await applyRemoteUpdate(existing.id, fields);
-				if (applied) syncState.inboundChanges += 1;
-			} else {
-				const { inserted } = await insertRemoteEntry({ remoteId: remoteRow.id, ...fields });
-				if (inserted) syncState.inboundChanges += 1;
-			}
+/** Bring one pulled row into IndexedDB. Idempotent: the overlap re-reads rows. */
+async function applyPulledRow(remoteRow) {
+	// A withdrawn entry arrives as an ordinary changed row carrying a tombstone,
+	// which is the whole reason deletion is a stamp rather than a DELETE: a row
+	// that simply stopped being returned would be indistinguishable from one
+	// that had not changed, and every device holding it would keep it forever.
+	if (remoteRow.deleted_at) {
+		const local = await getEntryByRemoteId(remoteRow.id);
+		if (local) {
+			await deleteEntry(local.id);
+			syncState.inboundChanges += 1;
 		}
+		return;
+	}
+	const fields = {
+		eventCode: remoteRow.event_code,
+		matchNumber: remoteRow.match_number,
+		teamNumber: remoteRow.team_number,
+		allianceColor: remoteRow.alliance_color,
+		scoutName: remoteRow.scout_name,
+		observations: remoteRow.observations ?? {},
+		// Carry the peer's stamp rather than re-deriving it. Their entry
+		// may predate a field this device already has.
+		schemaVersion: remoteRow.schema_version ?? null,
+		createdAt: remoteRow.created_at,
+		clientId: remoteRow.client_id,
+		submittedBy: remoteRow.submitted_by ?? null
+	};
 
-		if (!lastSeenAt || remoteRow.updated_at > lastSeenAt) {
-			lastSeenAt = remoteRow.updated_at;
-		}
+	// No "skip our own writes" here, and there used to be one: rows whose
+	// client_id was this device's were passed over as echoes. client_id names
+	// the device that RECORDED a row, not the last one to change it, so that
+	// skip also dropped every manager correction and every edit made elsewhere
+	// to an entry this phone recorded — and, once this phone's copy was gone
+	// (Clear entries, a restored backup), its own synced entries never came
+	// back. An echo needs no special case: it compares equal and is not applied,
+	// and a row with unpushed local edits is never overwritten
+	// (shouldApplyRemote).
+	const existing = await getEntryByRemoteId(remoteRow.id);
+	if (existing) {
+		const applied = await applyRemoteUpdate(existing.id, fields);
+		if (applied) syncState.inboundChanges += 1;
+	} else {
+		const { inserted } = await insertRemoteEntry({ remoteId: remoteRow.id, ...fields });
+		if (inserted) syncState.inboundChanges += 1;
 	}
 }
 

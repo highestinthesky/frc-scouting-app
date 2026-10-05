@@ -283,25 +283,13 @@
 				{shellIdentity.role}
 			</span>
 			{#if shellIdentity.isManager}
-				<!-- Opens in its own tab, so it carries a pop-out mark. The mark is not
-				     decoration: a link that replaces the page and a link that opens a
-				     new one should not look identical, and this one takes you out of
-				     the app you are standing in. rel=noopener because target=_blank
-				     otherwise hands the new tab a reference back to this window. -->
-				<a
-					class="studio-btn"
-					href="{base}/studio/"
-					target="_blank"
-					rel="noopener noreferrer"
-				>
-					Studio
-					<svg viewBox="0 0 12 12" width="10" height="10" fill="none" aria-hidden="true">
-						<path d="M4.5 1.5h6v6M10.5 1.5 5 7M8 9.5v1h-6.5V4h1"
-							stroke="currentColor" stroke-width="1.4"
-							stroke-linecap="round" stroke-linejoin="round" />
-					</svg>
-					<span class="sr-only">(opens in a new tab)</span>
-				</a>
+				<!-- Same window, not target=_blank. From an iOS home-screen install a
+				     new tab opens in an in-app Safari sheet whose storage is not the
+				     app's, so the manager arrived in Studio signed out; a native
+				     webview has no tabs at all and hands the link to Safari, with the
+				     same result. The new tab used to be the way back, and "Leave
+				     Studio" in Studio's own rail is that way now. -->
+				<a class="studio-btn" href="{base}/studio/">Studio</a>
 			{/if}
 		</div>
 	</header>
@@ -463,6 +451,11 @@
 		--fs-md: 0.95rem;
 		--fs-lg: 1.1rem;
 		--fs-xl: 1.5rem;
+		/* The floor for a focusable text control. iOS zooms the page in when a
+		   control under 16px takes focus and does not zoom back out, so a manager
+		   picking from a Select at --fs-md (15.2px) was left on a magnified page.
+		   WKWebView does the same, so the native app inherits it. */
+		--fs-control: 1rem;
 		/* One step above the scale, for the single greeting on Home. It is the only
 		   warm moment in an app that is otherwise a tool, and design.md forbids
 		   enrichment on app pages — so the warmth has to be typographic or it does
@@ -483,6 +476,11 @@
 		   of guessing. The reminder popup landed 12px under the bar because it
 		   guessed. Tracks the bar's own padding + line-height, plus the notch. */
 		--app-bar-h: calc(2.75rem + var(--space-2) * 2 + env(safe-area-inset-top, 0px));
+		/* The status bar and notch, for a screen with no app bar to carry it.
+		   viewport-fit=cover plus a translucent status bar means an installed
+		   app (home screen or native) starts drawing at y=0, under the clock.
+		   Zero in a browser tab, so adding it costs nothing there. */
+		--safe-top: env(safe-area-inset-top, 0px);
 
 		/* ─── how wide content is allowed to get ────────────────────────────────
 		 *
@@ -819,7 +817,7 @@
 	/* ── access gate ────────────────────────────────────────────────────── */
 	.gate {
 		max-width: 26rem;
-		margin: var(--space-6) auto;
+		margin: calc(var(--space-6) + var(--safe-top)) auto var(--space-6);
 		padding: 0 var(--space-4);
 	}
 	.gate h1 { margin: 0 0 var(--space-3); font-size: var(--fs-xl); letter-spacing: -0.02em; }
@@ -881,7 +879,7 @@
 	.pw-err { color: var(--danger); font-size: var(--fs-sm); margin: 0; }
 	.boot {
 		text-align: center;
-		margin-top: calc(2 * var(--space-6));
+		margin-top: calc(2 * var(--space-6) + var(--safe-top));
 		color: var(--text-faint);
 	}
 	/* The app bar is identity, not navigation — who you are and whether your
@@ -945,18 +943,6 @@
 		.role-badge {
 			display: none;
 		}
-	}
-
-	.sr-only {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		padding: 0;
-		margin: -1px;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
-		border: 0;
 	}
 
 	/* The one ACTION in the bar, and it has to look like one.

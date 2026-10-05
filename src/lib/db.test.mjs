@@ -144,7 +144,7 @@ function dbAt(name, upTo) {
 {
 	// picklist-store.js imports the shared `db` singleton, so the fixture has to
 	// go through that instance rather than a local one.
-	const { db, markEntrySynced } = await import('./db.js');
+	const { db, markEntrySynced, updateEntry, getUnsyncedEntries } = await import('./db.js');
 	const store = await import('./picklist-store.js');
 	await db.open();
 
@@ -162,6 +162,29 @@ function dbAt(name, upTo) {
 		attributed.submittedBy === 'server-profile');
 	ok('persisting server attribution also marks the outbox row clean',
 		attributed.pendingSync === false && attributed.remoteId === 'remote-attribution-row');
+
+	// An edit saved while that entry's push is in flight. The push carried the
+	// row as it was read; marking it clean when the server answered threw the
+	// newer edit away — it never went up, and the pull's echo of the old values
+	// then overwrote it on screen too.
+	{
+		const id = await db.entries.add({
+			eventCode: '2027hvr', matchNumber: 2, teamNumber: 118, scoutName: 'ning',
+			createdAt: '2026-08-03T12:05:00Z', observations: { notes: 'first' }
+		});
+		const [sent] = (await getUnsyncedEntries()).filter((e) => e.id === id);
+		await updateEntry(id, { observations: { notes: 'second' } });
+		await markEntrySynced(id, 'remote-race-row', undefined, sent.rev);
+		const after = await db.entries.get(id);
+		ok('an edit made during the push stays queued', after.pendingSync === true);
+		ok('and the row still learns its remote id', after.remoteId === 'remote-race-row');
+		ok('and keeps the newer edit', after.observations.notes === 'second');
+
+		const [resent] = (await getUnsyncedEntries()).filter((e) => e.id === id);
+		if (resent) await markEntrySynced(id, 'remote-race-row', undefined, resent.rev);
+		ok('a push of the current revision marks it clean',
+			(await db.entries.get(id)).pendingSync === false);
+	}
 
 	await db.settings.put({
 		key: 'picklist:2027hvr',

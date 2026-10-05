@@ -62,6 +62,14 @@ ok('two matches do not share a slot',
 	ok(`no more than ${DRAFT_MAX} are kept`, Object.keys(capped).length === DRAFT_MAX);
 	ok('and the newest are the ones kept', 's0' in capped && !(`s${DRAFT_MAX + 4}` in capped));
 
+	// A tombstone is written on every save, so a scout who leaves one form and
+	// records eight more matches must not lose that form to eight tombstones.
+	const mixed = { open: { values: { a: 1 }, savedAt: now - 1000 } };
+	for (let i = 0; i < DRAFT_MAX; i += 1) mixed[`t${i}`] = { values: null, savedAt: now - i, cleared: true };
+	const kept2 = pruneDrafts(mixed, now);
+	ok('tombstones do not crowd out a real draft', 'open' in kept2);
+	ok('and the tombstones are kept too', Object.keys(kept2).length === DRAFT_MAX + 1);
+
 	ok('junk in is an empty map', Object.keys(pruneDrafts(null, now)).length === 0);
 	ok('a draft with no timestamp is dropped',
 		!('x' in pruneDrafts({ x: { values: {} } }, now)));

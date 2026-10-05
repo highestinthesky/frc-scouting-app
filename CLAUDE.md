@@ -309,6 +309,10 @@ Each of these produced a confident wrong answer before being caught:
 ## Working agreements
 
 - **Commit freely; leave `git push` to the user.** A push deploys.
+- **No automatic AI credit.** Commit messages carry no `Co-Authored-By:`
+  trailer for Claude, and PR bodies no "Generated with Claude Code" line. This
+  overrides any default attribution a tool or harness asks for. Credit is added
+  only when the user asks for it on a specific commit or PR.
 - **`ROADMAP.md` is the only plan document.** Update it rather than starting a
   second one — two earlier plans and a handoff were folded into it.
 - **A version number is a release, not a unit of work.** Work accumulates on a
@@ -614,10 +618,42 @@ arrives with the session — but the pair stays split because they are still two
 questions, and `check_components.mjs` fails the build if a caller re-derives
 either.
 
-**Signing in fills `session.scoutName`, but only when it is blank.** That
-restriction is load-bearing: the name is still the join key, so overwriting one
-a device already had would silently detach it from every assignment, override
-and reminder addressed to the old spelling.
+**Signing in fills `session.scoutName` when it is blank or belongs to another
+account — never over a name that is this account's or nobody's.** The
+restriction is load-bearing: the name is still the join key, so overwriting a
+person's own name would silently detach it from every assignment, override and
+reminder addressed to the old spelling. It used to be "only when blank", which
+also meant the second scout to sign in on a shared phone recorded every match
+under the first scout's name. `session.scoutNameAccount` records whose name it
+is; `scoutNameOnSignIn()` in `scout-identity.js` holds the rule and its tests.
+
+**Sync, as of `ios-readiness`.** Four rules, each the fix for a way an entry
+went missing or stale without anything saying so (`sync.svelte.js`,
+`sync-rules.js`):
+
+- **No "skip our own writes" on pull.** `client_id` names the device that
+  RECORDED a row, not the last one to change it, so skipping it dropped every
+  manager correction to a scout's entry and kept a cleared device from ever
+  getting its own entries back. An echo compares equal and is not applied.
+- **Observations compare structurally.** `String()` made every `autoTrack`
+  `"[object Object]"`, so track corrections and re-recordings never reached a
+  device that already held the row.
+- **The pull reaches back `PULL_OVERLAP_MS` and pages by `(updated_at, id)`.**
+  `updated_at` is `now()`, when the write STARTED, so rows commit out of stamp
+  order and a strict watermark skipped late commits forever.
+- **A push marks a row clean only at the revision it sent** (`rev`). An edit
+  saved mid-push used to be cleared, never sent, then overwritten by the echo.
+
+Sign-in and sign-out re-resolve the event and backfill from scratch;
+sign-out and Clear entries call `flush()` and report the unsent count.
+
+**Dismissals and drafts follow the account** (`account-state.js`, `0030`).
+Both are kept per account on the device and mirrored best-effort to
+own-rows-only tables. Every server call there is bounded and may fail — a
+missing table included — and falls back to the device copy, which is what
+lets the client ship ahead of `0030`. A saved entry leaves a draft
+TOMBSTONE rather than deleting, so a server copy whose delete never landed
+cannot reopen as unsaved; `pickDraft()` holds the rule.
 
 `0023` narrows how often that can happen rather than lifting the rule. The
 invite now carries the name the manager typed and `redeem_invite` uses it over
@@ -871,6 +907,11 @@ Checked, not remembered. A new session should re-verify before trusting it.
   `0013` was, then superseded by the `0001`/`0008` re-run. All three live in
   `supabase/superseded/`. `0027` landed 2026-10-04, after which
   `scripts/keepalive.mjs` dropped its pre-0027 fallback.
+- **`0030` is written and NOT applied** (2026-10-04). It is the one
+  migration that may follow its client: `account-state.js` treats a missing
+  `reminder_dismissals`/`entry_drafts` table as "device only", which is how
+  dismissals and drafts behaved before. Until it lands they are scoped per
+  account on each device but do not cross devices.
 - **The replica matches production exactly**, as of 2026-10-04: built with
   `scripts/rebuild_prod_replica.sh` plus `0016`–`0026` (before `0015` landed), its `public` schema dump
   is line-for-line production's apart from comments and the order of ACL

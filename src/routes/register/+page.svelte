@@ -213,7 +213,7 @@
 	main {
 		max-width: 26rem;
 		margin: 0 auto;
-		padding: var(--space-5) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
+		padding: calc(var(--space-5) + var(--safe-top)) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 	}
 	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
 	.lede {

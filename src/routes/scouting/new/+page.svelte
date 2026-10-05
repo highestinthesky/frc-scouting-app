@@ -4,7 +4,8 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { addEntry, listEntries } from '$lib/db.js';
-	import { draftSlot, hasContent, loadDraft, saveDraft, clearDraft } from '$lib/draft.js';
+	import { draftSlot, hasContent } from '$lib/draft.js';
+	import { restoreDraft as restoreAccountDraft, keepDraft, forgetDraft } from '$lib/account-state.js';
 	import { session } from '$lib/session.svelte.js';
 	import { rowScout, sameScout } from '$lib/scout-identity.js';
 	import { auth } from '$lib/auth.svelte.js';
@@ -60,6 +61,8 @@
 	// pre-fill as if the scout had typed it.
 	let draftKey = $state('new');
 	let draftReady = $state(false);
+	/** The form as pre-fill left it, before any typing. Null until mounted. */
+	let openedWith = $state(/** @type {Record<string, any>|null} */ (null));
 	let restoredDraft = $state(false);
 
 	// ─── schedule / next-match state ────────────────────────────────────────
@@ -128,6 +131,9 @@
 		// match and team this form was opened for, so a stale draft must not be
 		// what decides which draft to load — that is circular, and it is how a
 		// draft for Q3 would end up reopening itself on every visit.
+		// What the form held before anyone typed: the pre-fill. A draft is only
+		// worth keeping once it differs from this — see the save effect.
+		openedWith = $state.snapshot(values);
 		await restoreDraft();
 		draftReady = true;
 	});
@@ -223,11 +229,20 @@
 	 * for Q3 never pours itself into a form opened for Q7. A deep link naming a
 	 * different pair simply looks up a different slot and finds nothing.
 	 */
+	/** Whose drafts: the signed-in account, or nobody's while signed out. */
+	const draftOwner = () => (auth.signedIn ? (auth.userId ?? null) : null);
+
 	async function restoreDraft() {
 		draftKey = draftSlot({ matchNumber: values.matchNumber, teamNumber: values.teamNumber });
 		try {
-			const found = await loadDraft(session.eventCode, draftKey);
+			// The account's draft, from this device or its newest from another —
+			// drafts follow the account, and the next person on this phone does
+			// not see this one's. May wait briefly on the server, so a scout who
+			// starts typing meanwhile keeps what they typed.
+			const untouched = JSON.stringify($state.snapshot(values));
+			const found = await restoreAccountDraft(session.eventCode, draftKey, draftOwner());
 			if (!found?.values) return;
+			if (JSON.stringify($state.snapshot(values)) !== untouched) return;
 			// Merge over the blank rather than assigning: a field added to
 			// form-config.js since the draft was written must exist, not be absent.
 			const merged = blank();
@@ -235,6 +250,11 @@
 				if (k in found.values) merged[k] = found.values[k];
 			}
 			values = merged;
+			// The restored draft is now the baseline. Against the pre-fill it
+			// counted as typed in, so merely opening the form saved it again with
+			// a fresh savedAt — a draft that never aged out while it kept being
+			// opened, re-pushed to the server on every visit.
+			openedWith = $state.snapshot(values);
 			restoredDraft = true;
 		} catch (_e) {
 			// A broken draft must never block recording. Worst case is retyping.
@@ -247,11 +267,16 @@
 	$effect(() => {
 		if (!draftReady) return;
 		const snapshot = $state.snapshot(values);
-		if (!hasContent(snapshot, blank())) return;
+		// Against the form as it OPENED, not an empty one. A deep link pre-fills
+		// the match and team, so compared with blank() a form that had only been
+		// opened counted as typed in and saved a draft — and drafts follow the
+		// account now, so that empty draft reached every device it signs in on.
+		if (!hasContent(snapshot, openedWith ?? blank())) return;
 		const eventCode = session.eventCode;
 		const key = draftKey;
+		const who = draftOwner();
 		const t = setTimeout(() => {
-			saveDraft(eventCode, key, snapshot).catch(() => {});
+			keepDraft(eventCode, key, snapshot, who).catch(() => {});
 		}, 400);
 		return () => clearTimeout(t);
 	});
@@ -306,7 +331,7 @@
 
 			// Only a successful save forgets the draft. Cancel deliberately does
 			// not — an accidental back press is the case the draft exists for.
-			await clearDraft(session.eventCode, draftKey);
+			await forgetDraft(session.eventCode, draftKey, draftOwner());
 
 			await goto(origin);
 		} catch (err) {

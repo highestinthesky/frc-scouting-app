@@ -214,16 +214,21 @@ const ok = (name, cond, detail = '') => {
 	);
 }
 
-// ─── the scout name fills itself, but never overwrites ─────────────────────
+// ─── the scout name fills itself, but never over its owner ────────────────
 //
 // scout_name is still the join key for assignments, overrides and targeted
-// reminders. Filling a blank one costs nothing; replacing one that already
-// exists would detach the device from everything addressed to the old spelling.
+// reminders. Filling a blank one costs nothing; replacing a person's own name
+// would detach the device from everything addressed to the old spelling.
+//
+// This asserted "only when the local name is empty", which was also how the
+// second scout on a shared phone recorded under the first one's name. The rule
+// now lives in scoutNameOnSignIn(), with behavioural tests in
+// scout-identity.test.mjs; what this pins is that sign-in goes through it.
 {
 	ok('signing in adopts the account name', /adoptScoutName\(/.test(src));
 	ok(
-		'and only when the local name is empty',
-		/adoptScoutName\([\s\S]*?if \(session\.scoutName\?\.trim\(\)\) return;/.test(src)
+		'and only through the rule that knows whose name it is',
+		/adoptScoutName\([\s\S]*?scoutNameOnSignIn\(\s*\{ name: session\.scoutName, account: session\.scoutNameAccount \}/.test(src)
 	);
 	ok(
 		'it writes "First Last", the form resolveScout matches on',

@@ -12,7 +12,11 @@ import {
 	sameObservations,
 	pushMode,
 	entryWritePayloads,
-	EDITABLE_FIELDS
+	EDITABLE_FIELDS,
+	pullFrom,
+	pageAfter,
+	laterOf,
+	PULL_OVERLAP_MS
 } from './sync-rules.js';
 
 let pass = 0;
@@ -132,6 +136,68 @@ const localRow = (over = {}) => ({
 		!Object.hasOwn(common, 'submitted_by'));
 	ok('a legacy anonymous recording inserts an explicit null attribution',
 		entryWritePayloads(common, undefined).insert.submitted_by === null);
+}
+
+// ─── a recording is an object, not a string ────────────────────────────────
+//
+// observations.autoTrack is a nested object. String() made every track
+// "[object Object]", so a manager's track correction and a scout's re-recording
+// compared equal to the old one and never reached a device that held the row.
+{
+	const track = (p, over = {}) => ({ v: 1, season: 2026, hz: 10, p, a: [{ a: 'shoot', t0: 1, t1: 2 }], ...over });
+	ok('a changed track is a change',
+		!sameObservations({ autoTrack: track('AAAA') }, { autoTrack: track('BBBB') }));
+	ok('a track turned end for end is a change',
+		!sameObservations({ autoTrack: track('AAAA', { flip: true }) }, { autoTrack: track('AAAA') }));
+	ok('a changed interval inside a track is a change',
+		!sameObservations(
+			{ autoTrack: track('AAAA', { a: [{ a: 'shoot', t0: 1, t1: 3 }] }) },
+			{ autoTrack: track('AAAA') }
+		));
+	ok('the same track with its keys reordered is not a change',
+		sameObservations({ autoTrack: { p: 'AAAA', hz: 10, v: 1 } }, { autoTrack: { v: 1, hz: 10, p: 'AAAA' } }));
+	ok('a track removed is a change',
+		!sameObservations({ autoTrack: track('AAAA') }, {}));
+	ok('a correction arriving from a peer is applied',
+		shouldApplyRemote(
+			localRow({ observations: { autoTrack: track('AAAA') } }),
+			{ observations: { autoTrack: track('BBBB') } }
+		));
+	ok('an echo of the same track is not applied',
+		!shouldApplyRemote(
+			localRow({ observations: { autoTrack: track('AAAA') } }),
+			{ observations: { autoTrack: track('AAAA') } }
+		));
+}
+
+// ─── the pull watermark ────────────────────────────────────────────────────
+//
+// updated_at is now() — the START of the writing transaction — so rows commit
+// out of timestamp order. A pull strictly after the newest stamp it has seen
+// skips a row stamped earlier that committed later, permanently.
+{
+	ok('a first pull starts from nothing', pullFrom(null) === null);
+	const from = pullFrom('2026-10-04T12:00:00.000+00:00');
+	ok('later pulls reach back by the overlap',
+		Date.parse('2026-10-04T12:00:00.000Z') - Date.parse(from) === PULL_OVERLAP_MS);
+	// authenticated's statement_timeout is 8s: nothing commits later than that
+	// after its stamp. Under that, a late commit can still be skipped.
+	ok('the overlap outlasts the slowest possible commit', PULL_OVERLAP_MS > 8_000 * 2);
+	ok('an unreadable watermark backfills rather than guessing', pullFrom('not a time') === null);
+
+	ok('the first page filters on time alone',
+		pageAfter({ ts: '2026-10-04T12:00:00+00:00', id: null }) === null);
+	const f = pageAfter({ ts: '2026-10-04T12:00:00.123456+00:00', id: 'abc' });
+	ok('a later page continues after the last row, ties broken by id',
+		f === 'updated_at.gt."2026-10-04T12:00:00.123456+00:00",and(updated_at.eq."2026-10-04T12:00:00.123456+00:00",id.gt.abc)', f);
+
+	ok('the watermark only moves forward',
+		laterOf('2026-10-04T12:00:05+00:00', '2026-10-04T12:00:01+00:00') === '2026-10-04T12:00:05+00:00');
+	ok('a newer stamp advances it',
+		laterOf('2026-10-04T12:00:01+00:00', '2026-10-04T12:00:05+00:00') === '2026-10-04T12:00:05+00:00');
+	ok('compared as times, not text, across offset spellings',
+		laterOf('2026-10-04T12:00:05Z', '2026-10-04T12:00:05.5+00:00') === '2026-10-04T12:00:05.5+00:00');
+	ok('nothing seen yet takes the first stamp', laterOf(null, '2026-10-04T12:00:01+00:00') === '2026-10-04T12:00:01+00:00');
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

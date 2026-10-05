@@ -21,10 +21,12 @@
 		try {
 			// Signed in, the picker already stored the event — do not overwrite it
 			// with this form's stale copy of the field it no longer renders.
+			// Typed while signed in, the name is that account's; typed signed out,
+			// it is nobody's. See scoutNameOnSignIn().
 			await session.update(
 				auth.signedIn
-					? { scoutName: scoutName.trim() }
-					: { eventCode: eventCode.trim().toLowerCase(), scoutName: scoutName.trim() }
+					? { scoutName: scoutName.trim(), scoutNameAccount: auth.profile?.id ?? null }
+					: { eventCode: eventCode.trim().toLowerCase(), scoutName: scoutName.trim(), scoutNameAccount: null }
 			);
 		} finally {
 			saving = false;
@@ -81,7 +83,7 @@
 <style>
 	.setup {
 		max-width: 28rem;
-		margin: var(--space-6) auto;
+		margin: calc(var(--space-6) + var(--safe-top)) auto var(--space-6);
 		padding: var(--space-6) var(--space-5);
 	}
 	h1 { margin: 0 0 var(--space-5); }

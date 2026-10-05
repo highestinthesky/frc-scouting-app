@@ -227,11 +227,18 @@ export async function pullAlliances(eventCode) {
 	}
 }
 
-/** Write the schedule to IndexedDB. Used by manager fetch and scout pull. */
-async function cacheSchedule(eventCode, matches, fetchedAt, fetchedBy) {
+/**
+ * Write the schedule to IndexedDB. Used by manager fetch and scout pull.
+ *
+ * `published` marks a copy of what the server holds, as opposed to a manager's
+ * TBA fetch that has not been published yet. Only a published copy may be
+ * dropped when the server no longer has one — see pullScheduleIfStale().
+ */
+async function cacheSchedule(eventCode, matches, fetchedAt, fetchedBy, published = false) {
 	await setSetting(`tba-schedule:${eventCode}`, {
 		cachedAt: fetchedAt ?? new Date().toISOString(),
 		fetchedBy: fetchedBy ?? null,
+		published,
 		matches
 	});
 }
@@ -306,7 +313,7 @@ export async function publishSchedule(eventCode, matches, opts = {}) {
 	}
 	if (error) throw mapSupabaseError(error, 'publish schedule');
 	// Refresh the local cache too — saves a round-trip on the next form load.
-	await cacheSchedule(code, matches, fetchedAt, opts.fetchedBy ?? null);
+	await cacheSchedule(code, matches, fetchedAt, opts.fetchedBy ?? null, true);
 	return { fetchedAt };
 }
 
@@ -351,7 +358,7 @@ export async function pullSchedule(eventCode) {
 	if (error) throw mapSupabaseError(error, 'pull schedule');
 	if (!data) return null;
 	const matches = Array.isArray(data.matches) ? data.matches : [];
-	await cacheSchedule(code, matches, data.fetched_at, data.fetched_by ?? null);
+	await cacheSchedule(code, matches, data.fetched_at, data.fetched_by ?? null, true);
 	return {
 		matches,
 		fetchedAt: data.fetched_at,
@@ -410,8 +417,20 @@ export async function pullScheduleIfStale(eventCode) {
 		.eq('event_id', sid)
 		.maybeSingle();
 	if (headErr) throw mapSupabaseError(headErr, 'check schedule');
-	if (!head) return false;
 	const cached = await getCachedSchedule(code);
+	if (!head) {
+		// The server has no schedule — never published, or a manager archived the
+		// event (reset_event_data deletes the row). This returned false and kept
+		// whatever was cached, so a schedule deleted for everyone stayed on every
+		// phone that had seen it, still driving the "you're up" reminders. A copy
+		// of a published schedule goes with it; a manager's unpublished TBA fetch
+		// is not a copy of anything and stays.
+		if (cached?.published) {
+			await clearScheduleCache(code);
+			return true;
+		}
+		return false;
+	}
 	if (cached && cached.cachedAt && cached.cachedAt >= head.fetched_at) return false;
 	const pulled = await pullSchedule(code);
 	return Boolean(pulled);

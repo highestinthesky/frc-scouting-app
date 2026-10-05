@@ -292,7 +292,9 @@ const EVENT_TABLES = [
 	'reminders',
 	'picklist',
 	'picklist_prefs',
-	'event_meta'
+	'event_meta',
+	'reminder_dismissals',
+	'entry_drafts'
 ];
 
 // ─── run ────────────────────────────────────────────────────────────────────
@@ -1639,6 +1641,52 @@ const scout2B = await clientFor(scout2, EVENT_B);
 		]);
 		ok('and it carries the name the manager typed', first_name === 'Ada', String(first_name));
 	}
+}
+
+// ─── a person's own state is theirs alone (0030) ────────────────────────────
+//
+// Dismissals and drafts follow an account between devices. Nobody else reads
+// them — a manager included — and nobody writes one in another person's name or
+// for an event they cannot reach.
+for (const table of ['reminder_dismissals', 'entry_drafts']) {
+	const row = (who, event, extra = {}) =>
+		table === 'reminder_dismissals'
+			? { profile_id: who.id, event_id: event.id, reminder_key: `k-${who.username}`, ...extra }
+			: { profile_id: who.id, event_id: event.id, slot: `s-${who.username}`, payload: { notes: 'x' }, saved_at: Date.now(), ...extra };
+
+	const { error: own } = await scoutA.from(table).insert(row(scout, EVENT_A));
+	ok(`${table}: a member keeps their own`, !own, own?.message);
+
+	const { data: theirs } = await scout2A.from(table).select('profile_id');
+	ok(`${table}: another scout reads none of it`,
+		(theirs ?? []).every((r) => r.profile_id !== scout.id), JSON.stringify(theirs));
+	const { data: mgrSees } = await managerA.from(table).select('profile_id');
+	ok(`${table}: neither does a manager of the event`,
+		(mgrSees ?? []).every((r) => r.profile_id !== scout.id), JSON.stringify(mgrSees));
+
+	const { error: forged } = await scout2A.from(table).insert(row(scout, EVENT_A, table === 'reminder_dismissals' ? { reminder_key: 'forged' } : { slot: 'forged' }));
+	ok(`${table}: nobody writes one in another person's name`, denied(forged), forged?.code);
+
+	const { error: offEvent } = await scoutA.from(table).insert(row(scout, EVENT_B));
+	ok(`${table}: nor for an event they are not on`, denied(offEvent), offEvent?.code);
+
+	const { error: superWrite } = await superA.from(table).insert(row(superUser, EVENT_A));
+	ok(`${table}: a super keeps their own on an event they manage but are not on`, !superWrite, superWrite?.message);
+
+	const { count: stolen } = await scout2A.from(table).delete({ count: 'exact' }).eq('profile_id', scout.id);
+	ok(`${table}: another scout cannot delete it`, (stolen ?? 0) === 0);
+	const [{ n }] = await sql(`select count(*)::int as n from public.${table} where profile_id = $1`, [scout.id]);
+	ok(`${table}: and it is still there`, n === 1, String(n));
+
+	const { count: mine } = await scoutA.from(table).delete({ count: 'exact' }).eq('profile_id', scout.id);
+	ok(`${table}: its owner can`, mine === 1, String(mine));
+}
+{
+	const { error: huge } = await scoutA.from('entry_drafts').insert({
+		profile_id: scout.id, event_id: EVENT_A.id, slot: 'huge',
+		payload: { notes: 'x'.repeat(70_000) }, saved_at: Date.now()
+	});
+	ok('a draft is a form, not storage: oversized payloads are refused', Boolean(huge), huge?.code);
 }
 
 await reset();

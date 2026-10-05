@@ -118,7 +118,7 @@
 <style>
 	.gate {
 		max-width: 32rem;
-		margin: var(--space-6) auto;
+		margin: calc(var(--space-6) + var(--safe-top)) auto var(--space-6);
 		padding: 0 var(--space-4);
 		color: var(--text-muted);
 	}
@@ -169,7 +169,15 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-4);
-		padding: var(--space-4) var(--space-3);
+		/* Clear of the status bar and the notch. app.html asks for
+		   viewport-fit=cover and a translucent status bar, so on an installed
+		   iPhone app page content starts at y=0 — and Studio, having no app bar
+		   to carry the inset, put its event code under the clock. The scout
+		   shell's app bar already does this; Studio skipped the shell and the
+		   inset with it. Zero everywhere else, so max() changes nothing there. */
+		padding: max(var(--space-4), env(safe-area-inset-top, 0px)) var(--space-3)
+			max(var(--space-4), env(safe-area-inset-bottom, 0px))
+			max(var(--space-3), env(safe-area-inset-left, 0px));
 		background: var(--bg-card);
 		border-right: 1px solid var(--border);
 	}
@@ -265,6 +273,9 @@
 		   rail is where the eye starts. */
 		max-width: var(--w-board);
 		padding: var(--space-5);
+		/* A phone on its side puts the notch on one edge or the other. */
+		padding-right: max(var(--space-5), env(safe-area-inset-right, 0px));
+		padding-bottom: max(var(--space-5), env(safe-area-inset-bottom, 0px));
 	}
 
 	/* Below the tablet breakpoint the sidebar becomes a strip above the content.
@@ -302,6 +313,9 @@
 		}
 		main {
 			padding: var(--space-4);
+			padding-left: max(var(--space-4), env(safe-area-inset-left, 0px));
+			padding-right: max(var(--space-4), env(safe-area-inset-right, 0px));
+			padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
 		}
 	}
 </style>

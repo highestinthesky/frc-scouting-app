@@ -4,7 +4,7 @@ This is the single planning document. Older improvement drafts and handoff
 documents were folded into it; update this file instead of starting another
 plan.
 
-Last audited: 2026-10-04. Included in v0.83 from `pre-kickoff`: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January.
+Last audited: 2026-10-04. Included in v0.83 from `pre-kickoff`: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January. v0.84 from `ios-readiness`: see the native iOS notes under *Deliberately not in v0.8*, and the sync rules in `CLAUDE.md`.
 
 Completion audit: saved-track edits preserve their recorded sample rate, and
 Stop/Escape fills samples and closes held actions using the current clock,
@@ -38,6 +38,7 @@ had to be renumbered twice.
 |---|---|---|---|
 | v0.82 | (pre-scheme) | 2026-09-01 | the last release numbered the old way |
 | v0.83 | `pre-kickoff` | 2026-10-04 | season modules, stamped auto tracks, practice mode, and recorder timing fixes |
+| v0.84 | `ios-readiness` | 2026-10-05 | iPhone/WebKit fixes, sync that loses and stales nothing, and dismissals, drafts and the scout name following the account (`0030` written, not yet applied) |
 
 ## Where the app is now
 
@@ -715,13 +716,57 @@ re-register. The one hard requirement is HTTPS — `deriveSessionId()` uses
   a form and a wait, not work, and an organisation enrolment can take three
   weeks against an individual's two days.
 
-  **One thing already known to break, found on 2026-08-26.** The Studio button in
-  `+layout.svelte` uses `target="_blank"`, and a native app has no tabs. Depending
-  on the webview that either does nothing or opens the system browser — which
-  drops a manager into Safari *signed out*, because the session lives in the
-  app's storage. Removing the attribute is not the fix on its own: the new tab
-  was how you got back, which is why Studio has no tab bar of its own. On native,
-  Studio needs an explicit exit. That is a design decision, not a one-line change.
+  **The Studio button no longer opens a tab** (`ios-readiness`, 2026-10-04).
+  It used `target="_blank"`, and a native app has no tabs — and neither,
+  usefully, does an iOS home-screen install, which opens one in an in-app Safari
+  sheet with its own storage. Both dropped a manager into Studio signed out.
+  The objection recorded here — the tab was the way back — had already been
+  answered by "Leave Studio" in Studio's own rail, so the attribute went.
+
+  **What the web build already does for the native one.** Capacitor on iOS is
+  WKWebView, the same WebKit as Safari, so every WebKit fix lands in the app for
+  free. Measured on an iOS 18.7 simulator rather than assumed:
+
+  - WebKit has **no unprefixed `user-select`** (`CSS.supports` is false). The
+    recorder's action rail and the field relied on it, so holding an action —
+    which is a long-press — selected its label and raised the loupe. Prefixed
+    now, with `-webkit-touch-callout: none`; reproduced before and gone after.
+  - A control under 16px **zooms the page on focus**. `Select` was 15.2px; it
+    reads `--fs-control` now. Every other control was already 16px.
+  - `viewport-fit=cover` with a translucent status bar starts the page at y=0.
+    The scout shell's app bar carried the inset; Studio, sign-in, register, the
+    gates and event setup did not, and drew under the Dynamic Island. They use
+    `--safe-top` (and Studio the side and bottom insets) now.
+  - `:hover` sticks after a tap (`hover: hover` is false), so `Button`, the
+    counter and the tag pills hover only under `@media (hover: hover)`.
+  - **Element fullscreen does not exist on iPhone** — the recorder's "Full
+    screen" is a CSS overlay, which is why it works. Keep it that way.
+  - The share sheet takes files (`canShare` is true): the scout's export uses it
+    on a phone and falls back to the download, which a native webview does not
+    have at all.
+
+  **Still to do when native starts**, in the order it will bite:
+
+  1. **The move is a new origin, so nothing carries over.** `capacitor://localhost`
+     has its own IndexedDB, session and settings. An entry recorded in Safari and
+     never synced stays in Safari. Before anyone deletes the home-screen icon,
+     the sync chip must read *Synced* — say so wherever the app is announced, and
+     consider a one-time notice in the web build once a native release exists.
+  2. **The service worker must be off in the native build.** WKWebView on a
+     custom scheme has no service worker, and updates arrive through the store
+     anyway. Gate `SvelteKitPWA` on a `NATIVE` build flag.
+  3. **The fallback page.** `adapter-static` writes `404.html` for GitHub Pages;
+     Capacitor serves `index.html` for an unknown path. The two `prerender =
+     false` routes need a SPA fallback in the native build rather than the root
+     page's prerendered HTML. Unverified — check it on the first native build.
+  4. `src/lib/native.js` as planned — the only file that knows a plugin exists —
+     for Share (the export), Keep Awake (the match form; the web Wake Lock API
+     is there too), Keyboard resize (the bottom tab bar rides up over the
+     keyboard in a webview) and Status Bar.
+  5. TestFlight **internal** testing needs no review for up to 100 testers on the
+     team's App Store Connect; external testing goes through Beta App Review, and
+     a public listing would meet guideline 4.2 on wrapped websites. Internal is
+     the whole requirement.
 - **Password recovery.** Wiping the data takes the four unroutable
   `@scout.invalid` accounts with it, and every account created since `0016` has a
   real address, so the urgent half of this problem disappears on its own. What

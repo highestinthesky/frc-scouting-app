@@ -121,3 +121,36 @@ export function resolveScout(name, roster) {
 export function identityFields(ref, uuidColumn = 'profile_id') {
 	return { scout_name: ref.label, [uuidColumn]: ref.profileId };
 }
+
+/**
+ * What a sign-in should do to the device's scout name, as a session patch, or
+ * null to leave it alone.
+ *
+ * The name is a join key, so the rule from CLAUDE.md stands: a device's name is
+ * not overwritten out from under the person it belongs to. What changed is
+ * knowing who that is. `account` records which account a name was filled for:
+ *
+ *   blank                    fill it, and record the account
+ *   this account's           leave it — they may have had it corrected
+ *   another account's        replace it: someone else signed in on this phone,
+ *                            and recording under the last scout's name would
+ *                            file their matches as somebody else's
+ *   nobody's (typed by hand, or set before this was recorded)
+ *                            leave it, unless it already IS this account's
+ *                            name, in which case just record the owner
+ *
+ * @param {{name?: string|null, account?: string|null}} device
+ * @param {string|null|undefined} profileId     the account signing in
+ * @param {string|null|undefined} accountName   "First Last", or the username
+ * @returns {{scoutName?: string, scoutNameAccount: string}|null}
+ */
+export function scoutNameOnSignIn(device, profileId, accountName) {
+	const theirs = scoutRef(accountName);
+	if (!profileId || !theirs.label) return null;
+	const current = scoutRef(device?.name);
+	const owner = device?.account || null;
+	if (!current.label) return { scoutName: theirs.label, scoutNameAccount: profileId };
+	if (owner === profileId) return null;
+	if (owner) return { scoutName: theirs.label, scoutNameAccount: profileId };
+	return current.key === theirs.key ? { scoutNameAccount: profileId } : null;
+}

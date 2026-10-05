@@ -33,6 +33,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { reminders } from '$lib/reminders.svelte.js';
+	import { screen } from '$lib/screen.svelte.js';
 	import { SvelteSet } from 'svelte/reactivity';
 
 	/** How long an informational reminder stays before it leaves by itself. */
@@ -72,8 +73,13 @@
 		list.filter((r) => isActionable(r) && !(onHome && r.kind === 'auto'))
 	);
 
+	// While the auto recorder owns the screen nothing is shown, and a fly-by that
+	// arrives meanwhile is not marked as flown — it flies when the screen is free.
+	const held = $derived(screen.recorder);
+
 	// New informational reminders fly by once each.
 	$effect(() => {
+		if (held) return;
 		for (const r of list) {
 			if (isActionable(r) || flown.has(r.id)) continue;
 			flown.add(r.id);
@@ -100,7 +106,7 @@
 <!-- Fly-bys. aria-live polite, not assertive: a scout mid-form should hear this
      at the next natural pause, not have their sentence interrupted. -->
 <div class="flyby-rail" aria-live="polite" aria-label="Reminders">
-	{#each showing as r (r.id)}
+	{#each held ? [] : showing as r (r.id)}
 		<div class="flyby">
 			<span class="msg">{r.message}</span>
 			{#if r.author}<small class="who">— {r.author}</small>{/if}
@@ -110,7 +116,7 @@
 </div>
 
 <!-- Jobs. One at a time: a stack of interruptions is the shelf again. -->
-{#if popups.length > 0}
+{#if popups.length > 0 && !held}
 	{@const r = popups[0]}
 	<div class="popup" role="alertdialog" aria-labelledby="rem-title">
 		<div class="card">
