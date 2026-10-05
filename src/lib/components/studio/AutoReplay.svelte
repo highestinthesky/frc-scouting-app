@@ -41,7 +41,7 @@
 	 * both would put two boxes on one robot and read as a collision. The second is
 	 * still on the entry and still visible on the team page.
 	 */
-	const rows = $derived(
+	const readable = $derived(
 		seats
 			.map((s) => {
 				const withTrack = s.entries.find((e) => readTrack(e));
@@ -62,6 +62,14 @@
 			})
 			.filter(Boolean)
 	);
+
+	// One field per replay, and it is the field the FIRST readable track was
+	// drawn on. Six robots are only comparable on one field, and a track drawn on
+	// another season's would land a plausible path in the wrong places — so a row
+	// from a different season is left out rather than drawn on a field it was not
+	// recorded on. Same object, not same year: seasonFor() is memoised.
+	const season = $derived(readable[0]?.track.season ?? null);
+	const rows = $derived(readable.filter((r) => r.track.season === season));
 
 	// The reference is the EARLIEST first movement. Shifting everything to the
 	// latest instead would make most robots start before t = 0 and be invisible
@@ -163,7 +171,7 @@
 
 {#if aligned.length}
 	<div class="replay">
-		<AutoField mode="replay" tracks={aligned} {t} {flipped} />
+		<AutoField mode="replay" tracks={aligned} {t} {flipped} {season} />
 
 		<div class="transport">
 			<Button variant="primary" onclick={toggle}>{playing ? 'Pause' : 'Play'}</Button>

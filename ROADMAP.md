@@ -4,7 +4,12 @@ This is the single planning document. Older improvement drafts and handoff
 documents were folded into it; update this file instead of starting another
 plan.
 
-Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
+Last audited: 2026-10-04. Included in v0.83 from `pre-kickoff`: the season boundary's steps 1–3 and practice mode. Step 4 waits for 9 January.
+
+Completion audit: saved-track edits preserve their recorded sample rate, and
+Stop/Escape fills samples and closes held actions using the current clock,
+including when the timer has not ticked or was throttled. `recorder.test.mjs`
+exercises these cases with the compiled Svelte script and a controlled clock.
 
 > **Live state is maintained in `CLAUDE.md`, not here.** A plan document and a
 > state document drift apart, and this file has already carried a "live state"
@@ -15,6 +20,25 @@ Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
 > is `true`, events are real rows with membership deciding access, and v0.76 is
 > shipped. One commit is unpushed.
 
+## How versions work
+
+**A version number is a release, not a unit of work.** Changes accumulate on a
+branch — any number of commits, across any number of sessions — and carry no
+number while they are there. When the user decides a branch is good enough for
+production, it is merged to `main`, takes the next number after the last
+release, gets a line in the release log below, and the user pushes it.
+
+Plans here are named by what they do, never by a number they have not earned
+yet. Changed 2026-10-04: until then every piece of work was numbered before it
+was built, and the numbers stopped meaning anything — two commits shipped as
+v0.82 while this file's v0.82 was something else, and the plan for v0.83–v0.87
+had to be renumbered twice.
+
+| Release | Branch | Merged | What it was |
+|---|---|---|---|
+| v0.82 | (pre-scheme) | 2026-09-01 | the last release numbered the old way |
+| v0.83 | `pre-kickoff` | 2026-10-04 | season modules, stamped auto tracks, practice mode, and recorder timing fixes |
+
 ## Where the app is now
 
 | Area | Current state |
@@ -24,12 +48,13 @@ Last audited: 2026-08-26. Planning **v0.8 — the event series**; see below.
 | Metrics and manager analysis | Shipped across Insights, team detail, compare, CSV and picklist scoring |
 | Picklist and alliance selection | Shipped; cloud-synced picklist and live taken-team state |
 | Accounts and roles | Shipped; manager-created accounts and invite codes, three roles enforced in RLS |
-| Studio | Shipped v0.73–v0.74 and **being reorganised in v0.83** — five noun-named pages holding nine jobs, four of them split across two pages |
-| What a scout sees at an event | One page since v0.82; the event's full schedule is still missing (v0.85) |
-| Interactive auto scouting | Shipped in v0.81 — record, correct, replay, route clustering, action chips. **Field geometry is 2026 and hard-coded** (v0.9) |
+| Studio | Shipped v0.73–v0.74 and **to be reorganised** (*Studio reorganised*, below) — five noun-named pages holding nine jobs, four of them split across two pages |
+| What a scout sees at an event | One page since v0.82; the event's full schedule is still missing (*The scout's schedule*) |
+| Interactive auto scouting | Shipped in v0.81 — record, correct, replay, route clustering, action chips. v0.83 moves the field, actions, questions, cycle, endgame and auto length into season data in `seasons/2026.js` |
 | What happened in one match | Shipped in v0.81; reachable from Schedule and Coverage since v0.81.2 |
-| Surviving a season change | **Not built (v0.9).** `form-config.js` already generalises the scalar half; the spatial half does not |
-| Pit scouting and the team profile | Not built (v0.84) |
+| Surviving a season change | v0.83 (*The season boundary*): a season is one module, `CURRENT_SEASON` is the switch, tracks carry their season, and the throwaway 1999 season proves the swap. `form-config.js` remains the scalar half |
+| Practice mode | v0.83: `/practice`, the recorder on the current season with nothing kept, reachable before a device has an event |
+| Pit scouting and the team profile | Not built (*Pit scouting*) |
 | Native apps | Paused — see *Deliberately not in v0.8* |
 | Used by a scout, ever | **No.** Every verification is synthetic pointer events from a console. The offseason was cancelled, so the first real use is a competition |
 
@@ -73,24 +98,22 @@ synthetic pointer events from a console.
 **The seven weeks after kickoff are the busiest of the team's year.** Anything
 unfinished on 9 January gets finished by people who are also building a robot,
 and then walks into that first event. So "at kickoff it is one file and a
-config" is not an aspiration for v0.9 — it is the requirement, and the work
+config" is not an aspiration for the season framework — it is the requirement, and the work
 before January has to earn it.
 
 ## v0.8 — the event series
 
-Enumerated in full before any of it ships, per the working agreement. The 7
-series closed with v0.76, so this is where the numbers resume.
+The last series planned under the old numbering, where every piece of work was
+given a version before it was built. v0.80–v0.82 shipped under it. What it had
+left — Studio reorganised, pit scouting, the scout's schedule, the comparison
+pair and the move to rohawks.org — is kept below under names rather than
+numbers; see *How versions work* at the top.
 
-**The charter: everything here is used *at* an event, by someone standing in a
-gym.** That is what decides both what is in the series and the order it lands
-in. A feature that is only interesting on a laptop at home is not in v0.8.
-
-**The target is the offseason event on 10–11 October 2026.** It is a rehearsal,
-and the point of a rehearsal is to find out what is broken — which is also the
-reason this series stays on the web. When a scout finds a bug on the Saturday
-morning, a push fixes it and they reload. Inside a native build the same fix
-waits on App Review. The web is not the fallback for a shakedown event; it is
-the correct answer.
+**Its charter still holds: everything here is used *at* an event, by someone
+standing in a gym.** Its target — a rehearsal at the offseason event on 10–11
+October 2026 — does not: the offseason was cancelled, so there is no rehearsal
+and the first real use is a competition. That is what moved the season
+framework and practice mode ahead of the rest.
 
 **Native is paused, not cancelled** — see *Deliberately not in v0.8* below.
 
@@ -354,7 +377,7 @@ right first.
 ### v0.82 — one scout page, and the name belongs to the manager ✅ shipped 2026-09-01
 
 Not what this number originally held. **The comparison pair below was v0.82 and
-was renumbered to v0.86 after the fact**, because two commits shipped under this
+was renumbered after the fact — it is *The comparison pair* below**, because two commits shipped under this
 number while the roadmap was not open. Recording it rather than quietly
 renumbering: a version number that means two things is the failure CLAUDE.md
 names, and the commits are pushed.
@@ -373,7 +396,7 @@ names, and the commits are pushed.
    `/register` no longer collects a name; `/studio/accounts` gained the rename,
    because it is now the only path.
 
-### v0.83 — Studio reorganised
+### Studio reorganised
 
 **The next release, and the one to build before anything else.** It is fully
 specifiable today, it has no dependency on the 2027 game, and the season
@@ -492,7 +515,7 @@ and have Run link across.
 - `/studio/event` as a route
 - `CoverageCheck` as a separate component
 - `/studio/insights/team/[n]` — the legacy redirect, once the PWA has cycled
-- **v0.84b is absorbed.** Getting to a replay was its own planned release; Home's
+- **The planned "getting to a replay" item is absorbed.** It was its own planned release; Home's
   Review tile and Review's index solve it, so it is deleted rather than deferred.
 
 #### Traps — read before writing anything
@@ -567,7 +590,7 @@ Reviewable in five steps rather than one diff:
 4. **Review** — new index; the two detail pages get a parent.
 5. **Home** — last, because every tile links to something that must exist first.
 
-### v0.84 — pit scouting and the team profile
+### Pit scouting and the team profile
 
 **Pit scouting is not a new surface.** `/studio/insights/team/[teamNumber]`
 already renders what the matches say about a team; pit answers are what the team
@@ -592,7 +615,7 @@ until after the first offseason, which removes the migration care that is
 normally the expensive half of adding a table here. That licence expires with
 the event.
 
-### v0.85 — the scout's schedule
+### The scout's schedule
 
 v0.73 step 2 planned a read-only `/schedule` and it was never built — there is
 no route for it. A scout sees the matches one of their own teams is in, on Home,
@@ -602,7 +625,7 @@ coverage maths rather than computing the same thing a second way.
 Last because it is the smallest and the only item in the series that can slip
 without costing anything on the day.
 
-### v0.86 — the comparison pair
+### The comparison pair
 
 Two questions, one table, **one release** — because they are the same rendering
 and building them apart is how `insights` ended up with the same shape under
@@ -647,7 +670,7 @@ already exists and already scrolls in its own wrapper.
 still not enough, that is the evidence a chart is needed — and `docs/adr-003-boards.md`
 is where the thinking already is.
 
-### v0.87 — the app moves to rohawks.org/app
+### The app moves to rohawks.org/app
 
 Off GitHub Pages and onto the team's own hosting, once the features are stable.
 
@@ -703,9 +726,9 @@ re-register. The one hard requirement is HTTPS — `deriveSessionId()` uses
   `@scout.invalid` accounts with it, and every account created since `0016` has a
   real address, so the urgent half of this problem disappears on its own. What
   remains is that there is no recovery flow in the UI at all — a fair thing to
-  carry into v0.9, and still the most immediate reason a second Edge Function
+  carry into the season work, and still the most immediate reason a second Edge Function
   gets written.
-- **A camera, and therefore Supabase Storage.** See v0.83.
+- **A camera, and therefore Supabase Storage.** See *Pit scouting*.
 - **True peer-to-peer sync.** Still not possible in a browser: iOS Safari has no
   Web Bluetooth and no local peer discovery, and WebRTC needs a signalling server
   — which needs the internet the feature exists to avoid. It belongs to the
@@ -715,10 +738,10 @@ re-register. The one hard requirement is HTTPS — `deriveSessionId()` uses
 - **Scout reliability**, considered and rejected as superficial.
 - **The season retune.** January's ritual, not this series'.
 
-## v0.9 — the season boundary
+## The season boundary
 
 **The framework series, and the one with a deadline it does not control.**
-Specced 2026-09-01; build after v0.83, finish before 9 January.
+Specced 2026-09-01; finish before 9 January.
 
 ### What already survives a season change — do not rebuild these
 
@@ -737,19 +760,22 @@ Specced 2026-09-01; build after v0.83, finish before 9 January.
 - Events, membership, RLS, sync, assignments, reminders, coverage and accounts
   are game-agnostic. TBA and Statbotics are already year-parameterised.
 
-### What is hard-coded and must become configuration
+### What was hard-coded, and where it lives now
 
-| | where | note |
+Done 2026-10-04 on `pre-kickoff`. Every row was a 2026 constant in generic code;
+each is now a field of the season spec, read through a built Season.
+
+| | was | now |
 |---|---|---|
-| Field geometry | `field.js` — ~20 inch constants, `OBSTACLES`, `FEATURES`, `ALLIANCE_BANDS`, `START_BANDS` | good shape, wrong home |
-| The action set | `auto-track.js` `ACTIONS` | stored as strings on every entry |
-| What a cycle is | `cycleStats` — collect then score | game-defined, not universal |
-| The endgame | `CLIMB_LEVELS`, the two climb questions, `climbOk`, `climbStartedAt` | 2027 may have no climb at all |
-| Auto duration | `AutoRecorder` `AUTO_MS = 15_000` | not constant across FRC history |
-| The rail | `LABELS`, `KEYS`, `KEY_FOR` — four actions on A/S/D/F | |
-| The icons | inline paths in `AutoField`, files in `icons/` | only `malfunction` is game-agnostic |
-| The start rule | `clampToStart`, the alliance zone | a new game may not constrain starts at all |
-| Zone names | `START_BANDS`, derived from the HUB | `routeSignature` buckets on these |
+| Field geometry | `field.js` — ~20 inch constants, `OBSTACLES`, `FEATURES`, `ALLIANCE_BANDS`, `START_BANDS` | `seasons/2026.js` `field`; `field.js` is the engine, `makeField(spec.field)` |
+| The action set | `auto-track.js` `ACTIONS` | `actions[].key`, validated by `buildSeason()` |
+| What a cycle is | `cycleStats` — collect then score | `cycle: {from, to}`, or null for a game without one |
+| The endgame | `CLIMB_LEVELS`, the two climb questions, `climbOk`, `climbStartedAt` | the action with `ends: true` and its `questions`; `cycleStats().endgame.{done, startedAt, answers}` |
+| Auto duration | `AutoRecorder` `AUTO_MS = 15_000` | `autoMs` |
+| The rail | `LABELS`, `KEYS`, `KEY_FOR` — four actions on A/S/D/F | `actions[].label`, `hotkey`, `tone` |
+| The icons | inline paths in `AutoField`, files in `icons/` | `actions[].icon` names one of the set; `null` draws `letter` or the label's first letter, unique per season |
+| The start rule | `clampToStart`, the alliance zone | `field.startDepth`, or null for no constraint |
+| Zone names | `START_BANDS`, derived from the HUB | `field.startBands` |
 
 ### What BIOCORE being pick-and-place tells us
 
@@ -772,7 +798,9 @@ the current model is shaped for the wrong thing in three places.
 
 ### The steps
 
-1. **v0.90 — `seasons/`.** `field.js` becomes `seasons/2026.js` plus a loader
+Steps 1–3 done 2026-10-04 on `pre-kickoff`.
+
+1. **Done — `seasons/`.** `field.js` becomes `seasons/2026.js` plus a loader
    and nothing else changes.
 
    **Prove it by adding a deliberately weird throwaway season and switching to
@@ -781,7 +809,7 @@ the current model is shaped for the wrong thing in three places.
    copy of 2026 proves nothing, and January is the wrong week to discover that.
    The throwaway season stays in the repo as a test fixture.
 
-2. **v0.91 — the season on the track.** `FIELD_VERSION`'s own comment reads
+2. **Done — the season on the track.** `FIELD_VERSION`'s own comment reads
    *"Dates the picture; stored on nothing"*, and `FIELD_SEASON` is read by
    exactly one line — a test asserting it is 2026. A stored track carries `v`
    for its byte layout and nothing about which field it was drawn on, so a 2026
@@ -792,15 +820,45 @@ the current model is shaped for the wrong thing in three places.
    tracks are test data and are not being kept. It is still worth doing now
    rather than in 2028, because doing it while the code is open is nearly free.
 
-3. **v0.92 — lift the vocabulary.** Actions, the cycle definition, the endgame
+3. **Done — lift the vocabulary.** Actions, the cycle definition, the endgame
    and the auto duration into the season module; the rail, the chips and the
    icons drive from it. Shaped for actions that carry answers, per above.
 
-4. **v0.93 — the BIOCORE field.** Blocked until 9 January. If the three above
+4. **The BIOCORE field.** Blocked until 9 January. If the three above
    are right, this is one file plus a `form-config.js` edit. **That is the test
    of everything above it.**
 
+### Decisions made building it
+
+- **Season resolution.** Recording uses `currentSeason()`; reading uses the
+  track's own `season` stamp through `seasonFor()`. An unstamped track is
+  2026's — the one season with `claimsUnstampedTracks`, since 2026 is the only
+  game the recorder knew before the stamp. An unregistered season decodes to
+  null rather than being drawn on the wrong field.
+- **v1 / v2.** A bundle cached before the stamp ignores `season` and draws any
+  `v: 1` track on the 2026 field. So 2026 tracks stay `v: 1` + stamp, readable by
+  every bundle on the right field, and every other season writes `v: 2` in the
+  same byte layout, which an old bundle refuses. v2 requires the stamp. `v` now
+  means "layout, and whether a pre-stamp reader may place it", and the header of
+  `auto-track.js` says exactly what an old decoder does with each.
+- **Actions carry answers through `questions`.** Any action may ask follow-ups;
+  each answer is a top-level key on the interval, absent when unanswered, kept
+  only on an exact option match. `role: 'level' | 'outcome'` tells generic code
+  how to combine them without knowing the game. The endgame's are asked at the
+  press; everyone else's in the sweep after the whistle.
+- **The endgame is the `ends` action.** At most one; it runs to the whistle and
+  is named by when it began. A season may have none, and `cycleStats` reports
+  null for a cycle, fault or endgame the season has no word for — never zero.
+- **The proof is the throwaway 1999 season**, `seasons/fixture.js`: a squarer,
+  asymmetric field, no start constraint, 20 s auto, five actions on other keys,
+  two-question scoring, a non-climb endgame. Switched to in a scratch copy, the
+  whole suite passes except the guard asserting it is not committed, and the
+  recorder, replay and stats were driven on it in the browser.
+
 ### Practice mode
+
+**Done 2026-10-04 on `pre-kickoff`** — `/practice`, in `NEEDS_NO_EVENT` so a
+signed-in device with no event reaches it.
 
 The recorder against a countdown with nothing saved, so a scout can run fifteen
 seconds on their own phone at home, as many times as they like.
@@ -860,17 +918,28 @@ Login may require a network. Recording may not.
 
 ## Retuning at kickoff
 
-**Superseded in shape by v0.9**, which exists to make this list shorter. Until
-that ships, this is what a January actually costs; after it, steps 1–2 become
-one module under `seasons/`.
+What a January costs now that the season boundary exists:
 
-1. Update `METRIC_FIELDS` — labels, maximums, `higherIsBetter`.
-2. **Replace the field geometry**, and re-check the coordinate normalisation.
-   Spatial observations store field-absolute fractions, so a new field with
-   different proportions silently moves every mark recorded against the old one.
-   v0.91 is what stops that being silent.
-3. Bump `SCHEMA_VERSION`.
-4. Run the full test and build checks before deploying.
+1. **Add `src/lib/seasons/2027.js`**, copying the shape of `2026.js` — field
+   in inches, actions, questions, cycle, endgame, `autoMs`. Data only.
+2. **Register it** in `SPECS` in `seasons/index.js`. Do not give it
+   `claimsUnstampedTracks`; that belongs to 2026 forever.
+3. **Flip `CURRENT_SEASON`** to 2027. Old tracks keep reading on 2026 by their
+   stamp.
+4. **Retune `form-config.js`** — `METRIC_FIELDS` labels, maximums,
+   `higherIsBetter`.
+5. **Bump `SCHEMA_VERSION`.**
+6. **Run the suite** — `npm test` builds every registered season, so a mistake
+   in the new file fails here — then the build, then the recorder on
+   `/practice` in a browser.
+
+**Before writing `2027.js`:**
+
+- More than six actions? The rail is one row of equal shares and stops fitting a
+  short phone past about six; it needs a second row or a narrower label first.
+- A new action needs an icon in the `AutoField` set, or `icon: null` and a
+  `letter` — two icon-less actions may not draw the same character, and
+  `buildSeason()` refuses it.
 
 Keep the list short enough to record reliably during one match, and preserve the
 invariant underneath all of it: blank means *not recorded*; `0` means *recorded
@@ -1039,7 +1108,7 @@ labelled Scouting moved to Studio; `/insights/*` became `/studio/insights/*`;
 Accounts left Settings. Every old path redirects, because a cached PWA or a
 bookmark must not 404 on the morning of an event.
 
-**Step 2's read-only `/schedule` was never built.** It is v0.84.
+**Step 2's read-only `/schedule` was never built.** It is *The scout's schedule*.
 
 #### v0.74 — Studio becomes its own application, visually ✅
 

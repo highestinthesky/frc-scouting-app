@@ -28,6 +28,7 @@ on `/studio` — because the global tab bar was a trapdoor out of it.
 | `/scouting` | A redirect to `/home`. Folded in at v0.82; kept because an installed PWA still has a tab bar pointing here. |
 | `/scouting/new`, `/scouting/edit` | The entry form. |
 | `/settings` | Device settings, event picker, sign out. |
+| `/practice` | The auto recorder against its own countdown, on the current season, with nothing kept — no IndexedDB, no draft, no sync. It is in `NEEDS_NO_EVENT` in `+layout.svelte`, the one route a signed-in device reaches without an event or a scout name, because its whole purpose is rehearsal before kickoff, when nobody is on an event. The sign-in guard still applies. |
 | `/home` | The scout's whole page: what is next, what a manager has said, what they are watching, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. |
 | `/studio/event` | Who is on this event — drag scouts on and off. |
 | `/studio/schedule` | Publish a TBA schedule, auto-assign, per-match overrides, reminders. |
@@ -212,7 +213,7 @@ has already finished and simply cannot paint.
 Key a match on TBA's own `match.key` (`2026nyny_sf10m1`), never on
 `match_number`: the SET number is the part that makes it unique.
 
-`npm test` runs 22 unit suites plus 2 checkers. The checkers are the important
+`npm test` runs 27 unit suites plus 2 checkers. The checkers are the important
 ones, and neither is a unit test:
 
 - **`check_components.mjs`** reads *emitted* CSS, not source, because Svelte's
@@ -310,15 +311,14 @@ Each of these produced a confident wrong answer before being caught:
 - **Commit freely; leave `git push` to the user.** A push deploys.
 - **`ROADMAP.md` is the only plan document.** Update it rather than starting a
   second one — two earlier plans and a handoff were folded into it.
-- **Plan a version series before shipping into it.** Every `v0.7x` release is
-  enumerated in `ROADMAP.md` before any of them ships, and v0.8 does not begin
-  until the 7 series closes. This rule exists because v0.6 finished and the work
-  simply kept going into v0.67–v0.71 with no plan behind the numbers — which is
-  how a version number stops meaning anything.
-
-  A release may span several commits, and **an overhaul is allowed to stay on
-  `v0.x`** rather than forcing a major bump; the series is the unit of planning,
-  not the commit.
+- **A version number is a release, not a unit of work.** Work accumulates on a
+  branch across as many commits and sessions as it takes, and carries no number
+  while it is there. A number is assigned only when the user decides a branch is
+  good enough for production: it merges to `main`, takes the next number, gets a
+  line in `ROADMAP.md`'s release log, and the user pushes it. Commit subjects
+  carry no version, and plans are named by what they do. This replaced
+  numbering every piece of work up front (2026-10-04), which had stopped
+  meaning anything — see *How versions work* in `ROADMAP.md`.
 - Existing structure is a **baseplate**. Reorganising it aggressively is fine.
   The invariants below are what isn't negotiable.
 
@@ -342,13 +342,50 @@ back in, because it plainly contains its own entries.
 A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — see
 `docs/adr-002-spatial-observations.md`. Three things make it work:
 
+- **The game is a season module, and `src/lib/seasons/` owns its vocabulary.**
+  `seasons/2026.js` is plain data: the field (dimensions, obstacles, landmarks,
+  start depth and bands), the length of auto, the actions with their hotkeys,
+  icons and follow-up `questions`, which action is the fault, which one `ends`
+  the robot's auto, and what a cycle is. `field.js` is the geometry ENGINE
+  (`makeField`) and names no game; `auto-track.js`, `AutoField`, `AutoRecorder`
+  and the stats read everything off a Season. `CURRENT_SEASON` in
+  `seasons/index.js` is the switch, and `buildSeason()` validates a spec and
+  throws, so a mistake in a season file fails `npm test` rather than an event.
+
+  **Recording uses the current season; reading uses the track's own stamp.** A
+  track carries `season: <year>`, and `decodeTrack` resolves it through
+  `seasonFor()` — so flipping `CURRENT_SEASON` never re-reads history on a
+  different field. A track with no stamp predates it and is 2026, the one season
+  with `claimsUnstampedTracks`. A season this build has not registered decodes to
+  null: invisible rather than convincingly misplaced.
+
+  **`v` is what makes the stamp safe for a cached bundle.** A pre-stamp bundle
+  checks `v === 1` and ignores `season`, so it draws whatever it accepts on the
+  2026 field. 2026 tracks are therefore written `v: 1` + stamp — every bundle
+  reads them on the right field — and every other season's are `v: 2`, the
+  identical byte layout, which an old bundle refuses. `decodeTrack` accepts v1
+  (stamp optional) and v2 (stamp required); anything else is null. This build
+  reads the stamp, so a v1 track stamped 1999 is a 1999 track — only pre-stamp
+  bundles rely on `v`.
+
+  `seasons/fixture.js` is a throwaway 1999 season, unlike 2026 in every way the
+  framework claims to support. Setting `CURRENT_SEASON = 1999` (in a scratch
+  copy) is how a framework change is proven: the only red test is the guard in
+  `seasons.test.mjs` asserting that it is not committed. Tests written in 2026's
+  words pass `seasonFor(2026)` explicitly for that reason.
+
 - **`t` is derived from a sample's INDEX**, so evenly-spaced samples are the one
   thing the encoding rests on. The recorder therefore fills forward to
   `performance.now()` rather than counting `setInterval` ticks: a backgrounded
   tab throttles the interval, and the first version recorded 52 seconds and would
-  have decoded as 15 seconds of motion at three times the true speed.
+  have decoded as 15 seconds of motion at three times the true speed. It samples
+  the initial position at Start, and Stop/Escape also fills to the current clock
+  before closing held actions. Reviewing keeps the track's recorded `hz`;
+  editing an answer must not change the positions' timestamps. Only a new
+  recording returns to `SAMPLE_HZ`. `recorder.test.mjs` exercises the compiled
+  component script against a controlled clock.
 - **An end of the field is coloured by the alliance that owns it, not by who is
-looking.** `field.js` fixes the convention — "Red stands at x = 0" — so near is
+looking.** The engine in `field.js` fixes the convention — "Red stands at x = 0" — so near is
 red and far is blue, and `AutoField` takes no `allianceColor` at all. The tint
 was keyed on `own`/`opp` while the stylesheet painted `own` red: correct for a
 red scout, and both ends inverted for a blue one, on the one graphic whose whole
@@ -363,8 +400,9 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   `fromScreen` is written out rather than reusing `toScreen`, because a quarter
   turn is not self-inverse.
 - **Coordinates are fractions of the FULL field**, never the drawn (cut) region
-  and never alliance-relative. `field.js` holds the season geometry and derives
-  the alliance-relative answers — start zone, orientation — at display time.
+  and never alliance-relative. The season file holds the geometry and the
+  engine in `field.js` derives the alliance-relative answers — start zone,
+  orientation — at display time.
   The **whole** field is drawn: the plan assumed robots are confined to their own
   half in auto and there is no such rule (G403 restricts *contact* past the
   centre line, not territory), so a cut field would have had nowhere to put a
@@ -387,7 +425,7 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   resolution free to move on an axis another rule has already fixed will use
   it**, which is the same note `clampToField` carries about the field boundary
   undoing its own obstacle escape.
-  It is the real 2026 REBUILT field — 54ft 3in by 26ft 3in, robots at a 120in
+  `seasons/2026.js` is the real 2026 REBUILT field — 54ft 3in by 26ft 3in, robots at a 120in
   frame perimeter — kept in **inches** and converted once, because `0.2826`
   cannot be checked against a game manual and `184` can. **The alliance zone
   depth is DERIVED, not quoted**: the manual says 158.6in twice and its own
@@ -396,9 +434,12 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   they cannot drift — which is why it is built from dimensions rather than
   traced. **BUMPs and TRENCHes are landmarks, not obstacles**: a robot drives
   over one and under the other, and only the two HUBs and the DEPOT stop it.
-- **`decodeTrack` refuses a version it does not know.** A future layout decoded
-  as this one draws a plausible path in the wrong places, which is worse than a
-  gap because a gap is visible.
+- **`decodeTrack` refuses a version or a season it does not know.** A future
+  layout decoded as this one, or a track drawn on a field this build does not
+  have, draws a plausible path in the wrong places, which is worse than a gap
+  because a gap is visible. The recorder does not place over one either: a
+  stored track it cannot decode is shown as such, and only "Record again"
+  discards it.
 - **What a robot is DOING is drawn on the robot**, as a chip above it —
   `badges()` and the icon block in `AutoField`. The artwork is the team's, in
   `icons/robot-action-icons/`, inlined as path data and drawn in its native 256
@@ -430,15 +471,18 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   exist. Its edge is `--text-faint`, not `--border-strong`: the disc is 1.08
   against the carpet so the edge carries the whole boundary, and `--border-strong`
   is 2.97 on `--bg-subtle` in the light palette — under the 3.0 floor.
-- **A climb ends the robot's auto, and that is what earns the popup the screen.**
-  `press('climb')` opens a mark that `release` deliberately does NOT close — it
-  runs to the whistle like any held action, which both frees the scout's hands
-  and keeps the interval non-empty (`encodeTrack` drops `t1 <= t0`, so a climb
-  that stopped the recording the instant it began would be silently discarded).
-  The sheet asks the two things only a scout can answer: which rung, and whether
-  it came off. Both are three-state — a rung nobody could read is not rung zero
-  and a climb nobody judged is not a failed one, so `ok` is `true`/`false`/absent
-  and `climbOk` reports null rather than false.
+- **The endgame ends the robot's auto, and that is what earns the popup the
+  screen.** The season's `ends` action (2026's climb) opens a mark on press that
+  `release` deliberately does NOT close — it runs to the whistle like any held
+  action, which both frees the scout's hands and keeps the interval non-empty
+  (`encodeTrack` drops `t1 <= t0`, so a climb that stopped the recording the
+  instant it began would be silently discarded). The sheet asks that action's
+  `questions` — in 2026, which rung and whether it came off. Every answer is
+  three-state — a rung nobody could read is not rung zero and a climb nobody
+  judged is not a failed one, so `ok` is `true`/`false`/absent and
+  `cycleStats().endgame.answers.ok` reports null rather than false. Other
+  actions' questions wait for the post-whistle sweep, whose Done advances; a
+  sheet opened by hand with "Answers" closes on Done.
 - **A robot is not faded the instant its own track ends.** Replay aligns on first
   movement, not a shared clock, so six recordings of one match legitimately end
   tenths of a second apart; greying one out while its neighbours run says "this
@@ -454,8 +498,9 @@ and belongs to `clampToStart()`; what colour an end is, is not.
   and the revision under it. Space starts a recording; Enter is under the hand
   that is about to be on the mouse.
 
-`SCHEMA_VERSION` is 4. The track carries its own `v` for the byte layout, so the
-sample rate can change without pretending the whole form did. `autoTrack` is
+`SCHEMA_VERSION` is 4. The track carries its own `v` for the byte layout (and,
+above, for whether a pre-stamp bundle may read it), so the sample rate can
+change without pretending the whole form did. `autoTrack` is
 deliberately not `autoPathing` — that is an older free-text field rendered on two
 pages, and two concepts must not share a name.
 
@@ -920,7 +965,7 @@ read-only `/schedule` was never built.
 
 | | |
 |---|---|
-| `ROADMAP.md` | the single dependency-ordered plan; v0.82 shipped, **v0.83 is Studio reorganised and is specced for another model to build**, v0.9 is the season boundary before BIOCORE |
+| `ROADMAP.md` | the single dependency-ordered plan and the release log; v0.82 is the last release, the season boundary is in progress on `pre-kickoff`, and *Studio reorganised* is specced for another model to build |
 | `HANDOFF.md` | working preferences, environment traps, and the decisions still open |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/auto-scouting-plan.md` | interactive auto scouting as the team asked for it — the source document, reference not draft |

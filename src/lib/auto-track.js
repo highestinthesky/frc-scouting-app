@@ -23,45 +23,64 @@
 // a robot's width, and on a field drawn 350 px wide one step is 1.4 px, well
 // under a thumb. Quantisation is not the limiting error here; the scout is.
 //
-// 150 samples × 2 bytes = 300 bytes, ~500 encoded with the intervals. A fully
-// covered 24-match event is about 70 KB. The plan raised database size as a
-// worry and the arithmetic does not support it — but it only does not support
-// it BECAUSE of this encoding. Storing 60 Hz unquantised JSON floats is 27 KB
-// per track, which would also have worked, and would have made entries.
-// observations a place where a 27 KB blob rides along on every sync tick.
+// 150 samples × 2 bytes = 300 bytes, 612 encoded with four intervals and the
+// season stamp. A fully covered 24-match event is about 86 KB. The plan raised
+// database size as a worry and the arithmetic does not support it — but it
+// only does not support it BECAUSE of this encoding. Storing 60 Hz unquantised
+// JSON floats is 27 KB per track, which would also have worked, and would have
+// made entries.observations a place where a 27 KB blob rides along on every
+// sync tick.
+//
+// ─── the track knows its season ────────────────────────────────────────────
+//
+// Nothing in this file names a game. What a robot can be doing, which follow-up
+// questions an action asks, what a cycle is, which action is a fault and which
+// one ends the robot's auto — all of it is read off a Season (`./seasons/`), and
+// `seasons/2026.js` is where this year's answers live.
+//
+// A track is stamped with the year of the season it was recorded on, because a
+// track is positions on ONE field and words from ONE game's vocabulary.
+//
+// The stamp is NOT backward-compatible on its own, and `v` is what makes it
+// safe. A bundle cached before the stamp existed checks `v === 1`, ignores
+// `season`, and draws whatever it accepts on the 2026 field. So:
+//
+//   - a track of the season that claims unstamped tracks (2026) is written
+//     `v: 1` plus the stamp. An old bundle reads it on the 2026 field, which is
+//     the right one, and this build reads it on the season the stamp names.
+//   - a track of every other season is written `v: 2`, in the identical byte
+//     layout. An old bundle refuses it as a version it does not know — the only
+//     way a bundle that predates seasons can be told it does not have the field.
+//     A v2 track MUST carry its stamp; one without is refused here.
+//
+// This build does not lean on `v` to pick the field: a v1 track stamped 1999
+// still decodes as 1999. Only pre-stamp bundles rely on the version number.
 
 import { mirrorPosition } from './field.js';
+import { currentSeason, seasonFor, seasonForUnstamped } from './seasons/index.js';
 
-/** Bump when the byte layout or the sample rate changes. NOT SCHEMA_VERSION. */
+/**
+ * `v` on a stored track. NOT SCHEMA_VERSION, and not the season either — the
+ * season is its own stamp, `season`, on the track.
+ *
+ * `TRACK_VERSION` and `TRACK_VERSION_STAMPED` are ONE byte layout and one sample
+ * rate. They differ only in who can read them: 1 is read by every bundle that
+ * has ever shipped, 2 only by one that reads the stamp (see the header). A
+ * change to the layout or the sample rate takes the next number for every
+ * season, and every older decoder refuses it.
+ */
 export const TRACK_VERSION = 1;
+export const TRACK_VERSION_STAMPED = 2;
+
+/**
+ * The `v` a track of this season is written with.
+ *
+ * @param {import('./seasons/index.js').Season} season
+ */
+const versionFor = (season) => (season.claimsUnstampedTracks ? TRACK_VERSION : TRACK_VERSION_STAMPED);
 
 /** Samples per second. See the header — this is a claim about people, not phones. */
 export const SAMPLE_HZ = 10;
-
-/**
- * What a robot can be doing. Closed, and versioned with the season alongside
- * METRIC_FIELDS, because what a robot can DO changes every January and a
- * free-text action would be unaggregatable within one event.
- *
- * `fault` is the plan's "disrupted from its original path". It is deliberately
- * not called `broke` — the form already has a `brokeDown` boolean and these are
- * not the same claim: a robot can be knocked off its route and finish fine.
- */
-export const ACTIONS = Object.freeze(['collect', 'score', 'fault', 'climb']);
-
-/**
- * How high a robot got on the TOWER, as the rungs are actually built.
- *
- * Three RUNGs at 27, 45 and 63 inches. Stored as the level rather than the
- * height, because the level is what a manager says and the heights are season
- * data that moves every January — the same reason a start ZONE is derived and
- * not stored.
- *
- * A `climb` interval carries `lvl`. It is optional: a scout who saw a robot get
- * on the tower but could not tell which rung has recorded something true, and
- * forcing a guess would turn it into something false.
- */
-export const CLIMB_LEVELS = Object.freeze([1, 2, 3]);
 
 /** Fraction of the field a robot must move before it counts as having started. */
 const MOVEMENT_EPSILON = 0.01;
@@ -110,6 +129,36 @@ function base64ToBytes(b64) {
 }
 
 /**
+ * Copy an interval's answers onto `out`, keeping only what the season allows.
+ *
+ * Only the questions THIS action asks, and only a value that is exactly one of
+ * that question's options. Exactly — `===`, no coercion — because the options
+ * are the closed set of things a scout could have tapped, and anything else is
+ * not an answer:
+ *
+ *   - An absent answer is "saw it, could not tell", which is a real
+ *     observation. A zero (`lvl: 0`) would be a different claim — "did not" —
+ *     and would be a lie in the same shape. Blank is not zero.
+ *   - Three-state answers (`true` / `false` / absent) are the reason this is
+ *     written out rather than coerced. `false` and absent are the two that get
+ *     confused, and confusing them turns "nobody judged it" into "it failed".
+ *     A stray `'yes'` must not become `true` on the way through either.
+ *
+ * Shared by encode and decode so the two cannot disagree about what survives.
+ *
+ * @param {object} iv   the interval as given
+ * @param {import('./seasons/index.js').Action} action
+ * @param {object} out  the interval being built
+ */
+function copyAnswers(iv, action, out) {
+	for (const q of action.questions ?? []) {
+		const value = iv[q.key];
+		if (q.options.some((o) => o.value === value)) out[q.key] = value;
+	}
+	return out;
+}
+
+/**
  * Build the stored shape from what the recorder collected.
  *
  * Every piece is optional and they are stored separately on purpose (Decision
@@ -118,42 +167,27 @@ function base64ToBytes(b64) {
  * most-asked question. Returning null for "nothing at all" is what keeps a
  * skipped recording out of the aggregates rather than in them as a zero.
  *
+ * `season` is the game the recording was made on; the output is stamped with
+ * its year, and only that season's actions and answers survive.
+ *
  * @param {{start?: {x:number,y:number}|null,
  *          samples?: Array<{x:number,y:number}>,
  *          intervals?: Array<{a:string,t0:number,t1:number}>,
  *          hz?: number}} input
+ * @param {import('./seasons/index.js').Season} [season]
  * @returns {object|null}
  */
-export function encodeTrack(input) {
+export function encodeTrack(input, season = currentSeason()) {
 	const samples = Array.isArray(input?.samples) ? input.samples : [];
 	const intervals = (Array.isArray(input?.intervals) ? input.intervals : [])
-		.filter((iv) => ACTIONS.includes(iv?.a))
-		.map((iv) => {
-			const out = {
+		.filter((iv) => iv && Object.hasOwn(season.actionByKey, iv.a))
+		.map((iv) =>
+			copyAnswers(iv, season.actionByKey[iv.a], {
 				a: iv.a,
 				t0: Math.max(0, Math.round(Number(iv.t0) || 0)),
 				t1: Math.max(0, Math.round(Number(iv.t1) || 0))
-			};
-			// Only on a climb, and only when it is one of the rungs that exists.
-			// An absent level is "got up, could not tell how far", which is a real
-			// observation; a zero would be "did not climb", which is a different
-			// claim and would be a lie in the same shape.
-			if (iv.a === 'climb' && CLIMB_LEVELS.includes(Number(iv.lvl))) {
-				out.lvl = Number(iv.lvl);
-			}
-			// Whether the climb actually came off, which is a different question
-			// from how high it was aimed and only the scout can answer it.
-			//
-			// Three states, not two, and the third is the reason this is written
-			// out rather than coerced: `true` succeeded, `false` tried and failed,
-			// ABSENT means nobody said. `false` and absent are the two that get
-			// confused, and they are the blank-is-not-zero distinction again — a
-			// climb nobody judged must not be counted as a failed one.
-			if (iv.a === 'climb' && typeof iv.ok === 'boolean') {
-				out.ok = iv.ok;
-			}
-			return out;
-		})
+			})
+		)
 		// A zero-length interval is a mis-tap, not an action. A button held for
 		// under a tenth of a second is below the sample rate and cannot be placed
 		// on the track anyway.
@@ -172,7 +206,7 @@ export function encodeTrack(input) {
 		bytes[i * 2 + 1] = quantize(samples[i]?.y);
 	}
 
-	const out = { v: TRACK_VERSION, hz: Number(input?.hz) || SAMPLE_HZ };
+	const out = { v: versionFor(season), hz: Number(input?.hz) || SAMPLE_HZ, season: season.year };
 	if (start) out.start = start;
 	if (samples.length) out.p = bytesToBase64(bytes);
 	if (intervals.length) out.s = intervals;
@@ -183,19 +217,42 @@ export function encodeTrack(input) {
  * Read a stored track back.
  *
  * Returns null for anything that is not a track this build understands —
- * including a FUTURE version. Refusing to guess is deliberate: a v2 layout
- * decoded as v1 produces a plausible-looking path in the wrong places, which is
+ * including a FUTURE version. Refusing to guess is deliberate: a future layout
+ * decoded as this one produces a plausible-looking path in the wrong places, which is
  * worse than a gap, because a gap is visible.
  *
+ * The same refusal covers a season this build does not have. A track's
+ * positions are fractions of ONE field and its actions are ONE game's words;
+ * drawn on another field, a path lands somewhere plausible and wrong, and its
+ * intervals would be read through a vocabulary they were never written in. So
+ * a track stamped with an unregistered season decodes to null — invisible,
+ * rather than convincingly misplaced.
+ *
+ * A v1 track with no stamp predates the stamp, and is read on the season that
+ * claims unstamped tracks (`seasonForUnstamped()`; 2026, the only game the
+ * recorder knew before tracks carried their season). A v2 track with no stamp
+ * is refused. Any other `v` is refused.
+ *
  * @param {unknown} raw
- * @returns {{v:number, hz:number, start:{x:number,y:number}|null,
+ * @returns {{v:number, hz:number, season: import('./seasons/index.js').Season,
+ *            start:{x:number,y:number}|null,
  *            samples:Array<{x:number,y:number,t:number}>,
  *            intervals:Array<{a:string,t0:number,t1:number}>}|null}
  */
 export function decodeTrack(raw) {
 	if (!raw || typeof raw !== 'object') return null;
 	const v = Number(raw.v);
-	if (v !== TRACK_VERSION) return null;
+	let season;
+	if (v === TRACK_VERSION) {
+		season = raw.season == null ? seasonForUnstamped() : seasonFor(raw.season);
+	} else if (v === TRACK_VERSION_STAMPED) {
+		// Written only with a stamp. One without has lost the one fact that says
+		// which field it is on, and the unstamped claim belongs to v1 alone.
+		season = raw.season == null ? null : seasonFor(raw.season);
+	} else {
+		return null;
+	}
+	if (!season) return null;
 
 	const hz = Number(raw.hz) || SAMPLE_HZ;
 	const step = 1000 / hz;
@@ -231,20 +288,15 @@ export function decodeTrack(raw) {
 			: null;
 
 	const intervals = (Array.isArray(raw.s) ? raw.s : [])
-		.filter((iv) => ACTIONS.includes(iv?.a) && Number.isFinite(Number(iv?.t0)))
-		.map((iv) => {
-			const out = { a: iv.a, t0: Number(iv.t0), t1: Number(iv.t1) };
-			if (iv.a === 'climb' && CLIMB_LEVELS.includes(Number(iv.lvl))) out.lvl = Number(iv.lvl);
-			// Read back the same three ways it is written: true, false, or absent.
-			// `typeof` and not a truthiness test, so a stored `false` survives as
-			// "tried and failed" instead of decoding as "nobody said".
-			if (iv.a === 'climb' && typeof iv.ok === 'boolean') out.ok = iv.ok;
-			return out;
-		})
+		.filter((iv) => iv && Object.hasOwn(season.actionByKey, iv.a) && Number.isFinite(Number(iv.t0)))
+		// Read back exactly as it is written — the same copyAnswers, so a stored
+		// `false` survives as "tried and failed" instead of decoding as "nobody
+		// said", and a stored answer the season does not offer is not resurrected.
+		.map((iv) => copyAnswers(iv, season.actionByKey[iv.a], { a: iv.a, t0: Number(iv.t0), t1: Number(iv.t1) }))
 		.sort((a, b) => a.t0 - b.t0);
 
 	if (!start && samples.length === 0 && intervals.length === 0) return null;
-	return { v, hz, start, samples, intervals };
+	return { v, hz, season, start, samples, intervals };
 }
 
 /**
@@ -335,14 +387,47 @@ export function actionsAt(track, t) {
 /**
  * The same, as the intervals themselves.
  *
- * The field draws a different climb icon for each rung and a different one again
- * for a climb that came off — so what it needs is the mark, not the name of the
- * action. `actionsAt` stays because "which actions" is still a question worth
- * asking on its own, and it is now one line over this.
+ * The field draws a mark's answers as well as its action — in 2026 a different
+ * climb icon for each rung, and a different one again for a climb that came
+ * off — so what it needs is the mark, not the name of the action. `actionsAt`
+ * stays because "which actions" is still a question worth asking on its own,
+ * and it is now one line over this.
  */
 export function marksAt(track, t) {
 	if (!track) return [];
 	return track.intervals.filter((iv) => t >= iv.t0 && t <= iv.t1);
+}
+
+/**
+ * Combine one question's answers across every interval that carries it.
+ *
+ * The role says how, so this never has to know the game:
+ *
+ *   level    the BEST, not the last and not a mean. A robot that slipped to a
+ *            lower level and then got back up did reach the higher one, and
+ *            averaging two attempts would describe something that never
+ *            happened.
+ *   outcome  true if any attempt came off, else false if any was judged a
+ *            failure, else null. A single `false` among several attempts is not
+ *            a verdict — a robot that slipped and then got up did make it.
+ *   (none)   the latest answer given, in time order.
+ *
+ * null, not 0 or false, when nobody answered. "Did it, could not tell how" and
+ * "did not" are different facts and must not collapse into the same value.
+ *
+ * @param {import('./seasons/index.js').Question} q
+ * @param {Array<object>} marks  in time order
+ */
+function combineAnswers(q, marks) {
+	const given = marks.filter((iv) => Object.hasOwn(iv, q.key)).map((iv) => iv[q.key]);
+	if (q.role === 'level') {
+		const levels = given.filter((n) => typeof n === 'number' && Number.isFinite(n));
+		return levels.length ? Math.max(...levels) : null;
+	}
+	if (q.role === 'outcome') {
+		return given.includes(true) ? true : given.includes(false) ? false : null;
+	}
+	return given.length ? given[given.length - 1] : null;
 }
 
 /**
@@ -353,67 +438,93 @@ export function marksAt(track, t) {
  * position track. A scout who could not track the robot but did hold the
  * buttons has still answered "how long was it scoring".
  *
- * A cycle is a `collect` followed by a `score`. Counting `score` marks alone
- * would count a preloaded game piece as a cycle, which is the one every team
- * scores and therefore the one that tells you nothing.
+ * Everything is read off the track's own season. `byAction` names every action
+ * that season has, zeros included — an action nobody pressed was available and
+ * not pressed, which IS zero, unlike an unanswered question. The three things a
+ * season may not have at all — a cycle, a fault action, an endgame — report
+ * null when it lacks them, rather than zero of something it has no word for.
  *
- * @param {object|null} track
+ * A cycle is the first `cycle.to` after a `cycle.from` (in 2026, a score after
+ * a collect). Counting `to` marks alone would count a preloaded game piece as a
+ * cycle, which is the one every team scores and therefore the one that tells
+ * you nothing.
+ *
+ * @param {object|null} track  as decodeTrack returns it
  */
 export function cycleStats(track) {
 	if (!track) return null;
-	const byAction = { collect: 0, score: 0, fault: 0, climb: 0 };
-	const counts = { collect: 0, score: 0, fault: 0, climb: 0 };
+	const { season } = track;
+
+	/** @type {Record<string, {ms: number, count: number}>} */
+	const byAction = {};
+	for (const a of season.actions) byAction[a.key] = { ms: 0, count: 0 };
 	for (const iv of track.intervals) {
-		byAction[iv.a] += iv.t1 - iv.t0;
-		counts[iv.a] += 1;
+		const slot = byAction[iv.a];
+		if (!slot) continue;
+		slot.ms += iv.t1 - iv.t0;
+		slot.count += 1;
 	}
 
-	// Walk in time order and close a cycle on the first score after a collect.
-	let cycles = 0;
-	let armed = false;
-	for (const iv of track.intervals) {
-		if (iv.a === 'collect') armed = true;
-		else if (iv.a === 'score' && armed) {
-			cycles += 1;
-			armed = false;
+	// Walk in time order and close a cycle on the first `to` after a `from`.
+	let cycles = null;
+	if (season.cycle) {
+		cycles = 0;
+		let armed = false;
+		for (const iv of track.intervals) {
+			if (iv.a === season.cycle.from) armed = true;
+			else if (iv.a === season.cycle.to && armed) {
+				cycles += 1;
+				armed = false;
+			}
 		}
 	}
 
-	// The BEST rung reached, not the last and not a mean. A robot that slipped to
-	// a lower rung and then got back up did reach the higher one, and averaging
-	// two attempts would describe a climb that never happened.
-	const climbs = track.intervals.filter((iv) => iv.a === 'climb');
-	const levels = climbs.map((iv) => iv.lvl).filter((n) => Number.isFinite(n));
+	let endgame = null;
+	if (season.endgame) {
+		const marks = track.intervals.filter((iv) => iv.a === season.endgame.key);
+		endgame = {
+			done: marks.length > 0,
+			// When it BEGAN. The endgame action runs to the whistle by construction,
+			// so its duration is a fact about the recording rather than about the
+			// robot — the moment it started is the only part anybody observed.
+			startedAt: marks.length ? Math.min(...marks.map((iv) => iv.t0)) : null,
+			answers: Object.fromEntries(
+				(season.endgame.questions ?? []).map((q) => [q.key, combineAnswers(q, marks)])
+			)
+		};
+	}
 
 	return {
-		msCollecting: byAction.collect,
-		msScoring: byAction.score,
-		msFaulted: byAction.fault,
-		msClimbing: byAction.climb,
-		collectCount: counts.collect,
-		scoreCount: counts.score,
-		faultCount: counts.fault,
-		climbCount: counts.climb,
-		// null, not 0. "Climbed, rung unknown" and "did not climb" are different
-		// facts and must not collapse into the same number.
-		climbLevel: levels.length ? Math.max(...levels) : null,
-		climbed: climbs.length > 0,
-		// When it BEGAN. A climb runs to the whistle by construction, so its
-		// duration is a fact about the recording rather than about the robot —
-		// the moment it started is the only part anybody observed.
-		climbStartedAt: climbs.length ? Math.min(...climbs.map((iv) => iv.t0)) : null,
-		// Did it come off? true / false / null, and null is "nobody said" rather
-		// than "no". A single `false` among the climbs is not a verdict either —
-		// what is reported is the best outcome recorded, because a robot that
-		// slipped and then got up did climb.
-		climbOk: climbs.some((iv) => iv.ok === true)
-			? true
-			: climbs.some((iv) => iv.ok === false)
-				? false
-				: null,
+		duration: trackDuration(track),
+		byAction,
 		cycles,
-		duration: trackDuration(track)
+		faults: season.faultAction ? byAction[season.faultAction.key].count : null,
+		endgame
 	};
+}
+
+/**
+ * A mark's answers as words, one per question, in the order the action asks.
+ *
+ * The chosen option's `says` ("rung 2"); when unanswered, the question's
+ * `unknown` wording if it has one ("rung not recorded"), otherwise nothing. An
+ * unanswered question is only worth saying aloud when its absence is itself
+ * information a reader would otherwise miss — which is the season's call, not
+ * this function's.
+ *
+ * @param {import('./seasons/index.js').Action|null|undefined} action
+ * @param {object|null|undefined} mark  an interval
+ * @returns {string[]}
+ */
+export function describeAnswers(action, mark) {
+	const out = [];
+	for (const q of action?.questions ?? []) {
+		const value = mark?.[q.key];
+		const chosen = mark && Object.hasOwn(mark, q.key) ? q.options.find((o) => o.value === value) : undefined;
+		if (chosen) out.push(chosen.says);
+		else if (q.unknown) out.push(q.unknown);
+	}
+	return out;
 }
 
 /**
@@ -429,9 +540,9 @@ export function cycleStats(track) {
  * three-piece from the middle". Geometry only refines WITHIN a signature group,
  * where comparing curves means something.
  *
- * `fault` is left out of the signature deliberately: a robot knocked off its
- * route ran the same route. Including it would split one team's eleven
- * identical autos into two clusters on the one match someone hit them.
+ * The season's fault action is left out of the signature deliberately: a robot
+ * knocked off its route ran the same route. Including it would split one team's
+ * eleven identical autos into two clusters on the one match someone hit them.
  *
  * @param {object|null} track
  * @param {string|null} zone  from the season's classifier, alliance-relative
@@ -439,10 +550,11 @@ export function cycleStats(track) {
  */
 export function routeSignature(track, zone) {
 	if (!track) return null;
-	// A climb is in the signature without its level: "they climb" is a route, and
-	// splitting one team's eleven identical autos across three rungs would bury
-	// the route under the variation.
-	const seq = track.intervals.filter((iv) => iv.a !== 'fault').map((iv) => iv.a);
+	// Actions are in the signature without their answers: "they climb" is a
+	// route, and splitting one team's eleven identical autos across three rungs
+	// would bury the route under the variation.
+	const fault = track.season?.faultAction?.key ?? null;
+	const seq = track.intervals.filter((iv) => iv.a !== fault).map((iv) => iv.a);
 	if (!zone && seq.length === 0) return null;
 	return `${zone ?? '?'} → ${seq.length ? seq.join(' → ') : 'no actions'}`;
 }
@@ -461,7 +573,9 @@ export function routeSignature(track, zone) {
  * rewrite the first.
  *
  * Takes and returns the STORED shape, so it composes with what is on an entry.
- * Returns null for anything unreadable rather than a half-flipped track.
+ * Returns null for anything unreadable rather than a half-flipped track. The
+ * result is stamped with the season the track was read on — a legacy, unstamped
+ * track comes back stamped, which is the same field it was always drawn on.
  *
  * @param {unknown} raw
  * @returns {object|null}
@@ -469,12 +583,15 @@ export function routeSignature(track, zone) {
 export function flipTrack(raw) {
 	const d = decodeTrack(raw);
 	if (!d) return null;
-	return encodeTrack({
-		hz: d.hz,
-		start: d.start ? mirrorPosition(d.start) : null,
-		samples: d.samples.map(mirrorPosition),
-		intervals: d.intervals
-	});
+	return encodeTrack(
+		{
+			hz: d.hz,
+			start: d.start ? mirrorPosition(d.start) : null,
+			samples: d.samples.map(mirrorPosition),
+			intervals: d.intervals
+		},
+		d.season
+	);
 }
 
 /**

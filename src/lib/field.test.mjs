@@ -1,36 +1,26 @@
-// Tests for the season field geometry. 2026 — REBUILT.
+// Tests for the field geometry engine, run against the 2026 season — REBUILT.
 //   node src/lib/field.test.mjs
 //
 // The numbers come from FIRST's published dimensions, so some of these
 // assertions check the ARITHMETIC — that the derived fractions still match the
-// inches in the manual. That is worth pinning: this file is retuned every
-// January by someone reading a drawing, and a transposed digit in a fraction is
-// invisible while a failing ratio is not.
+// inches in the manual. That is worth pinning: `seasons/2026.js` is retuned
+// every January by someone reading a drawing, and a transposed digit in a
+// fraction is invisible while a failing ratio is not.
 //
 // The rest check the RULES, which do not move when the numbers do: which
 // coordinate space things live in, that the alliance perspective inverts, and
 // that a robot cannot be parked inside a wall or a HUB.
+//
+// Every assertion here predates the split of `field.js` into an engine and a
+// season file, and none was changed by it — that is the proof the move was
+// exact. Only the imports moved.
 
-import {
-	DRAWN,
-	OBSTACLES,
-	FEATURES,
-	FIELD_ASPECT,
-	FIELD_SEASON,
-	HALF_ROBOT_X,
-	HALF_ROBOT_Y,
-	START_BANDS,
-	startZone,
-	clampToStart,
-	STARTING_LINE,
-	mirrorPosition,
-	ROBOT_SIZE_IN,
-	clampToField,
-	toDrawn,
-	fromDrawn,
-	toScreen,
-	fromScreen
-} from './field.js';
+import * as engine from './field.js';
+import { toScreen, fromScreen, mirrorPosition } from './field.js';
+import { seasonFor } from './seasons/index.js';
+const S = seasonFor(2026);
+const { DRAWN, OBSTACLES, FEATURES, FIELD_ASPECT, HALF_ROBOT_X, HALF_ROBOT_Y, START_BANDS, startZone, clampToStart, STARTING_LINE, ROBOT_SIZE_IN, clampToField, toDrawn, fromDrawn } = S.field;
+const FIELD_SEASON = S.year;
 
 let pass = 0;
 let fail = 0;
@@ -42,6 +32,16 @@ function ok(label, cond) {
 	}
 }
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+
+// ─── the engine names no game ──────────────────────────────────────────────
+{
+	// Everything about 2026 lives in seasons/2026.js. A 2026 constant exported
+	// from here again is a second copy of the field that the next season's file
+	// would not replace.
+	ok('field.js exports only the engine',
+		JSON.stringify(Object.keys(engine).sort()) ===
+			JSON.stringify(['fromScreen', 'makeField', 'mirrorPosition', 'toScreen']));
+}
 
 // ─── the published numbers ─────────────────────────────────────────────────
 {

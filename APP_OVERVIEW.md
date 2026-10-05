@@ -59,6 +59,7 @@ never receives an email merely for knowing a username.
 | `/scouting/new` | Record a match observation |
 | `/scouting/edit` | Correct a saved observation |
 | `/settings` | Device settings, event, theme, sign out |
+| `/practice` | The auto recorder on the current season, nothing kept. In `NEEDS_NO_EVENT`, so a signed-in device reaches it with no event or scout name |
 | `/studio/event` | Who is on this event — drag scouts on and off |
 | `/studio/schedule` | Publish a TBA schedule, auto-assign, overrides, reminders |
 | `/studio/coverage` | What is being watched and what is not |
@@ -85,6 +86,16 @@ tidiness.
   and `rowScout()` are the only things that may compare one.
 - **`form-config.js`** — the field definitions shared by the form, export and
   insights.
+- **`seasons/`** — the game as data. `2026.js` is REBUILT: the field, auto's
+  length, the actions with their keys, icons and follow-up questions, the cycle
+  and the endgame. `fixture.js` is a throwaway 1999 season that proves the swap.
+  `index.js` validates and builds a season and holds `CURRENT_SEASON`, the one
+  line that changes which season new recordings are made on.
+- **`field.js`** — the geometry engine (`makeField`): collision, start zones and
+  the view transforms, for any season. It names no game.
+- **`auto-track.js`** — the auto track's encoding. Stamped with its season and
+  read back on it; `cycleStats()` reports `byAction`, `cycles`, `faults` and
+  `endgame.{done, startedAt, answers}` from the track's own season.
 - **`metrics.js` / `aggregate.js`** — numeric summaries. Blank means *not
   recorded*; `0` means a recorded zero.
 - **`auto-assign.js` / `assignments.js` / `coverage.js`** — DSATUR assignment,

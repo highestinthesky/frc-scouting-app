@@ -3,6 +3,7 @@
 	import { base } from '$app/paths';
 	import { auth } from '$lib/auth.svelte.js';
 	import EventPicker from './EventPicker.svelte';
+	import Button from './Button.svelte';
 
 	let eventCode = $state(session.eventCode);
 	let scoutName = $state(session.scoutName);
@@ -67,6 +68,14 @@
 			</button>
 		{/if}
 	</form>
+
+	<!-- Practice needs no event, and this is the one screen a device with none
+	     is stuck on. Signed in only: the route is behind the sign-in guard. -->
+	{#if auth.signedIn}
+		<div class="practice">
+			<Button href="{base}/practice/" full>Practice</Button>
+		</div>
+	{/if}
 </main>
 
 <style>
@@ -76,6 +85,8 @@
 		padding: var(--space-6) var(--space-5);
 	}
 	h1 { margin: 0 0 var(--space-5); }
+	/* Flex because Button's `full` is flex: 1 — a row of one. */
+	.practice { display: flex; margin-top: var(--space-4); }
 	.as {
 		margin: 0 0 var(--space-5);
 		color: var(--text-muted);

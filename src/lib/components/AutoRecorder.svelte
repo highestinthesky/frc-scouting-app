@@ -1,5 +1,5 @@
 <script>
-	// Fifteen seconds of auto, recorded by a thumb.
+	// Auto, recorded by a thumb.
 	//
 	// ADR-002 Decision 6, which is the decision this whole component is:
 	//
@@ -17,8 +17,9 @@
 	//
 	//   place    drag the robot to where it starts. Before the match, no clock.
 	//   arm      one big button, because the next thing that happens is a match.
-	//   live     15 s. Drag, hold the action buttons. This is the only timed part.
-	//   correct  scrub, fix, trim. Or throw it away and place again.
+	//   live     the season's length of auto. Drag, hold the action buttons. This
+	//            is the only timed part.
+	//   correct  scrub, fix, trim, answer. Or throw it away and place again.
 	//
 	// Everything is skippable and everything is undoable. A required field here
 	// would manufacture false data at exactly the moment the real data was
@@ -28,15 +29,14 @@
 	import Button from './Button.svelte';
 	import {
 		SAMPLE_HZ,
-		ACTIONS,
-		CLIMB_LEVELS,
 		encodeTrack,
 		decodeTrack,
 		positionAt,
 		trackDuration,
-		cycleStats
+		cycleStats,
+		describeAnswers
 	} from '$lib/auto-track.js';
-	import { startZone, clampToStart } from '$lib/field.js';
+	import { currentSeason } from '$lib/seasons/index.js';
 
 	/**
 	 * @type {{
@@ -47,11 +47,30 @@
 	 */
 	let { value = null, allianceColor = null, onchange } = $props();
 
-	/** Auto is fifteen seconds. The recorder stops itself. */
-	const AUTO_MS = 15_000;
-	const STEP_MS = 1000 / SAMPLE_HZ;
+	// ─── the season ────────────────────────────────────────────────────────────
+	//
+	// The game being recorded — its field, its length of auto, its actions and
+	// their keys — is the season's, and this file names none of it. A new
+	// recording is made on the current season. A track the form already holds is
+	// opened on the season it was RECORDED on, because its positions are
+	// fractions of that field and its intervals are that game's words; reviewing
+	// it on another would draw a plausible path in the wrong places. "Record
+	// again" is a new recording, so it returns to the current season.
+	//
+	// `$state.raw`, not `$state`: a Season is frozen, and is only ever replaced
+	// whole. A deep proxy over a frozen object breaks the proxy invariants, and
+	// the field compares actions by identity (`season.endgame`), which a proxy
+	// would also break.
+	let season = $state.raw(currentSeason());
+
+	/** The length of auto. The recorder stops itself. */
+	const autoMs = $derived(season.autoMs);
+	// Reviewing keeps the cadence written on the track. Changing an answer must
+	// not change the timestamps of the positions that were already recorded.
+	let hz = $state(SAMPLE_HZ);
+	const STEP_MS = $derived(1000 / hz);
 	/** The most samples a recording can hold. Derived, so it cannot disagree. */
-	const MAX_SAMPLES = Math.round(AUTO_MS / STEP_MS);
+	const MAX_SAMPLES = $derived(Math.round(autoMs / STEP_MS));
 
 	let phase = $state('place');
 	let start = $state(null);
@@ -67,18 +86,39 @@
 	let full = $state(false);
 	let portrait = $state(false);
 	/**
-	 * Which climb is being asked about: `'pending'` while the recording is still
-	 * running and the mark has not been closed yet, an index into `intervals`
-	 * afterwards, or null.
+	 * Which action's questions are being asked: `'pending'` for the endgame while
+	 * the recording is still running and its mark has not been closed yet, an
+	 * index into `intervals` afterwards, or null.
 	 *
-	 * Two forms because the mark does not exist yet at the moment the question is
-	 * asked. A climb stays open until the whistle (see `release`), so during the
-	 * recording there is nothing to write to — the answers are parked here and
-	 * attached when finish() closes it.
+	 * Two forms because the mark does not exist yet at the moment the endgame's
+	 * questions are asked. The endgame stays open until the whistle (see
+	 * `release`), so during the recording there is nothing to write to — the
+	 * answers are parked here and attached when finish() closes it.
+	 *
+	 * @type {null|'pending'|number}
 	 */
-	let askClimb = $state(null);
-	/** Answers for a climb that has not been closed into an interval yet. */
-	let pendingClimb = $state({ lvl: null, ok: null });
+	let askFor = $state(null);
+	/**
+	 * Answers for an endgame that has not been closed into an interval yet, keyed
+	 * by question. An unanswered question is ABSENT, never null or zero.
+	 *
+	 * @type {Record<string, number|string|boolean>}
+	 */
+	let pendingAnswers = $state({});
+	/**
+	 * Whether the open sheet is the post-whistle sweep, which walks every interval
+	 * with a question still open. Only the sweep's Done moves on to the next one;
+	 * a sheet the scout opened on one interval with "Answers" closes on Done,
+	 * because that scout asked about that interval and nothing else.
+	 */
+	let sweeping = false;
+	/**
+	 * The form holds a track this build cannot read — a season it does not have,
+	 * or a version it does not know. Shown, never placed over: the placement
+	 * step's first drag would emit a new track and silently replace the stored
+	 * one. Only "Record again" discards it, and says so by being pressed.
+	 */
+	let unreadable = $state(false);
 
 	// Full screen on a phone held upright is width-bound — the field is half
 	// again as wide as it is tall, so it bought 2% and left 607px of height
@@ -127,18 +167,22 @@
 		if (value && phase === 'place' && samples.length === 0 && !start) {
 			const d = decodeTrack(value);
 			if (d) {
+				season = d.season;
+				hz = d.hz;
 				start = d.start;
 				here = d.start;
 				samples = d.samples.map((s) => ({ x: s.x, y: s.y }));
 				intervals = d.intervals.map((iv) => ({ ...iv }));
 				phase = 'correct';
+			} else {
+				unreadable = true;
 			}
 		}
 	});
 
-	const zone = $derived(startZone(start, allianceColor));
+	const zone = $derived(season.field.startZone(start, allianceColor));
 	const preview = $derived(
-		decodeTrack(encodeTrack({ start, samples, intervals, hz: SAMPLE_HZ }))
+		decodeTrack(encodeTrack({ start, samples, intervals, hz }, season))
 	);
 	const stats = $derived(preview ? cycleStats(preview) : null);
 	const duration = $derived(preview ? trackDuration(preview) : 0);
@@ -147,16 +191,18 @@
 	const atScrub = $derived(preview ? positionAt(preview, scrub) : null);
 
 	function emit() {
-		onchange?.(encodeTrack({ start, samples, intervals, hz: SAMPLE_HZ }));
+		onchange?.(encodeTrack({ start, samples, intervals, hz }, season));
 	}
 
 	function place(pos) {
+		if (unreadable) return;
 		if (phase === 'place') {
-			// G303-D: "its BUMPERS overlap their ROBOT STARTING LINE." A start
-			// anywhere else is a placement that could not have happened, and a start
-			// position is the single most-asked question of this whole feature — so
-			// it is constrained at the input rather than corrected in the reading.
-			const p = clampToStart(pos, allianceColor);
+			// A start the season's field rules out — inside an obstacle, or outside
+			// the robot's own alliance zone — is a placement that could not have
+			// happened, and a start position is the single most-asked question of
+			// this whole feature — so it is constrained at the input rather than
+			// corrected in the reading.
+			const p = season.field.clampToStart(pos, allianceColor);
 			const first = !start;
 			here = p;
 			start = p;
@@ -187,16 +233,21 @@
 	function begin() {
 		// Defensive: a second begin() with a timer still running leaks the first
 		// one, and two samplers filling the same array double the rate at which `t`
-		// advances — a 15-second recording that decodes as 7.5 seconds of motion at
+		// advances — a recording that decodes at half its length, its motion at
 		// twice the speed, with nothing about it looking wrong.
 		if (timer) clearInterval(timer);
 		samples = [];
 		intervals = [];
 		held = {};
+		askFor = null;
+		sweeping = false;
+		pendingAnswers = {};
 		elapsed = 0;
 		here = start;
 		phase = 'live';
 		startedAt = performance.now();
+		// Capture t = 0 before the first drag or delayed timer can move it.
+		sampleToNow();
 		timer = setInterval(tick, STEP_MS);
 	}
 
@@ -216,8 +267,8 @@
 	// So each tick asks the clock how many samples SHOULD exist by now and fills
 	// forward to that index. A late tick writes several samples; a skipped one is
 	// caught up by the next. The index and the time cannot drift apart.
-	function tick() {
-		elapsed = performance.now() - startedAt;
+	function sampleToNow() {
+		elapsed = Math.min(performance.now() - startedAt, autoMs);
 		// Held at the last known position. A robot that is not being dragged has
 		// not vanished — it is standing still, which is a real thing a robot does
 		// in auto and a real thing to record. Filling the gap this way is also the
@@ -227,30 +278,39 @@
 		const want = Math.min(MAX_SAMPLES, Math.floor(elapsed / STEP_MS) + 1);
 		while (samples.length < want) samples.push(at);
 		samples = samples;
-		if (elapsed >= AUTO_MS) finish();
+	}
+
+	function tick() {
+		if (phase !== 'live') return;
+		sampleToNow();
+		// `autoMs` is read here, on every tick, rather than captured when the timer
+		// started: it is the season's, and the season is state.
+		if (elapsed >= autoMs) finish();
 	}
 
 	function finish() {
+		if (phase !== 'live') return;
+		// Stop/Escape can arrive between ticks, including before the first one or
+		// after a hidden tab has throttled the timer. Fill to the clock before
+		// closing held actions, so neither positions nor action tails are lost.
+		sampleToNow();
 		if (timer) clearInterval(timer);
 		timer = null;
 		// Clamped, for the same reason the sampler fills to a clock: a throttled
-		// tick can arrive well past fifteen seconds, and a recording of auto is
-		// fifteen seconds by definition. Stopping early is the case where this is
-		// simply the elapsed time.
-		elapsed = Math.min(elapsed, AUTO_MS);
+		// tick can arrive well past the whistle, and a recording of auto is the
+		// season's length of auto by definition. Stopping early is the case where
+		// this is simply the elapsed time.
+		elapsed = Math.min(elapsed, autoMs);
 		// Any button still down when the whistle goes is closed at the whistle
 		// rather than dropped. A scout holding "scoring" as auto ends recorded
 		// something true, and discarding it would lose the longest interval on the
 		// track precisely when it mattered.
 		const now = Math.round(elapsed);
 		for (const [a, t0] of Object.entries(held)) {
-			const iv = { a, t0, t1: now };
-			// The climb's answers were given while it was still open; they belong to
-			// the mark that is only now being created.
-			if (a === 'climb') {
-				if (pendingClimb.lvl != null) iv.lvl = pendingClimb.lvl;
-				if (typeof pendingClimb.ok === 'boolean') iv.ok = pendingClimb.ok;
-			}
+			// The endgame's answers were given while it was still open; they belong
+			// to the mark that is only now being created. Only answered questions
+			// are in `pendingAnswers`, so nothing unanswered is written as a value.
+			const iv = a === season.endgame?.key ? { a, t0, t1: now, ...pendingAnswers } : { a, t0, t1: now };
 			intervals.push(iv);
 		}
 		held = {};
@@ -269,87 +329,158 @@
 		// first correction lands on the last moment — which is the one still in the
 		// scout's head.
 		scrub = Math.max(0, (samples.length - 1) * STEP_MS);
-		// A climb nobody finished answering gets asked again here, where there is
-		// no clock on it at all. Unanswered means EITHER question outstanding.
-		const pending = intervals.findIndex(
-			(iv) => iv.a === 'climb' && (iv.lvl == null || typeof iv.ok !== 'boolean')
-		);
-		askClimb = pending >= 0 ? pending : null;
-		pendingClimb = { lvl: null, ok: null };
+		// Anything with questions nobody finished answering gets asked here, where
+		// there is no clock on it at all: the endgame if it was left half-answered,
+		// and every other action whose questions could not be asked mid-match
+		// without taking the screen while there was still a field to watch.
+		// Unanswered means ANY question outstanding. One at a time, in order; the
+		// sheet's Done moves to the next — this sweep, and only this one.
+		askFor = nextUnanswered(-1);
+		sweeping = askFor !== null;
+		pendingAnswers = {};
 		emit();
 	}
 
 	function press(action) {
 		if (phase !== 'live' || held[action] != null) return;
 		held = { ...held, [action]: Math.round(performance.now() - startedAt) };
-		// A climb is the end of the robot's auto, so it is the one action that is
-		// not a hold. See `release` and `askClimb`.
-		if (action === 'climb') askClimb = true;
+		// The endgame is the end of the robot's auto, so it is the one action that
+		// is not a hold, and the one whose questions are asked at once. See
+		// `release` and `askFor`.
+		if (action === season.endgame?.key && season.endgame.questions?.length) askFor = 'pending';
 	}
 
 	function release(action) {
-		// Letting go of the climb does not end it.
+		// Letting go of the endgame does not end it.
 		//
-		// A robot that has started climbing has finished its auto — it is on the
-		// tower and it is not going anywhere else. So the mark stays open and
-		// finish() closes it at the whistle, the same way any held action is
-		// closed. That is what frees the scout's hands for the two questions,
-		// which is the whole reason the popup is allowed to take the screen.
+		// A robot that has started its endgame has finished its auto — it is where
+		// it will finish, and it is not going anywhere else. So the mark stays open
+		// and finish() closes it at the whistle, the same way any held action is
+		// closed. That is what frees the scout's hands for its questions, which is
+		// the whole reason the popup is allowed to take the screen.
 		//
 		// It also has to work this way for the data. encodeTrack drops any
-		// interval with t1 <= t0, so a climb that ended the recording the instant
-		// it began would be silently discarded — the one action the scout most
-		// wants recorded, thrown away for being instantaneous.
-		if (action === 'climb') return;
+		// interval with t1 <= t0, so an endgame that ended the recording the
+		// instant it began would be silently discarded — the one action the scout
+		// most wants recorded, thrown away for being instantaneous.
+		if (action === season.endgame?.key) return;
 		if (held[action] == null) return;
 		const t0 = held[action];
 		const t1 = Math.round(performance.now() - startedAt);
 		const { [action]: _drop, ...rest } = held;
 		held = rest;
 		if (t1 > t0) {
-			intervals.push({ a: action, t0: Math.min(t0, AUTO_MS), t1: Math.min(t1, AUTO_MS) });
+			intervals.push({ a: action, t0: Math.min(t0, autoMs), t1: Math.min(t1, autoMs) });
 			intervals = intervals;
 		}
 	}
 
-	// ─── the rung ──────────────────────────────────────────────────────────────
+	// ─── the answers ───────────────────────────────────────────────────────────
 	//
-	// A climb has a level, and the level cannot be recorded while the robot is
-	// still climbing. So the button behaves like the others during the hold, and
-	// the question arrives when the hold ends — during the recording if there is
-	// time, and waiting in the correction pass if there is not.
+	// An action may carry questions only a scout can answer — how high, whether
+	// it worked. The answer cannot be recorded while the action is still
+	// happening, so the endgame's arrive the moment it is pressed (the robot's
+	// auto is over; there is nothing left to watch), and everyone else's wait
+	// for the correction pass, where there is no clock on them.
 	//
-	// It is skippable. A scout who saw a robot get onto the TOWER but could not
-	// tell which rung has recorded something true; forcing a number would turn it
-	// into something false, which is Decision 4 pointed at the input.
-	/** What has been answered so far, wherever the answers currently live. */
-	const climbAnswers = $derived(
-		askClimb === 'pending'
-			? pendingClimb
-			: typeof askClimb === 'number'
-				? { lvl: intervals[askClimb]?.lvl ?? null, ok: intervals[askClimb]?.ok ?? null }
-				: { lvl: null, ok: null }
-	);
+	// Every one is skippable. A scout who saw a robot do it but could not tell
+	// how high has recorded something true; forcing a number would turn it into
+	// something false, which is Decision 4 pointed at the input.
 
 	/**
-	 * Answer one of the two questions.
+	 * Whether a question has an answer on `mark`.
+	 *
+	 * The value is READ first, and that order is the point. An interval here is a
+	 * Svelte `$state` proxy, and `Object.hasOwn` on a key the proxy has never
+	 * seen subscribes to nothing — measured: the sheet answered a question and
+	 * went on showing "Not sure" selected, because the button never heard. A
+	 * property read always subscribes. No option's value is ever `undefined`, so
+	 * an undefined read is unanswered; `hasOwn` after it only keeps a question
+	 * keyed like an Object.prototype method from reading as answered.
+	 *
+	 * @param {object} mark
+	 * @param {string} key
+	 */
+	const answered = (mark, key) => mark[key] !== undefined && Object.hasOwn(mark, key);
+
+	/** @param {{a: string}} iv */
+	function hasUnanswered(iv) {
+		const qs = season.actionByKey[iv.a]?.questions ?? [];
+		return qs.some((q) => !answered(iv, q.key));
+	}
+
+	/** The first interval after index `after` with a question still open, or null. */
+	function nextUnanswered(after) {
+		for (let i = after + 1; i < intervals.length; i += 1) {
+			if (hasUnanswered(intervals[i])) return i;
+		}
+		return null;
+	}
+
+	/** The action whose questions the sheet is asking, or null. */
+	const asking = $derived(
+		askFor === 'pending'
+			? season.endgame
+			: typeof askFor === 'number'
+				? (season.actionByKey[intervals[askFor]?.a] ?? null)
+				: null
+	);
+	/** What has been answered so far, wherever the answers currently live. */
+	const answers = $derived(
+		askFor === 'pending' ? pendingAnswers : typeof askFor === 'number' ? (intervals[askFor] ?? {}) : {}
+	);
+
+	/** @param {string} key */
+	const isAnswered = (key) => answered(answers, key);
+
+	/**
+	 * Answer one question.
 	 *
 	 * `value` of null is the deliberate "not sure", and it DELETES rather than
-	 * storing a zero or a false. A rung nobody could read is not rung zero and a
-	 * climb nobody judged is not a failed climb; both would be lies in the same
+	 * storing a zero or a false. A level nobody could read is not level zero and
+	 * an outcome nobody judged is not a failure; both would be lies in the same
 	 * shape as blank-is-not-zero.
+	 *
+	 * @param {string} key
+	 * @param {number|string|boolean|null} value
 	 */
-	function answerClimb(key, value) {
-		if (askClimb === 'pending') {
-			pendingClimb = { ...pendingClimb, [key]: value };
+	function answer(key, value) {
+		if (askFor === 'pending') {
+			const { [key]: _drop, ...rest } = pendingAnswers;
+			pendingAnswers = value == null ? rest : { ...rest, [key]: value };
 			return;
 		}
-		const iv = typeof askClimb === 'number' ? intervals[askClimb] : null;
+		const iv = typeof askFor === 'number' ? intervals[askFor] : null;
 		if (!iv) return;
-		if (value == null) delete iv[key];
-		else iv[key] = value;
-		intervals = intervals;
+		// Replaced, not mutated. A `delete` on a `$state` proxy leaves the key on
+		// the object underneath, and everything that renders this interval — the
+		// sheet, the list's answers — should see one new interval rather than
+		// depend on which property reads a proxy happens to track.
+		const { [key]: _drop, ...rest } = iv;
+		intervals[askFor] = value == null ? rest : { ...rest, [key]: value };
 		emit();
+	}
+
+	/** "Answers" on one interval: ask its questions, and only its. */
+	function openAnswers(i) {
+		sweeping = false;
+		askFor = i;
+	}
+
+	/**
+	 * The sheet's Done. During the post-whistle sweep, on to the next interval
+	 * still waiting; otherwise close. Advancing after a sheet the scout opened
+	 * by hand would walk them into a question about some other interval they
+	 * never asked to see.
+	 */
+	function doneAsking() {
+		if (sweeping && typeof askFor === 'number') {
+			askFor = nextUnanswered(askFor);
+			if (askFor === null) sweeping = false;
+			return;
+		}
+		askFor = null;
+		sweeping = false;
 	}
 
 	function dropInterval(i) {
@@ -364,23 +495,31 @@
 		samples = [];
 		intervals = [];
 		held = {};
+		askFor = null;
+		sweeping = false;
+		pendingAnswers = {};
 		elapsed = 0;
 		scrub = 0;
 		phase = 'place';
+		unreadable = false;
+		// A new recording is made on the current season, whatever the one being
+		// thrown away was recorded on.
+		season = currentSeason();
+		hz = SAMPLE_HZ;
 		emit();
 	}
 
 	// ─── keys, for the half of the team on a laptop ────────────────────────────
 	//
 	// A drag-only control with hold-to-record buttons is a two-hand job, and on a
-	// desktop one of those hands is on the mouse. A / S / D sit under the resting
-	// left hand while the right drags, which is the same reason those keys are
-	// the movement keys in every game these scouts have played.
+	// desktop one of those hands is on the mouse. Each action's key is the
+	// season's (`hotkey`); why those letters is written beside them there.
 	//
 	// Bound on the window rather than the component: the pointer is captured by
 	// the SVG during a drag, so a listener on the recorder would only fire when
 	// focus happened to be inside it — which, mid-drag, it is not.
-	const KEYS = { a: 'collect', s: 'score', d: 'fault', f: 'climb' };
+	/** hotkey -> action key. */
+	const KEYS = $derived(Object.fromEntries(season.actions.map((a) => [a.hotkey, a.key])));
 
 	function isTyping(t) {
 		return t instanceof HTMLElement && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
@@ -394,7 +533,7 @@
 		if (isTyping(ev.target)) return;
 		// Space starts it, not Enter.
 		//
-		// Enter is across the keyboard from A/S/D/F and under the hand that is on
+		// Enter is across the keyboard from the action keys and under the hand that is on
 		// the mouse — the one hand that is busy, because it is about to drag the
 		// robot. Space is under the thumb that is already resting there, and it is
 		// what starts a stopwatch, a video and a game, which is the whole of what
@@ -417,7 +556,7 @@
 		}
 		// Space does nothing during the recording, but it must not do its DEFAULT
 		// either: it scrolls the page and it clicks whichever action button holds
-		// focus. The recorder owns the keyboard for these fifteen seconds.
+		// focus. The recorder owns the keyboard for the length of auto.
 		if (ev.key === ' ') {
 			ev.preventDefault();
 			return;
@@ -455,40 +594,26 @@
 		if (timer) clearInterval(timer);
 	});
 
-	const remaining = $derived(Math.max(0, Math.ceil((AUTO_MS - elapsed) / 1000)));
-	// Marks, not names: the field draws a different climb icon per rung and a
-	// different one again for a climb that came off, so it needs the answers and
-	// not just "a climb is happening". During the recording those answers live in
-	// `pendingClimb` — the mark itself does not exist until the whistle.
+	const remaining = $derived(Math.max(0, Math.ceil((autoMs - elapsed) / 1000)));
+	// Marks, not names: the field draws the endgame's chip from its answers — a
+	// different picture per level, and another for one that failed — so it needs the answers and not just "the endgame is happening".
+	// During the recording those answers live in `pendingAnswers`; the mark
+	// itself does not exist until the whistle.
 	const activeNow = $derived(
-		Object.keys(held).map((a) =>
-			a === 'climb'
-				? {
-						a,
-						...(pendingClimb.lvl != null ? { lvl: pendingClimb.lvl } : {}),
-						...(typeof pendingClimb.ok === 'boolean' ? { ok: pendingClimb.ok } : {})
-					}
-				: { a }
-		)
+		Object.keys(held).map((a) => (a === season.endgame?.key ? { a, ...pendingAnswers } : { a }))
 	);
-	// Short enough to survive a quarter of a phone's width. "Disrupted" truncated
-	// to "Disrup…" on the rail, and a control whose label is cut off is a control
-	// a scout has to remember rather than read. "Off path" is also closer to what
-	// the plan actually describes — "disrupted from its original path" — than a
-	// word that sounds like the robot's fault.
-	const LABELS = { collect: 'Collect', score: 'Score', fault: 'Off path', climb: 'Climb' };
-	const KEY_FOR = { collect: 'A', score: 'S', fault: 'D', climb: 'F' };
 </script>
 
 <div class="shell" class:full>
 <div class="rec" class:left={handed === 'left'}>
 	<div class="stage">
 		<!-- `phase` and `mode` deliberately disagree in the last state: the pass
-		     still corrects — trim an action, set a rung, turn the track end for end
+		     still corrects — trim an action, answer its questions, turn the track end for end
 		     — but the FIELD is read-only, because those are the corrections that do
 		     not invent a position. -->
 		<AutoField
-			mode={phase === 'correct' ? 'review' : 'record'}
+			{season}
+			mode={phase === 'correct' || unreadable ? 'review' : 'record'}
 			position={phase === 'correct' ? atScrub : here}
 			trail={phase === 'place' ? [] : samples}
 			{flipped}
@@ -506,18 +631,18 @@
 	     empty for a few seconds either side and buys a picture that never moves. -->
 	{#if full || phase === 'live'}
 		<div class="rail" class:idle={phase !== 'live'} aria-label="Actions" aria-hidden={phase !== 'live'}>
-			{#each ACTIONS as a}
+			{#each season.actions as a (a.key)}
 				<button
 					type="button"
-					class="act {a}"
-					class:on={held[a] != null}
-					onpointerdown={() => press(a)}
-					onpointerup={() => release(a)}
-					onpointerleave={() => release(a)}
-					onpointercancel={() => release(a)}
+					class="act tone-{a.tone}"
+					class:on={held[a.key] != null}
+					onpointerdown={() => press(a.key)}
+					onpointerup={() => release(a.key)}
+					onpointerleave={() => release(a.key)}
+					onpointercancel={() => release(a.key)}
 				>
-					<span class="what">{LABELS[a]}</span>
-					<kbd>{KEY_FOR[a]}</kbd>
+					<span class="what">{a.label}</span>
+					<kbd>{a.hotkey.toUpperCase()}</kbd>
 				</button>
 			{/each}
 		</div>
@@ -525,7 +650,12 @@
 </div>
 
 <div class="controls">
-	{#if phase === 'place'}
+	{#if unreadable}
+		<p class="say">Recorded on a field this build does not have.</p>
+		<div class="row">
+			<Button variant="ghost" onclick={discard}>Record again</Button>
+		</div>
+	{:else if phase === 'place'}
 		<p class="say">
 			{#if start}Starting {zone ?? 'position'} set.{:else}Drag the robot to where it starts.{/if}
 		</p>
@@ -583,23 +713,21 @@
 		{#if intervals.length}
 			<ul class="ivs">
 				{#each intervals as iv, i}
+					{@const action = season.actionByKey[iv.a]}
 					<li>
-						<span class="what {iv.a}">{LABELS[iv.a]}{#if iv.a === 'climb'}{#if iv.lvl}
-									<span class="lvl">L{iv.lvl}</span>{/if}{#if iv.ok === true}
-									<span class="lvl">made it</span>{:else if iv.ok === false}
-									<span class="lvl">failed</span>{/if}{/if}</span>
-						<!-- A climb runs to the whistle by construction, so its span is a
+						<span class="what">{action?.label ?? iv.a}{#each describeAnswers(action, iv) as said}
+								<span class="lvl">{said}</span>{/each}</span>
+						<!-- The endgame runs to the whistle by construction, so its span is a
 						     fact about the recording and not about the robot. What was
 						     observed is the moment it began. -->
 						<span class="when">
-							{#if iv.a === 'climb'}began {(iv.t0 / 1000).toFixed(1)}s{:else}{(
+							{#if action === season.endgame}began {(iv.t0 / 1000).toFixed(1)}s{:else}{(
 									iv.t0 / 1000
 								).toFixed(1)}–{(iv.t1 / 1000).toFixed(1)}s{/if}
 						</span>
-						{#if iv.a === 'climb'}
-							<!-- Both questions, so the label is not "rung" any more. -->
-							<button type="button" class="drop" onclick={() => (askClimb = i)}>
-								The climb
+						{#if action?.questions?.length}
+							<button type="button" class="drop" onclick={() => openAnswers(i)}>
+								Answers
 							</button>
 						{/if}
 						<button type="button" class="drop" onclick={() => dropInterval(i)}>Remove</button>
@@ -616,7 +744,7 @@
 		     "Flip recording" turned the TRACK 180 degrees. For a manager comparing
 		     six tracks that is the repair for a scout who read the field backwards.
 		     In the scout's own hands it is never right: clampToStart() pinned this
-		     start to their own alliance's line, so a flip always lands it on the
+		     start to their own alliance's end, so a flip always lands it on the
 		     opponent's — a recording that could not have happened. It lives on the
 		     match page, where a mirrored track is actually visible against five
 		     others. -->
@@ -630,70 +758,48 @@
 </div>
 </div>
 
-<!-- ─── the climb sheet ──────────────────────────────────────────────────────
-     A robot that has started climbing has finished its auto. That is what earns
-     this the whole screen: there is nothing left on the field to watch, so the
-     two questions only a scout can answer get asked while the answer is still in
-     their head, instead of being reconstructed at a table afterwards.
+<!-- ─── the answers sheet ────────────────────────────────────────────────────
+     For the endgame it opens at the press. A robot that has started its endgame
+     has finished its auto. That is what earns this
+     the whole screen: there is nothing left on the field to watch, so the
+     questions only a scout can answer get asked while the answer is still in
+     their head, instead of being reconstructed at a table afterwards. For every
+     other action it waits for the whistle, one interval after another.
 
-     Both are skippable, and "Not sure" is a real answer rather than a way out. A
-     rung nobody could read is not rung zero, and a climb nobody judged is not a
-     failed one — forcing either would manufacture the exact false data the
-     recording exists to avoid. -->
-{#if askClimb != null}
-	<div class="sheet" role="dialog" aria-modal="true" aria-label="The climb">
+     Every question is skippable, and "Not sure" is a real answer rather than a
+     way out. A level nobody could read is not level zero, and an outcome nobody
+     judged is not a failure — forcing either would manufacture the exact false data
+     the recording exists to avoid.
+
+     No heading: the questions are the heading. -->
+{#if asking?.questions?.length}
+	<div class="sheet" role="dialog" aria-modal="true" aria-label={asking.label}>
 		<div class="sheet-in">
-			<p class="q">Which rung?</p>
-			<div class="opts" role="group" aria-label="Which rung?">
-				{#each CLIMB_LEVELS as lvl}
+			{#each asking.questions as q (q.key)}
+				<p class="q">{q.ask}</p>
+				<div class="opts" role="group" aria-label={q.ask}>
+					{#each q.options as o (o.value)}
+						<button
+							type="button"
+							class="opt"
+							class:on={isAnswered(q.key) && answers[q.key] === o.value}
+							onclick={() => answer(q.key, o.value)}
+						>
+							{o.label}
+						</button>
+					{/each}
 					<button
 						type="button"
-						class="opt"
-						class:on={climbAnswers.lvl === lvl}
-						onclick={() => answerClimb('lvl', lvl)}
+						class="opt skip"
+						class:on={!isAnswered(q.key)}
+						onclick={() => answer(q.key, null)}
 					>
-						{lvl}
+						Not sure
 					</button>
-				{/each}
-				<button
-					type="button"
-					class="opt skip"
-					class:on={climbAnswers.lvl == null}
-					onclick={() => answerClimb('lvl', null)}
-				>
-					Not sure
-				</button>
-			</div>
+				</div>
+			{/each}
 
-			<p class="q">Did it make it?</p>
-			<div class="opts" role="group" aria-label="Did it make it?">
-				<button
-					type="button"
-					class="opt"
-					class:on={climbAnswers.ok === true}
-					onclick={() => answerClimb('ok', true)}
-				>
-					Made it
-				</button>
-				<button
-					type="button"
-					class="opt"
-					class:on={climbAnswers.ok === false}
-					onclick={() => answerClimb('ok', false)}
-				>
-					Failed
-				</button>
-				<button
-					type="button"
-					class="opt skip"
-					class:on={climbAnswers.ok == null}
-					onclick={() => answerClimb('ok', null)}
-				>
-					Not sure
-				</button>
-			</div>
-
-			<Button variant="primary" full onclick={() => (askClimb = null)}>Done</Button>
+			<Button variant="primary" full onclick={doneAsking}>Done</Button>
 		</div>
 	</div>
 {/if}
@@ -713,7 +819,7 @@
 
 	/* ─── full screen ───────────────────────────────────────────────────────
 	   The field was sharing a phone with a form, and it is the one thing here
-	   that cannot afford to: fifteen seconds of thumb-tracking is the input the
+	   that cannot afford to: auto's worth of thumb-tracking is the input the
 	   whole feature rests on, and it was happening on a 358px-wide picture.
 
 	   In portrait this buys back the form's padding. The real gain is LANDSCAPE,
@@ -746,6 +852,12 @@
 		   100%` on the SVG resolved against `auto` and never bound, and the field
 		   rendered 524px tall inside a 390px viewport. */
 		align-items: stretch;
+		/* The field's row takes the slack, the rail's row takes its content. With
+		   both rows `auto` the slack was shared between them, and a season whose
+		   field is squarer than 2026's leaves slack on a phone held upright: its
+		   rail buttons were measured at 133px tall at 375x812 — a third of the
+		   screen of buttons, pushed away from the field. */
+		grid-template-rows: minmax(0, 1fr) auto;
 	}
 	.shell.full .stage {
 		min-height: 0;
@@ -778,7 +890,7 @@
 
 	   Not zero change: the field IS smaller during review than during recording,
 	   and that is the right way round. Holding the review pass's height open
-	   through the fifteen seconds would spend the screen on an empty box at the
+	   through the recording would spend the screen on an empty box at the
 	   one moment the field is the input. */
 	.shell.full .controls {
 		flex: 0 1 auto;
@@ -839,9 +951,11 @@
 		padding-top: var(--space-1);
 		grid-auto-flow: column;
 		grid-auto-columns: minmax(0, 1fr);
-		/* Four actions now. Without this the rail is as wide as its widest label
-		   times four and overflows a phone rather than sharing the width. */
+		/* As many columns as the season has actions. Without this the rail is as
+		   wide as its widest label times their number and overflows a phone rather
+		   than sharing the width. */
 		min-width: 0;
+		/* One row of equal shares: it does not grow past ~6 actions on a short phone. */
 	}
 
 	/* The plan asks for the rail to swap sides for whichever hand holds the phone.
@@ -854,7 +968,7 @@
 	/* The label and its key on one line, centred, with the text allowed to shrink.
 	   Stacked they made a tall lozenge whose height changed with whether the key
 	   hint was showing, so the rail's rows were different sizes on a laptop and a
-	   phone. `min-width: 0` is what stops "Disrupted" from forcing the button
+	   phone. `min-width: 0` is what stops a long label from forcing the button
 	   wider than its grid track and pushing the rail off a full-screen edge. */
 	.act {
 		display: flex;
@@ -876,15 +990,15 @@
 		user-select: none;
 	}
 	/* The label WRAPS rather than truncating.
-	   "Off path" was already the short name — it replaced "Disrupted" because a
-	   truncated control is one a scout has to remember instead of read — and on a
-	   375px phone it still came out "Off pa…", which is the same bug with a
-	   shorter word in it. There is no name for this action that survives a quarter
-	   of a phone's width on one line, so it gets two: the button is 55px tall for
-	   the thumb and two lines of body text fit inside that without changing the
-	   rail's height. Shrinking the type instead would have kept the baseline tidy
-	   and made the control harder to hit, which is the wrong trade on the one
-	   surface that is used under a fifteen-second clock. */
+	   A truncated control is one a scout has to remember instead of read, and
+	   shortening a season's label only moves the problem: an already-short label
+	   on a 375px phone still came out cut off with an ellipsis. There is no name
+	   that is guaranteed to survive a quarter of a phone's width on one line, so
+	   it gets two: the button is 55px tall for the thumb and two lines of body
+	   text fit inside that without changing the rail's height. Shrinking the type
+	   instead would have kept the baseline tidy and made the control harder to
+	   hit, which is the wrong trade on the one surface that is used against the
+	   clock. */
 	.act .what {
 		min-width: 0;
 		overflow-wrap: break-word;
@@ -919,7 +1033,9 @@
 			display: none;
 		}
 	}
-	.act.fault.on {
+	/* The tone is the season's, per action. Only a warning has its own on-state;
+	   `accent` and `success` both light up in the accent. */
+	.act.tone-warning.on {
 		background: var(--warning);
 		border-color: var(--warning);
 		color: var(--on-alliance);
@@ -982,7 +1098,7 @@
 		text-align: right;
 	}
 
-	/* The climb sheet. Fixed to the viewport rather than placed in the controls:
+	/* The answers sheet. Fixed to the viewport rather than placed in the controls:
 	   it is asked WHILE the recording is still running, and the recorder may or
 	   may not be in full screen at the time, so it cannot be a child of either
 	   layout. z-index clears the full-screen shell's 50. */
@@ -997,7 +1113,7 @@
 			max(var(--space-4), env(safe-area-inset-bottom, 0))
 			max(var(--space-4), env(safe-area-inset-left, 0));
 		/* Opaque, not a scrim. The field behind it has nothing left to show — the
-		   robot is on the tower — and a translucent panel over a drawn field is
+		   robot has finished its auto — and a translucent panel over a drawn field is
 		   the hardest thing to read on this screen. */
 		background: var(--bg-page);
 	}
@@ -1045,7 +1161,7 @@
 	}
 	/* "Not sure" reads as the lighter answer without becoming a way out: it is
 	   selectable and it selects, because it is the honest answer more often than
-	   any single rung is. */
+	   any single option is. */
 	.opt.skip {
 		font-weight: 400;
 		color: var(--text-muted);
@@ -1137,6 +1253,11 @@
 		}
 		.rec.left {
 			grid-template-columns: auto minmax(0, 1fr);
+		}
+		/* Beside the field there is one row. A second, empty one would still be
+		   given a gap, taken out of the field's height. */
+		.shell.full .rec {
+			grid-template-rows: minmax(0, 1fr);
 		}
 		.rec.left .stage {
 			order: 2;

@@ -244,17 +244,39 @@
 				</Panel>
 			{/if}
 
+			<!-- Named in the words of the season the tracks were drawn on, and each
+			     figure only where that season can measure it: one with no cycle has
+			     no cycle count, one with no fault action has no fault rate. A null is
+			     left out, never printed as a zero. -->
 			{#if a.cycles}
-				<Stats>
-					<Stat label="Auto cycles" value={a.cycles.meanCycles.toFixed(1)} note="mean of {a.cycles.n}" />
-					<Stat label="Seconds scoring" value={(a.cycles.meanScoringMs / 1000).toFixed(1)} note="per match" />
-					<Stat
-						label="Disrupted"
-						value={a.cycles.faultRate.toFixed(2)}
-						note="per match"
-						tone={a.cycles.faultRate >= 0.5 ? 'warn' : 'default'}
-					/>
-				</Stats>
+				{@const c = a.cycles}
+				{@const to = a.season.cycle ? a.season.actionByKey[a.season.cycle.to] : null}
+				{@const counted =
+					typeof c.meanCycles === 'number' ||
+					(to && typeof c.meanToMs === 'number') ||
+					typeof c.faultRate === 'number'}
+				{#if counted}
+					<Stats>
+						{#if typeof c.meanCycles === 'number'}
+							<Stat label="Auto cycles" value={c.meanCycles.toFixed(1)} note="mean of {c.n}" />
+						{/if}
+						{#if to && typeof c.meanToMs === 'number'}
+							<Stat
+								label="Seconds {to.doing.toLowerCase()}"
+								value={(c.meanToMs / 1000).toFixed(1)}
+								note="per match"
+							/>
+						{/if}
+						{#if typeof c.faultRate === 'number'}
+							<Stat
+								label={a.season.faultAction.label}
+								value={c.faultRate.toFixed(2)}
+								note="per match"
+								tone={c.faultRate >= 0.5 ? 'warn' : 'default'}
+							/>
+						{/if}
+					</Stats>
+				{/if}
 			{/if}
 		{/if}
 

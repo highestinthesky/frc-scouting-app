@@ -28,8 +28,7 @@
 	import Stat from '$lib/components/studio/Stat.svelte';
 	import Stats from '$lib/components/studio/Stats.svelte';
 	import AutoReplay from '$lib/components/studio/AutoReplay.svelte';
-	import { readTrack, cycleStats } from '$lib/auto-track.js';
-	import { startZone } from '$lib/field.js';
+	import { readTrack, cycleStats, describeAnswers } from '$lib/auto-track.js';
 
 	const eventCode = $derived(String(page.params.eventCode ?? '').toLowerCase());
 	const matchNumber = $derived(Number(page.params.matchNumber));
@@ -72,15 +71,42 @@
 	const seats = $derived([...report.red, ...report.blue]);
 	const withTracks = $derived(seats.filter((s) => s.entries.some((e) => readTrack(e))));
 
-	/** The auto summary for one seat, or null when nobody recorded a track. */
-	function autoOf(seat) {
+	/**
+	 * One seat's auto, as a line, or null when nobody recorded a track.
+	 *
+	 * Read in the words of the season the TRACK was drawn on, not this build's:
+	 * the start zone from that season's field, the cycle and the endgame from its
+	 * actions. Each clause is there only when it says something — a season with
+	 * no cycle has no cycle count, and zero seconds in the cycle's closing action
+	 * is left out rather than printed as an observation.
+	 */
+	function autoLine(seat) {
 		const e = seat.entries.find((x) => readTrack(x));
 		if (!e) return null;
 		const track = readTrack(e);
-		return {
-			zone: startZone(track.start, seat.allianceColor),
-			stats: cycleStats(track)
-		};
+		const { season } = track;
+		const c = cycleStats(track);
+		const zone = season.field.startZone(track.start, seat.allianceColor);
+		const parts = [zone ? `Auto from ${zone}` : 'Auto'];
+		if (typeof c.cycles === 'number' && c.cycles > 0) {
+			parts.push(`${c.cycles} ${c.cycles === 1 ? 'cycle' : 'cycles'}`);
+		}
+		if (season.cycle) {
+			const to = season.actionByKey[season.cycle.to];
+			const ms = c.byAction[to.key]?.ms ?? 0;
+			if (ms > 0) parts.push(`${(ms / 1000).toFixed(1)}s ${to.doing.toLowerCase()}`);
+		}
+		// The endgame is named by when it BEGAN: it runs to the whistle, so its
+		// span is the length of the recording rather than a fact about the robot.
+		if (c.endgame?.done) {
+			const end = season.endgame;
+			const from =
+				c.endgame.startedAt == null ? '' : ` from ${(c.endgame.startedAt / 1000).toFixed(1)}s`;
+			parts.push(
+				[`${end.doing.toLowerCase()}${from}`, ...describeAnswers(end, c.endgame.answers)].join(', ')
+			);
+		}
+		return parts.join(' · ');
 	}
 </script>
 
@@ -153,6 +179,7 @@
 				<Panel title="{side.colour === 'red' ? 'Red' : 'Blue'} alliance">
 					<ul class="seats {side.colour}">
 						{#each side.seats as seat}
+							{@const auto = autoLine(seat)}
 							<li class:uncovered={!seat.covered}>
 								<div class="seat-head">
 									<a class="team" href="{base}/studio/{eventCode}/team/{seat.teamNumber}/">
@@ -177,25 +204,8 @@
 											{/if}
 										{/each}
 									</dl>
-									{#if autoOf(seat)}
-										{@const a = autoOf(seat)}
-										<p class="auto">
-											Auto{a.zone ? ` from ${a.zone}` : ''}{a.stats.cycles
-												? ` · ${a.stats.cycles} ${a.stats.cycles === 1 ? 'cycle' : 'cycles'}`
-												: ''}{a.stats.msScoring
-												? ` · ${(a.stats.msScoring / 1000).toFixed(1)}s scoring`
-												: ''}{a.stats.climbed
-												? ` · climbed from ${(a.stats.climbStartedAt / 1000).toFixed(1)}s${
-														a.stats.climbLevel ? `, rung ${a.stats.climbLevel}` : ''
-													}${
-														a.stats.climbOk === true
-															? ', made it'
-															: a.stats.climbOk === false
-																? ', failed'
-																: ''
-													}`
-												: ''}
-										</p>
+									{#if auto}
+										<p class="auto">{auto}</p>
 									{/if}
 									{#each seat.entries as e}
 										{#if e.observations?.comments?.trim() || e.observations?.strengths?.trim()}

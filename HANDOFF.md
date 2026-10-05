@@ -280,7 +280,7 @@ answer.
    between correctness and precision and it is theirs.
 
 8. **G303-E is deliberately not enforced.** A robot may not start touching a
-   BUMP, and the lateral BUMP extents in `field.js` are *derived* from a width
+   BUMP, and the lateral BUMP extents in `seasons/2026.js` are *derived* from a width
    that sums rather than measured off a drawing. Hard-blocking a placement on an
    inferred number would fight a scout who watched a robot start somewhere the
    file is wrong about. If someone measures the real extents off the field
@@ -423,7 +423,8 @@ are in the v0.81.4 commit message; the two worth carrying forward:
 
   The sheet takes the screen because there is nothing left on the field to
   watch. Both answers are three-state: `ok` is `true`/`false`/ABSENT, and
-  `cycleStats.climbOk` returns null rather than false for an unjudged climb —
+  `cycleStats().endgame.answers.ok` (once `climbOk`) is null rather than false
+  for an unjudged climb —
   the same blank-is-not-zero line the rest of the app holds.
 
 - **The 7% mobile reflow was one wrapped button.** At 375px the place row
@@ -559,9 +560,10 @@ Five modules, in dependency order. The first two are pure and carry the rules:
 
 | | |
 |---|---|
-| `src/lib/auto-track.js` | the encoding, cycle stats, route signatures. 67 tests |
-| `src/lib/field.js` | 2026 REBUILT geometry, alliance-relative zones, collision, the view transforms. 113 tests |
-| `components/AutoField.svelte` | one renderer, three modes: record / correct / replay |
+| `src/lib/auto-track.js` | the encoding, the season stamp and v1/v2, `cycleStats` (`byAction`, `cycles`, `faults`, `endgame.{done, startedAt, answers}`), route signatures |
+| `src/lib/seasons/` | the game as data: `2026.js` (REBUILT), `fixture.js` (the throwaway 1999 proof), `index.js` (validator, registry, `CURRENT_SEASON`) |
+| `src/lib/field.js` | the geometry engine — `makeField`, alliance-relative zones, collision, the view transforms; names no game |
+| `components/AutoField.svelte` | one renderer, three modes: record / review / replay |
 | `components/AutoRecorder.svelte` | place → arm → live → correct |
 | `components/studio/AutoReplay.svelte` | every recording of a match at once |
 
@@ -608,35 +610,28 @@ is `0021` exactly — the body being right is what makes the grant look fine.
 3. **Coordinates are fractions of the FULL field**, never the drawn region and
    never alliance-relative. The drawn region has already changed twice; not one
    stored path had to move, and that is Decision 1 paying for itself.
-4. **`decodeTrack` refuses a version it does not know.** A future layout decoded
-   as this one draws a plausible path in the wrong places, which is worse than a
-   gap because a gap is visible.
-5. **Blank stays blank, per piece.** Start-only is a real record. `climbLevel` is
-   `null` and never `0` — "climbed, rung unknown" and "did not climb" are
-   different facts.
+4. **`decodeTrack` refuses a version or a season it does not know.** A future
+   layout, or a track drawn on a field this build does not have, draws a
+   plausible path in the wrong places, which is worse than a gap because a gap
+   is visible. 2026 tracks are `v: 1`; every other season's are `v: 2`, so a
+   bundle cached before the stamp refuses them instead of drawing them on 2026.
+5. **Blank stays blank, per piece.** Start-only is a real record.
+   `cycleStats().endgame.answers.lvl` is `null` and never `0` — "climbed, rung
+   unknown" and "did not climb" are different facts.
 
-### Where v0.8 stands
+### Where the plan stands
 
-`ROADMAP.md` enumerates six releases. **v0.80 and v0.81 are done.** Remaining:
-
-- **v0.82 — the comparison pair.** Transpose `compare` so metrics are rows and
-  teams are columns. Its old item 6, the pre-match view, moved into v0.81's match
-  page; what is left here is that the match page swaps in the transposed table
-  once it exists.
-- **v0.83 — pit scouting**, as a second section on the team page.
-- **v0.84 — the scout's schedule**, the smallest item and the only one that can
-  slip without costing anything on the day.
-- **v0.85 — the move to `rohawks.org/app`.**
-
-The series targets the offseason on **10–11 October 2026**, and everything in it
-is used at an event by someone standing in a gym.
+`ROADMAP.md` is current; this section used to restate it and went stale twice.
+Versions are now assigned on release rather than up front — see *How versions
+work* there. The offseason event was cancelled, so nothing in the plan is
+aimed at a rehearsal any more.
 
 ### Two things only the user can do
 
 - **Leaked-password protection is still OFF** in the Supabase dashboard. Worth
   doing before more accounts are handed out.
 - **The field geometry should be checked against the real drawings** before
-  scouts practise on it. Two numbers in `field.js` are DERIVED rather than
+  scouts practise on it. Two numbers in `seasons/2026.js` are DERIVED rather than
   quoted, and both are flagged in place:
 
   - **The alliance zone depth is 184in, not the 158.6in the manual states.** The
@@ -651,7 +646,7 @@ is used at an event by someone standing in a gym.
     lateral elements then sum to the field width exactly, and that sum is the
     check that the layout was read correctly.
 
-  Everything in `field.js` is in inches for this reason: `184` can be checked
+  Everything in `seasons/2026.js` is in inches for this reason: `184` can be checked
   against a drawing and `0.2826` cannot.
 
 `docs/adr-003-boards.md` is REJECTED and kept for its decisions.

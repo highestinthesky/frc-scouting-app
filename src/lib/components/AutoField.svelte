@@ -1,7 +1,7 @@
 <script>
 	// The field, the robots on it, and the three things you can do with them.
 	//
-	//   mode="record"   drag one robot for fifteen seconds
+	//   mode="record"   drag one robot through auto
 	//   mode="review"   scrub back through what you just drew and look at it
 	//   mode="replay"   watch six recordings at once
 	//
@@ -26,22 +26,17 @@
 	// for ("either on their phone or computer"). setPointerCapture is what keeps a
 	// drag alive when the thumb slides off the SVG — without it a scout who
 	// overshoots the field edge drops the robot mid-recording.
-	import {
-		DRAWN,
-		DRAWN_ASPECT,
-		ROBOT_SIZE_IN,
-		FIELD_LENGTH_IN,
-		OBSTACLES,
-		FEATURES,
-		ALLIANCE_BANDS,
-		START_BANDS,
-		clampToField,
-		toDrawn,
-		fromDrawn,
-		toScreen,
-		fromScreen
-	} from '$lib/field.js';
-	import { ACTIONS, CLIMB_LEVELS, positionAt, marksAt, trackDuration } from '$lib/auto-track.js';
+	//
+	// ─── the season ────────────────────────────────────────────────────────────
+	//
+	// Everything game-shaped — the field's geometry, what a robot can be doing,
+	// how each action is drawn and named — comes from the `season` prop, and this
+	// file names no game. The default is the season new recordings are made on;
+	// a replay passes the season its tracks were drawn on, because a track read
+	// on another season's field draws a plausible path in the wrong places.
+	import { toScreen, fromScreen } from '$lib/field.js';
+	import { currentSeason, chipLetter } from '$lib/seasons/index.js';
+	import { positionAt, marksAt, trackDuration, describeAnswers } from '$lib/auto-track.js';
 
 	/**
 	 * @type {{
@@ -52,7 +47,8 @@
 	 *   t?: number,
 	 *   flipped?: boolean,
 	 *   rotated?: boolean,
-	 *   active?: Array<{a: string, lvl?: number, ok?: boolean}>,
+	 *   active?: Array<{a: string, t0?: number, [answer: string]: unknown}>,
+	 *   season?: import('$lib/seasons/index.js').Season,
 	 *   onmove?: (pos: {x:number,y:number}) => void
 	 * }}
 	 */
@@ -65,14 +61,29 @@
 		flipped = false,
 		rotated = false,
 		active = [],
+		season = currentSeason(),
 		onmove
 	} = $props();
+
+	const {
+		DRAWN,
+		DRAWN_ASPECT,
+		ROBOT_SIZE_IN,
+		LENGTH_IN,
+		OBSTACLES,
+		FEATURES,
+		ALLIANCE_BANDS,
+		START_BANDS,
+		clampToField,
+		toDrawn,
+		fromDrawn
+	} = $derived(season.field);
 
 	// The viewBox is in DRAWN units scaled to the picture's own aspect, so every
 	// coordinate below is a straight multiply and nothing has to remember which
 	// space it is in.
 	const LONG = 1000;
-	const SHORT = Math.round(LONG / DRAWN_ASPECT);
+	const SHORT = $derived(Math.round(LONG / DRAWN_ASPECT));
 	// A quarter turn swaps the box, so every coordinate below is still a straight
 	// multiply and nothing has to remember which way up it is.
 	const VB_W = $derived(rotated ? SHORT : LONG);
@@ -84,10 +95,11 @@
 	// It was a fixed 48 units against a picture that has changed width twice,
 	// which made it about 70% of a real robot on the cut field and would have
 	// been a different wrong size on this one. A scout judging whether a robot
-	// fits between the HUB and a BUMP is reading this square, so it has to be the
-	// square the rules describe: 110in of frame perimeter plus bumpers, 34in.
-	const ROBOT = (ROBOT_SIZE_IN / FIELD_LENGTH_IN) * LONG;
-	const HALF_BOT = ROBOT / 2;
+	// fits between two structures — in 2026, the HUB and a BUMP — is reading this
+	// square, so it has to be the square the rules describe: the season's robot,
+	// bumpers included.
+	const ROBOT = $derived((ROBOT_SIZE_IN / LENGTH_IN) * LONG);
+	const HALF_BOT = $derived(ROBOT / 2);
 
 	/**
 	 * Full-field position to a point in the viewBox, honouring the flip.
@@ -127,15 +139,16 @@
 		const across = (o.h / (DRAWN.y1 - DRAWN.y0)) * SHORT;
 		const w = rotated ? across : along;
 		const h = rotated ? along : across;
-		return { x: c.cx - w / 2, y: c.cy - h / 2, w, h, label: o.label };
+		return { x: c.cx - w / 2, y: c.cy - h / 2, w, h, label: o.label, look: o.look };
 	}
 
 	const solids = $derived(
 		OBSTACLES.filter((o) => o.kind === 'rect').map((o) => {
 			const b = box(o);
-			// The HUB's hexagonal opening, drawn inside its square footprint —
-			// which is what the field actually looks like from above, and what makes
-			// it recognisable rather than just another rectangle.
+			// An obstacle's opening — in 2026, the HUB's hexagonal one — drawn inside
+			// its square footprint, which is what the field actually looks like from
+			// above, and what makes it recognisable rather than just another
+			// rectangle.
 			if (!o.opening) return b;
 			const r = (o.opening / (DRAWN.y1 - DRAWN.y0)) * SHORT / 2;
 			const c = place({ x: o.x, y: o.y });
@@ -178,7 +191,7 @@
 	const lines = $derived(
 		FEATURES.filter((f) => f.kind === 'line').map((f) => {
 			const u = toDrawn({ x: f.x, y: 0 }).u;
-			return { ...segment(u, 0, u, 1), label: f.label };
+			return { ...segment(u, 0, u, 1), label: f.label, look: f.look };
 		})
 	);
 
@@ -200,8 +213,8 @@
 
 	// Band labels start clear of whatever is against the near wall.
 	//
-	// Centred in their band they sat exactly where the DEPOT is drawn — both are
-	// centred across the width — and "Middle" rendered as "ODLE". Anchoring to
+	// In 2026, centred in their band they sat exactly where the DEPOT is drawn —
+	// both are centred across the width — and "Middle" rendered as "ODLE". Anchoring to
 	// the top of the band left one pixel of overlap, which is the kind of fix
 	// that comes back the moment a band moves. So they clear the wall furniture
 	// HORIZONTALLY instead, computed from the widest thing touching x = 0 rather
@@ -209,10 +222,12 @@
 	// How far along the drawn box the labels sit: clear of whatever is against the
 	// near wall. Expressed as a DRAWN fraction rather than a pixel offset, so it
 	// survives the box being turned on its side.
-	const labelAlong = Math.max(
-		0.02,
-		...OBSTACLES.filter((o) => o.kind === 'rect' && o.x - o.w / 2 <= DRAWN.x0 + 1e-9).map(
-			(o) => (o.x + o.w / 2) / (DRAWN.x1 - DRAWN.x0) + 0.02
+	const labelAlong = $derived(
+		Math.max(
+			0.02,
+			...OBSTACLES.filter((o) => o.kind === 'rect' && o.x - o.w / 2 <= DRAWN.x0 + 1e-9).map(
+				(o) => (o.x + o.w / 2) / (DRAWN.x1 - DRAWN.x0) + 0.02
+			)
 		)
 	);
 	// Anchored away from the wall, whichever side the wall ended up on. Rotated,
@@ -255,18 +270,19 @@
 							...place(pos),
 							label: row.label,
 							colour: row.colour ?? '',
-							// A climb outlives its own recording.
+							// The endgame outlives its own recording.
 							//
-							// Once a robot starts climbing it is on the tower for the rest
-							// of auto — that is why the mark runs to the whistle and why the
-							// recorder stops asking the scout to track it. So past the end
-							// of this robot's track the climb keeps showing, while nothing
-							// else does: a collect that happened to be open at the whistle
-							// makes no claim about the seconds after it, and a climb does.
+							// Once a robot starts the season's endgame action — in 2026, a
+							// climb — it is committed to it for the rest of auto: that is
+							// why the mark runs to the whistle and why the recorder stops
+							// asking the scout to track it. So past the end of this robot's
+							// track the endgame keeps showing, while nothing else does: a
+							// collect that happened to be open at the whistle makes no claim
+							// about the seconds after it, and a climb does.
 							doing:
 								local > trackDuration(row.track)
 									? marksAt(row.track, trackDuration(row.track)).filter(
-											(m) => m.a === 'climb'
+											(m) => season.endgame != null && m.a === season.endgame.key
 										)
 									: marksAt(row.track, local),
 							// Past its own end, a robot is drawn faded rather than removed:
@@ -305,15 +321,17 @@
 	// team number, and its POSITION is the recorded data — the one thing nothing
 	// may sit on top of.
 	//
-	// Colour is the second signal, never the first: the glyphs are a mirrored
-	// pair (an arrow into the robot, an arrow out of it) because at fifteen
-	// screen pixels a reversal reads and a hue does not. `fault` is --warning to
-	// agree with the action rail the scout holds, so there is one mapping to
-	// learn rather than two.
+	// Colour is the second signal, never the first: the collect and score glyphs
+	// are a mirrored pair (an arrow into the robot, an arrow out of it) because
+	// at fifteen screen pixels a reversal reads and a hue does not. The chip's ink
+	// is the action's own `tone` from the season — the same tone the action rail
+	// the scout holds is painted in — so there is one mapping to learn rather
+	// than two.
 	//
 	// Every pairing here is already in check_contrast's table at 4.5 across all
 	// four palettes — the chip is --bg-card and the glyphs are --accent,
-	// --success and --warning, which are measured against it. That is why the
+	// --success and --warning (the three tones a season may name), which are
+	// measured against it. That is why the
 	// chip is neutral with coloured ink and not a coloured fill: an --on-success
 	// token does not exist, and inventing one would mean four new assertions to
 	// keep true forever.
@@ -392,55 +410,74 @@
 	};
 
 	/**
-	 * Which icon a mark draws.
+	 * The season's action a mark records, or undefined.
 	 *
-	 * The climb is the only one with variants, and they are exactly the two
-	 * questions the recorder asks. `ok === false` is a failed climb; `ok`
-	 * absent is a climb nobody judged and draws as a plain one — NOT as a failed
-	 * one, which is the blank-is-not-zero line this file keeps.
+	 * `hasOwn`, so a mark whose `a` is `constructor` is not an action.
 	 */
-	function iconFor(mark) {
-		if (mark?.a !== 'climb') return { kind: mark?.a ?? 'collect' };
-		const lvl = CLIMB_LEVELS.includes(Number(mark.lvl)) ? Number(mark.lvl) : null;
-		return { kind: 'climb', lvl, failed: mark.ok === false };
-	}
-
-	const GLYPH_LABEL = {
-		collect: 'Collecting',
-		score: 'Scoring',
-		fault: 'Malfunction'
-	};
+	const actionOf = (mark) =>
+		mark && Object.hasOwn(season.actionByKey, mark.a) ? season.actionByKey[mark.a] : undefined;
 
 	/**
-	 * What a chip announces.
+	 * Which icon a mark draws.
 	 *
-	 * A climb is named by WHEN IT BEGAN rather than by a span, because the span is
-	 * not a fact about the robot — it always runs to the whistle. "Began climbing
-	 * at 12.7s" is the observation; "12.7 to 15.0s" is that observation plus the
-	 * length of the recording, which says nothing.
+	 * The action's own `icon` from the season, and an action with none draws one
+	 * character — its `letter`, else the first letter of its label (`chipLetter`,
+	 * which buildSeason() has already checked is unique). A season does not have
+	 * to ship artwork to be readable on the field.
+	 *
+	 * The climb icon is the only one with variants, and they are exactly the two
+	 * questions an endgame of that shape asks, found by ROLE rather than by key:
+	 * the `level` question picks the numeral, and the `outcome` question being
+	 * `false` is a failed climb. An outcome nobody judged is absent and draws as
+	 * a plain climb — NOT as a failed one, which is the blank-is-not-zero line
+	 * this file keeps. A level is drawn as a numeral only when it is one the icon
+	 * set has; anything else is the question mark, never a numeral picked as a
+	 * stand-in.
+	 */
+	function iconFor(mark) {
+		const action = actionOf(mark);
+		const kind = action?.icon ?? 'letter';
+		if (kind === 'letter') return { kind, letter: action ? chipLetter(action) : '?' };
+		if (kind !== 'climb') return { kind };
+		const level = action.questions?.find((q) => q.role === 'level');
+		const outcome = action.questions?.find((q) => q.role === 'outcome');
+		const v = level ? mark[level.key] : undefined;
+		const lvl = Number.isInteger(v) && Object.hasOwn(RUNG, v) ? v : null;
+		return { kind, lvl, failed: outcome ? mark[outcome.key] === false : false };
+	}
+
+	/**
+	 * What a chip announces: what the robot is doing, then each answer it was
+	 * given, in the season's own words.
+	 *
+	 * The endgame is named by WHEN IT BEGAN rather than by a span, because the
+	 * span is not a fact about the robot — it always runs to the whistle. "Began
+	 * climbing at 12.7s" is the observation; "12.7 to 15.0s" is that observation
+	 * plus the length of the recording, which says nothing.
 	 */
 	function markLabel(mark) {
-		if (mark?.a !== 'climb') return GLYPH_LABEL[mark?.a] ?? '';
+		const action = actionOf(mark);
+		if (!action) return '';
+		const answers = describeAnswers(action, mark);
+		if (action !== season.endgame) return [action.doing, ...answers].join(', ');
 		const at = Number.isFinite(Number(mark.t0))
 			? ` at ${(Number(mark.t0) / 1000).toFixed(1)}s`
 			: '';
-		const lvl = CLIMB_LEVELS.includes(Number(mark.lvl))
-			? `, rung ${Number(mark.lvl)}`
-			: ', rung not recorded';
-		const out = mark.ok === true ? ', made it' : mark.ok === false ? ', failed' : '';
-		return `Began climbing${at}${lvl}${out}`;
+		return [`Began ${action.doing.toLowerCase()}${at}`, ...answers].join(', ');
 	}
 
 	/**
 	 * Lay a row of chips above a robot, centred on it.
 	 *
-	 * Ordered by ACTIONS rather than by whatever order the intervals happen to
-	 * be in, so a robot collecting-and-off-path draws its chips the same way
-	 * every time and the row does not reshuffle between frames.
+	 * Ordered by the season's actions rather than by whatever order the intervals
+	 * happen to be in, so a robot collecting-and-off-path draws its chips the
+	 * same way every time and the row does not reshuffle between frames.
 	 */
 	function badges(doing, cx, cy) {
-		const marks = Array.isArray(doing) ? doing.filter((m) => ACTIONS.includes(m?.a)) : [];
-		const list = ACTIONS.map((a) => marks.find((m) => m.a === a)).filter(Boolean);
+		const marks = Array.isArray(doing) ? doing : [];
+		const list = season.actions
+			.map((action) => marks.find((m) => m?.a === action.key))
+			.filter(Boolean);
 		if (!list.length) return [];
 		const step = BADGE_R * 2 + BADGE_GAP;
 
@@ -463,6 +500,7 @@
 		return list.map((m, i) => ({
 			mark: m,
 			a: m.a,
+			tone: season.actionByKey[m.a].tone,
 			icon: iconFor(m),
 			label: markLabel(m),
 			cx: mid - half + i * step,
@@ -481,9 +519,10 @@
 	// looks like one thing and is another. A track is evidence of where a robot
 	// was, and evidence is not edited from memory.
 	//
-	// What the pass still does — scrub, trim an action, set a rung, turn the whole
-	// thing end for end, throw it away and record again — is all either reading or
-	// a whole-track operation with a known cause. None of them make up a point.
+	// What the pass still does — scrub, trim an action, answer an action's
+	// questions (in 2026, set a rung), turn the whole thing end for end, throw it
+	// away and record again — is all either reading or a whole-track operation
+	// with a known cause. None of them make up a point.
 	const draggable = $derived(mode === 'record');
 
 	let svg = $state(null);
@@ -629,15 +668,16 @@
 	<!-- Driven over and driven under: landmarks a scout steers by, and paths
 	     legitimately cross both. Drawn under everything else. -->
 	{#each marks as m}
-		<rect x={m.x} y={m.y} width={m.w} height={m.h} rx="4" class="mark {m.label}" />
+		<rect x={m.x} y={m.y} width={m.w} height={m.h} rx="4" class="mark look-{m.look}" />
 	{/each}
 
 	{#each lines as l}
-		<line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} class="mark-line {l.label.split(' ')[0]}" />
+		<line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} class="mark-line look-{l.look}" />
 	{/each}
 
-	<!-- Solid: a robot cannot be here. Both HUBs and the DEPOT, both ends, drawn
-	     whole — the field has not been cut since v0.81. -->
+	<!-- Solid: a robot cannot be here. Every obstacle the season lists, drawn
+	     whole — in 2026 both HUBs and both DEPOTs. The field has not been cut
+	     since v0.81. -->
 	{#each solids as o}
 		<rect x={o.x} y={o.y} width={o.w} height={o.h} rx="4" class="solid" />
 		{#if o.hex}<polygon points={o.hex} class="opening" />{/if}
@@ -680,7 +720,7 @@
      tooltip AND the accessible name, it costs no space on a phone, and the
      field is already the densest picture in the app. -->
 {#snippet chip(b, faded)}
-	<g class="badge {b.a}" class:faded class:failed={b.icon.failed}>
+	<g class="badge tone-{b.tone}" class:faded class:failed={b.icon.failed}>
 		<title>{b.label}</title>
 		<circle class="disc" cx={b.cx} cy={b.cy} r={BADGE_R} />
 		<!-- The icon draws in its own 256 space and one transform puts it on the
@@ -743,6 +783,16 @@
 				{:else}
 					<path class="g-fill" d={RUNG_UNKNOWN} />
 				{/if}
+			{:else if b.icon.kind === 'letter'}
+				<!-- An action with no artwork: its initial, centred in the same 256
+				     box, so it sits on the chip exactly where an icon would. -->
+				<text
+					class="g-text"
+					x={ICON_BOX / 2}
+					y={ICON_BOX / 2}
+					text-anchor="middle"
+					dominant-baseline="central">{b.icon.letter}</text
+				>
 			{/if}
 		</g>
 	</g>
@@ -796,11 +846,11 @@
 	}
 	/* A stroke means "this stops a robot", and nothing else on the field has one.
 	   That is the entire visual grammar here, and it has to survive being glanced
-	   at on a phone in a gym: the HUB and the BUMP beside it are adjacent
+	   at on a phone in a gym: in 2026 the HUB and the BUMP beside it are adjacent
 	   rectangles of similar size, and if they read alike the scout learns a field
 	   where the hub is passable. */
-	/* Tint, not fill: the band sits under the BUMPs and TRENCHes and has to let
-	   them read through it. */
+	/* Tint, not fill: the band sits under the landmarks — in 2026 the BUMPs and
+	   TRENCHes — and has to let them read through it. */
 	.alliance.red {
 		fill: var(--alliance-red);
 		opacity: 0.16;
@@ -824,11 +874,13 @@
 		fill: var(--bg-elev);
 		opacity: 0.6;
 	}
-	.mark.tower {
+	/* A feature's `look` from the season, not its name: in 2026 the TOWER is the
+	   wall and the TRENCH is the outline. Plain `.mark` is the landmark. */
+	.mark.look-wall {
 		fill: var(--border-strong);
 		opacity: 0.5;
 	}
-	.mark.trench {
+	.mark.look-outline {
 		fill: none;
 		stroke: var(--border);
 		stroke-width: 2;
@@ -838,7 +890,7 @@
 		stroke: var(--border);
 		stroke-width: 2;
 	}
-	.mark-line.centre {
+	.mark-line.look-dashed {
 		stroke-dasharray: 10 8;
 	}
 
@@ -942,11 +994,27 @@
 		fill: var(--accent);
 		stroke: none;
 	}
-	.badge.score .g-line {
+	/* An action with no artwork draws its initial. Sized in the icon's own 256
+	   box, like every other glyph, so one transform places all of them. */
+	.badge .g-text {
+		fill: var(--accent);
+		font-size: 150px;
+		font-weight: 700;
+	}
+	/* The ink follows the action's tone, which the season names. */
+	.badge.tone-success .g-line {
 		stroke: var(--success);
 	}
-	.badge.score .g-fill {
+	.badge.tone-success .g-fill,
+	.badge.tone-success .g-text {
 		fill: var(--success);
+	}
+	.badge.tone-warning .g-line {
+		stroke: var(--warning);
+	}
+	.badge.tone-warning .g-fill,
+	.badge.tone-warning .g-text {
+		fill: var(--warning);
 	}
 	/* The warning triangle is a FILL, and the mark inside it is cut back to the
 	   disc's own colour rather than to white. White is only right on one of the

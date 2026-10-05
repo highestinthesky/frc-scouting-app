@@ -14,6 +14,9 @@
 
 import { scopeEntries, summarizeEntries, teamProfile, matchReport, autoSummary } from './aggregate.js';
 import { encodeTrack } from './auto-track.js';
+import { seasonFor, currentSeason } from './seasons/index.js';
+
+const S2026 = seasonFor(2026);
 
 let pass = 0;
 let fail = 0;
@@ -204,7 +207,7 @@ function entry(eventCode, matchNumber, teamNumber, extra = {}) {
 					start: { x: 0.08, y },
 					samples: [{ x: 0.08, y }, { x: 0.4, y }],
 					intervals: acts.map((a, i) => ({ a, t0: i * 1000, t1: i * 1000 + 600 }))
-				})
+				}, S2026)
 			}
 		});
 
@@ -216,7 +219,7 @@ function entry(eventCode, matchNumber, teamNumber, extra = {}) {
 		entry('2026onsum', 5, 254, { observations: { autoPathing: 'middle three piece' } })
 	];
 
-	const a = autoSummary(rows);
+	const a = autoSummary(rows, S2026);
 	ok('only entries with a track are counted', a.n === 3);
 	ok('but the entry total is still reported', a.ofEntries === 5);
 
@@ -229,21 +232,44 @@ function entry(eventCode, matchNumber, teamNumber, extra = {}) {
 	ok('cycles are averaged over entries WITH tracks', a.cycles.n === 3);
 	// Two entries with one cycle each, one with none: 2/3.
 	ok('and the mean is over that n', Math.abs(a.cycles.meanCycles - 2 / 3) < 1e-9);
+	// Three scores of 600 ms over three tracks: the cycle's closing action, timed.
+	ok('time in the cycle\'s closing action is averaged', a.cycles.meanToMs === 600);
+	ok('no fault recorded is a rate of zero, not null', a.cycles.faultRate === 0);
+	ok('the summary says which season it read', a.season === S2026);
 
 	// Nothing recorded must produce nothing, not a zero.
-	const none = autoSummary([entry('2026onsum', 1, 999)]);
+	const none = autoSummary([entry('2026onsum', 1, 999)], S2026);
 	ok('no tracks means n = 0', none.n === 0);
 	ok('and no cycle figures at all, rather than zeroes', none.cycles === null);
 	ok('and an empty histogram', none.zones.length === 0);
-	ok('junk is safe', autoSummary(null).n === 0);
+	ok('junk is safe', autoSummary(null, S2026).n === 0);
+	ok('no season counts nothing', autoSummary(rows, null).n === 0);
 
 	// The alliance perspective has to survive the aggregation: the same field
 	// position is a different zone to each alliance.
 	const mirrored = autoSummary([
 		withTrack('2026onsum', 7, 'red', 0.05, []),
 		withTrack('2026onsum', 7, 'blue', 0.05, [])
-	]);
+	], S2026);
 	ok('one field position is two zones to two alliances', mirrored.zones.length === 2);
+
+	// A track from another season is another field and another game. Its start
+	// zone means something else and its cycle is a different thing, so it is
+	// not counted — not even as an entry with a track.
+	const other = entry('2026onsum', 6, 254, {
+		allianceColor: 'red',
+		observations: {
+			autoTrack: encodeTrack(
+				{ start: { x: 0.08, y: 0.5 }, intervals: [{ a: 'grab', t0: 0, t1: 600 }, { a: 'place', t0: 700, t1: 1300 }] },
+				seasonFor(1999)
+			)
+		}
+	});
+	const mixed = autoSummary([...rows, other], S2026);
+	ok('a track from another season is not counted', mixed.n === 3);
+	ok('but its entry is', mixed.ofEntries === 6);
+	ok('and it joins no route', mixed.routes.reduce((n, r) => n + r.count, 0) === 3);
+	ok('and it is counted on its own season', autoSummary([...rows, other], seasonFor(1999)).n === 1);
 }
 
 // teamProfile carries the auto view, scoped the same two ways as everything else.
@@ -251,12 +277,17 @@ function entry(eventCode, matchNumber, teamNumber, extra = {}) {
 	const t = (eventCode, y) =>
 		entry(eventCode, 1, 254, {
 			allianceColor: 'red',
-			observations: { autoTrack: encodeTrack({ start: { x: 0.08, y } }) }
+			observations: { autoTrack: encodeTrack({ start: { x: 0.08, y } }, S2026) }
 		});
 	const p = teamProfile([t('2026onsum', 0.5), t('2026onto', 0.1), t('2025onsum', 0.9)], 254, '2026onsum');
 	ok('the event auto view sees this event only', p.auto.n === 1);
 	ok('the season auto view crosses events in the year', p.autoSeason.n === 2);
 	ok('and never crosses a year', p.autoSeason.n !== 3);
+	ok('both are read on the event\'s own season',
+		p.auto.season === S2026 && p.autoSeason.season === S2026);
+	// An undated event has no season of its own; it is read on the current one.
+	ok('an undated event falls back to the current season',
+		teamProfile([t('practice', 0.5)], 254, 'practice').auto.season === currentSeason());
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);
