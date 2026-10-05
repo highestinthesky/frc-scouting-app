@@ -30,7 +30,11 @@ import {
 	// once a withdrawal has succeeded somewhere, which that same bug prevented.
 	// One bug hid two.
 	deleteEntry,
-	mirrorServerChange
+	mirrorServerChange,
+	getEntry,
+	clearEntries,
+	getPullWatermark,
+	setPullWatermark
 } from './db.js';
 import { SCHEMA_VERSION } from './form-config.js';
 import { pullScheduleIfStale } from './tba.js';
@@ -100,6 +104,8 @@ let watermarkFirm = false;
  * old scope's position, and every row older than that would never arrive.
  */
 let scopeGen = 0;
+/** The scopeGen whose saved pull position has been looked up already. */
+let restoredFor = -1;
 /** Cached on first call; stable for the device. */
 let cachedClientId = null;
 /**
@@ -109,6 +115,8 @@ let cachedClientId = null;
 let syncedAs = /** @type {string|null|undefined} */ (undefined);
 /** The tick in progress, so flush() can wait for it instead of skipping. */
 let inflight = /** @type {Promise<void>|null} */ (null);
+/** The tick that set `polling`, while it is set. See exclusive(). */
+let worker = /** @type {Promise<void>|null} */ (null);
 /** Tick counter for the schedule/assignments throttle. Starts at the
  *  threshold so the very first tick after (re)connecting checks them once. */
 let ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
@@ -187,7 +195,7 @@ export function kick() {
  */
 export function resync() {
 	if (!syncState.eventCode) return;
-	resetWatermark();
+	forgetPosition();
 	// User explicitly asked for a full refresh — include schedule + assignments
 	// in that, even if we just polled them.
 	ticksSinceScheduleCheck = SCHEDULE_POLL_EVERY_N_TICKS;
@@ -252,6 +260,26 @@ function resetWatermark() {
 	scopeGen += 1;
 }
 
+/**
+ * Throw the pull position away for good: here, and the copy kept across
+ * launches. For "Sync now" and Clear entries, which both exist because the
+ * device may be missing rows — so resuming from a saved position on the next
+ * launch would undo them.
+ */
+function forgetPosition() {
+	const sid = syncState.sessionId;
+	resetWatermark();
+	restoredFor = scopeGen;
+	const scope = positionScope(sid);
+	if (scope) setPullWatermark(scope, null).catch(() => {});
+}
+
+/** Key for the saved pull position: whose, at which event. Null when there is
+ * nobody to key it on. */
+function positionScope(sid) {
+	return sid && auth.userId ? `${auth.userId}|${sid}` : null;
+}
+
 /** Who this device is signed in as, for scoping sync; null when signed out. */
 function currentAccount() {
 	return auth.signedIn ? (auth.userId ?? 'signed-in') : null;
@@ -303,10 +331,83 @@ export async function flush(timeoutMs = 8000) {
 
 function tick() {
 	if (inflight) return inflight;
-	inflight = runTick().finally(() => {
-		inflight = null;
+	const starting = !polling;
+	const run = runTick().finally(() => {
+		// Only if it is still ours: exclusive() may have queued behind it.
+		if (inflight === run) inflight = null;
 	});
-	return inflight;
+	inflight = run;
+	// The tick doing the work, as opposed to one that found it already running
+	// and returned. exclusive() waits on this one.
+	if (starting) worker = run;
+	return run;
+}
+
+/** What exclusive() returns when a tick would not finish in time. */
+const BUSY = Symbol('busy');
+
+/**
+ * Run `fn` with no sync tick in flight, and none starting until it is done.
+ *
+ * For local changes that must not interleave with a push or a pull. Deleting
+ * an entry that has never synced is a local delete — but if a push of that
+ * same row is already on the wire, the server keeps it, the next pull brings
+ * it back, and every teammate has it. The deleted entry came back from the
+ * dead, on every device but the one that deleted it, until it pulled too.
+ *
+ * Waits at most `waitMs` for a tick already running. A request with no
+ * signal can hang far longer than anyone will watch a button, so after that
+ * the answer is BUSY and the caller decides — or, with `proceed`, `fn` runs
+ * anyway, for changes that are safe against a late push.
+ *
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @param {{waitMs?: number, proceed?: boolean}} [opts]
+ * @returns {Promise<T | typeof BUSY>}
+ */
+function exclusive(fn, { waitMs = 8000, proceed = false } = {}) {
+	// `inflight` alone is not enough. Once a tick has outlasted one wait, the
+	// gate that gave up on it is released and `inflight` is cleared while that
+	// tick is still on the wire — so a retry would not have waited for it.
+	const prior = inflight ?? (polling ? worker : null);
+	const run = (async () => {
+		if (prior && !(await settles(prior, waitMs)) && !proceed) return BUSY;
+		return fn();
+	})();
+	const gate = run.then(
+		() => {},
+		() => {}
+	);
+	inflight = gate;
+	gate.then(() => {
+		if (inflight === gate) inflight = null;
+		// Ticks that fired meanwhile were answered with the gate and did not run.
+		if (syncState.eventCode) scheduleTick(0);
+	});
+	return run;
+}
+
+/** Whether `p` settles within `ms`. */
+async function settles(p, ms) {
+	let timer;
+	const done = await Promise.race([
+		p.then(
+			() => true,
+			() => true
+		),
+		new Promise((r) => (timer = setTimeout(() => r(false), ms)))
+	]);
+	clearTimeout(timer);
+	return done;
+}
+
+/** Resolve within `ms`, or reject. For lookups made while the user waits. */
+function within(promise, ms) {
+	let timer;
+	return Promise.race([
+		promise,
+		new Promise((_, reject) => (timer = setTimeout(() => reject(new Error('timed out')), ms)))
+	]).finally(() => clearTimeout(timer));
 }
 
 async function runTick() {
@@ -588,14 +689,35 @@ async function findRemoteTwin(client, sid, local) {
  * where the reverse silently loses it locally while every teammate keeps it.
  *
  * A row that was never pushed has no remote half — deleting it locally IS the
- * whole operation.
+ * whole operation. Whether it was never pushed is decided HERE, under
+ * exclusive(), and not from the copy the page rendered: a push that landed
+ * while the confirm dialog was open, or one still on the wire, made it a
+ * synced entry, and deleting it locally was how it came back from the dead.
  *
  * @param {{id: number, remoteId?: string|null, eventCode: string}} entry
  * @returns {Promise<{ok: true} | {ok: false, message: string}>}
  */
 export async function withdrawEntry(entry) {
-	if (entry?.remoteId) {
-		const sid = await eventIdForCode(entry.eventCode);
+	const res = await exclusive(() => withdrawNow(entry));
+	if (res === BUSY) {
+		return { ok: false, message: 'This entry is uploading right now. Try again in a moment.' };
+	}
+	return res;
+}
+
+async function withdrawNow(entry) {
+	const current = await getEntry(entry?.id);
+	if (!current) return { ok: true };
+
+	// Pushed without this device hearing back — the response lost on a venue
+	// network — means the server has it, and the next pull would restore it here.
+	const remoteId = current.remoteId ?? (await serverCopyOf(current));
+	// The page offered this as "only on this device". If that stopped being true
+	// while it asked, say so rather than giving the generic refusal.
+	const arrived = Boolean(remoteId) && !entry.remoteId;
+
+	if (remoteId) {
+		const sid = await within(eventIdForCode(current.eventCode), 4000).catch(() => null);
 		if (!sid) {
 			return {
 				ok: false,
@@ -606,18 +728,77 @@ export async function withdrawEntry(entry) {
 		// deleted_at precisely because entries_evt_update already lets a scout edit
 		// their own row, so the grant handed them the tombstone too — the RPC is
 		// where "only a manager of this event" is actually enforced.
-		const { error } = await clientFor(sid).rpc('withdraw_entry', { p_id: entry.remoteId });
+		// Bounded, because sync waits behind this. If the answer is only slow and
+		// the withdrawal lands anyway, its tombstone arrives by the next pull.
+		let error;
+		try {
+			({ error } = await within(
+				clientFor(sid).rpc('withdraw_entry', { p_id: remoteId }),
+				15_000
+			));
+		} catch {
+			return { ok: false, message: 'No answer from the server. Check the connection and try again.' };
+		}
 		if (error) {
 			// 42501 is the policy refusing it — a scout, or a manager who is not on
 			// this event. Say which rather than showing a Postgres code.
 			if (error.code === '42501' || /permission|policy/i.test(error.message)) {
-				return { ok: false, message: 'Only a manager of this event can delete an entry.' };
+				return {
+					ok: false,
+					message: arrived
+						? 'It finished uploading before it could be deleted, so your team has it now. Only a manager of this event can delete it.'
+						: 'Only a manager of this event can delete an entry.'
+				};
 			}
 			return { ok: false, message: error.message };
 		}
 	}
-	await deleteEntry(entry.id);
+	await deleteEntry(current.id);
 	return { ok: true };
+}
+
+/**
+ * The server's id for a row this device thinks it never sent, adopted onto the
+ * local row — or null when the server has none, or cannot be asked.
+ *
+ * "Cannot be asked" deletes locally, as before. If an insert did commit and
+ * only its answer was lost, the next pull restores the entry here: the team
+ * has it, so that is the truth, and it is the one case this cannot close
+ * without a signal.
+ */
+async function serverCopyOf(local) {
+	if (typeof navigator !== 'undefined' && !navigator.onLine) return null;
+	try {
+		const sid = await within(eventIdForCode(local.eventCode), 4000);
+		if (!sid) return null;
+		const found = await within(findRemoteTwin(clientFor(sid), sid, local), 4000);
+		if (!found?.id) return null;
+		await markEntrySynced(local.id, found.id, found.submitted_by, local.rev);
+		return found.id;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Clear every entry on this device, then download the event again.
+ *
+ * Under exclusive() so a pull cannot land between the clear and the reset and
+ * record a position over rows that are no longer here. A push still on the
+ * wire is safe to let finish — it can only put an entry on the server — so
+ * after the wait this clears regardless.
+ */
+export async function clearLocalEntries() {
+	await exclusive(
+		async () => {
+			// Reset first. A pull that has not yet recorded its position then fails
+			// its scope check; one that already has wrote before this clear, which
+			// IndexedDB orders ahead of it and the clear erases.
+			forgetPosition();
+			await clearEntries();
+		},
+		{ proceed: true }
+	);
 }
 
 /**
@@ -688,6 +869,25 @@ async function pullInbox() {
 	// position as the other's.
 	const sid = syncState.sessionId;
 	const gen = scopeGen;
+	const scope = positionScope(sid);
+	// Resume from where the last launch got to, once per scope. lastSeenAt lived
+	// only in memory, so every reload, PWA relaunch and phone unlock that
+	// restarted the page downloaded the WHOLE event again — every row, every
+	// auto track — on venue cellular, each time a scout opened the app to record.
+	if (!lastSeenAt && restoredFor !== gen) {
+		restoredFor = gen;
+		const saved = scope ? await getPullWatermark(scope).catch(() => null) : null;
+		if (gen !== scopeGen) return;
+		if (saved) {
+			lastSeenAt = saved;
+			// Not firm: the overlap re-reads behind it once more, which is what
+			// catches a row that committed late just as the last launch ended. And
+			// the watermark was visible before now, which is all watermarkSettled()
+			// needs to settle it a window from here.
+			watermarkMovedAt = performance.now();
+			watermarkFirm = false;
+		}
+	}
 	const readAt = performance.now();
 	const client = clientFor(sid);
 	// Watermark on updated_at, not created_at. created_at never moves, so an
@@ -742,6 +942,8 @@ async function pullInbox() {
 		// The pull has finished, so the server's clock is past `newest` by now.
 		watermarkMovedAt = performance.now();
 		watermarkFirm = false;
+		// Every row up to `newest` is in IndexedDB — applyPulledRow awaited each.
+		if (scope) await setPullWatermark(scope, newest).catch(() => {});
 	} else if (!firm && watermarkSettled(watermarkMovedAt, readAt)) {
 		watermarkFirm = true;
 	}

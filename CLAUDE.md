@@ -213,7 +213,9 @@ has already finished and simply cannot paint.
 Key a match on TBA's own `match.key` (`2026nyny_sf10m1`), never on
 `match_number`: the SET number is the part that makes it unique.
 
-`npm test` runs 27 unit suites plus 2 checkers. The checkers are the important
+`npm test` runs 28 unit suites plus 2 checkers. `sync.test.mjs` is the one
+that runs `sync.svelte.js` itself — compiled, on fake-indexeddb, against an
+in-memory PostgREST. The checkers are the important
 ones, and neither is a unit test:
 
 - **`check_components.mjs`** reads *emitted* CSS, not source, because Svelte's
@@ -627,7 +629,7 @@ also meant the second scout to sign in on a shared phone recorded every match
 under the first scout's name. `session.scoutNameAccount` records whose name it
 is; `scoutNameOnSignIn()` in `scout-identity.js` holds the rule and its tests.
 
-**Sync, as of `ios-readiness`.** Six rules, most of them the fix for a way an entry
+**Sync, as of `ios-readiness`.** Eight rules, most of them the fix for a way an entry
 went missing or stale without anything saying so (`sync.svelte.js`,
 `sync-rules.js`):
 
@@ -654,6 +656,15 @@ went missing or stale without anything saying so (`sync.svelte.js`,
   `accessToken`, so supabase-js builds no GoTrueClient for it. Each call used
   to build one, and each GoTrueClient adds a `visibilitychange` listener that
   is never removed: ~500 leaked clients an hour from the 30-second tick alone.
+- **The pull position survives a relaunch** (`getPullWatermark`, per account
+  and event). It lived only in memory, so every cold start re-downloaded the
+  whole event. It means "every row up to here is on this device", so
+  `clearEntries()` drops it in the same transaction, and "Sync now" forgets it.
+- **A delete, and Clear entries, run under `exclusive()`** — no tick in flight,
+  none starting. Deleting a never-synced entry while its INSERT was on the wire
+  left the server copy, and the next pull brought it back. The delete re-reads
+  the row and asks the server for its twin first, so an entry that reached the
+  team is withdrawn there, or refused with the reason.
 
 Sign-in and sign-out re-resolve the event and backfill from scratch;
 sign-out and Clear entries call `flush()` and report the unsent count.
