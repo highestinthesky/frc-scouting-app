@@ -24,6 +24,8 @@ const harness = `
 import { SAMPLE_HZ, encodeTrack, decodeTrack, positionAt, trackDuration, cycleStats, describeAnswers }
   from ${JSON.stringify(new URL('./auto-track.js', import.meta.url).href)};
 import { currentSeason } from ${JSON.stringify(new URL('./seasons/index.js', import.meta.url).href)};
+// Stands in for $lib/screen.svelte.js, whose import is stripped with the rest.
+export const screen = $state({ recorder: false });
 export function createRecorder(props = {}) {
   const cleanups = [];
   const onDestroy = (fn) => cleanups.push(fn);
@@ -34,7 +36,7 @@ export function createRecorder(props = {}) {
 }`;
 const code = compileModule(harness, { filename: 'recorder-test.svelte.js', generate: 'client' }).js.code
 	.replaceAll("'svelte/internal/client'", JSON.stringify(runtimeUrl));
-const { createRecorder } = await import('data:text/javascript,' + encodeURIComponent(code));
+const { createRecorder, screen } = await import('data:text/javascript,' + encodeURIComponent(code));
 
 let pass = 0;
 let fail = 0;
@@ -128,6 +130,22 @@ try {
 		ok('a late stop closes actions at the whistle', decoded.intervals[0]?.t1 === currentSeason().autoMs);
 		ok('all timers are cleared on stop', timers.size === 0);
 		destroy();
+	}
+
+	// Reminders hold while the recorder owns the screen, and only then.
+	{
+		clock = 0;
+		const { recorder, destroy } = mount({allianceColor: 'red', onchange: () => {}});
+		ok('an idle inline recorder leaves the screen free', screen.recorder === false);
+		recorder.place({x: 0.1, y: 0.5});
+		flushSync();
+		ok('the first placement opens full screen and claims it', screen.recorder === true);
+		recorder.begin();
+		flushSync();
+		ok('a live recording holds the screen', screen.recorder === true);
+		destroy();
+		flushSync();
+		ok('unmounting gives the screen back', screen.recorder === false);
 	}
 } finally {
 	for (const [key, descriptor] of Object.entries(savedGlobals)) {

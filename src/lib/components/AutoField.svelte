@@ -811,7 +811,11 @@
 		/* The scout is dragging on this. Without it a drag scrolls the page on a
 		   phone and the robot stays put, which reads as the field being broken. */
 		touch-action: none;
+		/* Prefixed as well: WebKit has no unprefixed user-select, so on iOS a
+		   robot held still for half a second became a text selection. */
+		-webkit-user-select: none;
 		user-select: none;
+		-webkit-touch-callout: none;
 	}
 	.field.draggable {
 		cursor: grab;
