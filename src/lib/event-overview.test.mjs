@@ -68,3 +68,21 @@ test('scout activity uses account identity and the selected event', () => {
 	});
 	assert.deepEqual(result?.activity.map(r => [r.person.profileId, r.count]), [['b', 0], ['a', 1]]);
 });
+
+test('Home and Run retain earlier missing matches when a later qual has entries', () => {
+	const matches = [match(1), match(2), match(3), match(4)];
+	const entries = [1, 2, 3, 4, 5, 6].map(team => entry(3, team));
+	const result = overview({ matches, entries });
+	assert.equal(result.expected, 18);
+	assert.equal(result.percent, 33);
+	assert.equal(result.nextMatch.match_number, 4);
+	assert.deepEqual(result.gaps.map(r => r.match.match_number), [1, 2]);
+	assert.deepEqual(coverage.gapMatches(matches, coverage.buildEntryIndex(entries, '2026demo')).map(r => r.match.match_number), [1, 2]);
+});
+
+test('Run gaps include played matches with zero entries, including zero scores', () => {
+	const zeroScore = match(2);
+	zeroScore.alliances.red.score = 0;
+	zeroScore.alliances.blue.score = 0;
+	assert.deepEqual(coverage.gapMatches([match(1, true), zeroScore, match(3)], new Map()).map(r => r.match.match_number), [1, 2]);
+});

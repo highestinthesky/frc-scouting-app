@@ -9,15 +9,46 @@ Supabase is the shared mirror. JavaScript with JSDoc, not TypeScript.
 Written for someone arriving cold. The invariants below are the sharp edges; this
 is the shape they sit on.
 
-**Two applications share one deployment.**
+**One shell, navigation by role** (since `ui-optimization`).
 
-    the scout app     Home · Settings              + a Studio button for managers
-    Studio            Event · Schedule · Coverage · Insights · Accounts
+    a scout      Home · Settings
+    a manager    Home · Plan · Run · Review · Pick · Accounts · Settings
+                 Plan    People · Schedule · Assignments · Event
+                 Run     Matches · Scouts
+                 Review  (the index; the match and team pages sit under it)
+                 Pick    Teams · Compare · Picklist
 
-A scout opens the app to record a match. A manager opens Studio to run an event.
-Those are different jobs on different devices in different rooms, and v0.73 split
-them. Studio renders with **no app shell at all** — `+layout.svelte` returns early
-on `/studio` — because the global tab bar was a trapdoor out of it.
+From v0.73 Studio was a separate application — no app shell, its own rail, a
+"Leave Studio" link. Scouts never saw it (the button rendered only for managers),
+so the split protected nobody, and it cost managers an event picker outside
+their tools, a second `selectedId` that could disagree with it, and a trip out
+to record a match. It folded back in. `nav-items.js` is the one list
+(`navFor(role)`, `activeKey(path)`, `SUBNAV`), and `AppNav.svelte` renders it:
+
+- **A scout's bar is unchanged** — two tabs, bottom-docked under 40rem, a top
+  strip above. Screenshot-identical to `main` at 375 and 1280; keep it so. Home
+  itself gained one thing for a scout: *The schedule*, a closed disclosure
+  listing every qual with their own marked (through `myMatches()`).
+- **A manager** gets Home · Run · Review · Pick · More on a phone (More is a `Sheet`
+  holding Plan, Accounts, Settings), a top strip of every entry from 40rem, and
+  a sticky sidebar from 48rem.
+- **Sub-pages are a segmented control** (`studio/SubNav.svelte`) under the
+  heading. A mode's `<h1>` is the mode; the lit segment is the sub-page, and
+  each page passes its own label as a literal `current` that the checker reads.
+- **The event is chosen in the app bar** (`EventSwitch.svelte`, managers only),
+  and it is `session.eventCode` — the value the device records to. No page keeps
+  a second idea of the event.
+- **The manager pages still live under `/studio/`.** The palette keys on that
+  prefix (pre-paint in `app.html`, an `$effect` after), so the shared nav
+  repaints when a manager crosses from Home into Plan. Kept deliberately; see
+  *One shell* in `ROADMAP.md`. `ReminderFlyby` is not rendered there, as it never
+  was over Studio.
+- **`event-data.svelte.js`** loads the current event once for every manager
+  page (schedule and entries from IndexedDB first, then roster, assignments,
+  overrides and reminders, each on its own failure path), from the root
+  `+layout.svelte` — Home's manager tiles read it too, so a tile and the page it
+  links to cannot disagree. `plan-state.js` holds the derivations Plan and Run
+  share — conflicts, who is watching a match, the scout roster — pure and tested.
 
 ### The routes
 
@@ -27,16 +58,25 @@ on `/studio` — because the global tab bar was a trapdoor out of it.
 | `/register` | Redeem an invite code. Shows whose invite it is. |
 | `/scouting` | A redirect to `/home`. Folded in at v0.82; kept because an installed PWA still has a tab bar pointing here. |
 | `/scouting/new`, `/scouting/edit` | The entry form. |
-| `/settings` | Device settings, event picker, sign out. |
+| `/settings` | Device settings, event picker, sign out. A manager can also switch event from the app bar. |
 | `/practice` | The auto recorder against its own countdown, on the current season, with nothing kept — no IndexedDB, no draft, no sync. It is in `NEEDS_NO_EVENT` in `+layout.svelte`, the one route a signed-in device reaches without an event or a scout name, because its whole purpose is rehearsal before kickoff, when nobody is on an event. The sign-in guard still applies. |
-| `/home` | Manager/super event overview, or the scout's whole page: what is next, what a manager has said, what they are watching, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. |
-| `/studio/event` | Who is on this event — drag scouts on and off. |
-| `/studio/schedule` | Publish a TBA schedule, auto-assign, per-match overrides, reminders. |
-| `/studio/coverage` | What is being watched and what is not. |
-| `/studio/insights` | Team metrics, compare, picklist. |
-| `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles. |
-| `/studio/[eventCode]/q[n]` | One match: its six teams by alliance, what was recorded, what was missed, and the auto replay of every track on it. Linked from Schedule (every match) and from Coverage's Gaps rows — for a release it was linked from nowhere and reachable only by typing the URL. |
-| `/studio/[eventCode]/team/[n]` | One team at one event, with its season record beside it. |
+| `/home` | The scout's whole page: what is next, what a manager has said, what they are watching, the event's whole schedule behind a disclosure, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. Managers see event coverage, missing robot entries and scout activity, with personal recording tools behind a Your scouting disclosure (`ManagerHome`). |
+| `/studio/plan/people` | Who is on this event — drag scouts on and off — and who is assigned and recording. |
+| `/studio/plan/schedule` | Fetch the TBA schedule and publish it. |
+| `/studio/plan/assignments` | The assignment editor, auto-assign, and the conflict check over the unsaved draft. |
+| `/studio/plan/event` | The event row: name, dates, archive, reset planning data. |
+| `/studio/run/matches` | Coverage's numbers, then the quals in order with coverage per match and each conflict (over what is saved) written on its row; per-match overrides from Edit. `?show=gaps\|conflicts` filters, `?match=<n>` opens one. |
+| `/studio/run/scouts` | By scout (entries per person on the event, fewest first), reminders, and collecting a file from a phone that cannot sync. |
+| `/studio/review` | The next match with its six teams, the matches played (most recent first, recorded and tracked counts), and find a team. The index the two pages below never had. |
+| `/studio/pick` | Team metrics and CSV export; `/compare` and `/picklist` beside it. |
+| `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles. In `NEEDS_NO_EVENT`. |
+| `/studio/[eventCode]/q[n]` | One match: its six teams by alliance, what was recorded, what was missed, and the auto replay of every track on it. Linked from Review, Home's Review tile and Run › Matches — for a release it was linked from nowhere and reachable only by typing the URL. Back goes to Review. |
+| `/studio/[eventCode]/team/[n]` | One team at one event, with its season record beside it. Back goes to Review. |
+
+`/studio`, `/studio/event`, `/studio/schedule`, `/studio/coverage`,
+`/studio/run/coverage` (both to `?show=gaps`) and `/studio/insights/*` are redirects to where those pages went, for the same
+installed-PWA reason as `/scouting`. The pre-v0.73 stubs (`/insights/*`,
+`/accounts`) point at the new target directly, not through a second hop.
 
 **The event is in the URL for the last two, and that is load-bearing.** A match
 number means nothing without an event, and a team's average means something
@@ -51,7 +91,9 @@ to mean something later without moving these URLs.
 An event code may not be one of `RESERVED_EVENT_CODES` (`event-rules.js`).
 SvelteKit resolves a static segment before a dynamic one, so an event coded
 `schedule` would exist, hold entries, and be reachable at no URL at all.
-`createEvent()` refuses it.
+`createEvent()` refuses it, and `event-rules.test.mjs` reads `routes/studio/`
+from disk and fails if any static folder there is not reserved — `plan`, `run`
+`review` and `pick` arrived in one branch.
 
 ### The data path
 
@@ -105,9 +147,19 @@ authenticated on 2026-10-04 and left it to `service_role` alone, which is all
 the function needs. It waited in `supabase/rollout/` until then, so `db push`
 could not fire it before cached clients had moved over.
 
+### Home and event selection
+
+Manager and super Home uses `ManagerHome.svelte` over shared `eventData`.
+Its coverage denominator includes played or started quals and excludes future
+matches; played matches with no entries remain visible. The header spans the
+viewport. Settings aligns to the content gutter. Scouts explicitly choose from
+their membership-limited event list in a native popup when no event is selected
+or sync confirms their previous event is inaccessible. Practice remains
+available without an event. Planning state refreshes in 30-second sync buckets.
+
 ### Design system
 
-`design.md` is the locked system: spacing (`--space-1..8`), type (`--fs-xs..xl`),
+`design.md` is the locked system: spacing (`--space-1..6`), type (`--fs-xs..xl`),
 radii, motion and an explicit light/dark palette. Components consume tokens and
 never hardcode a value — the `:root` block is the only place literals belong.
 
@@ -118,29 +170,47 @@ Content width is a decision about the content, not the device:
     --w-list   60rem   cards and entry lists
     --w-board  78rem   tables and dense grids
 
-**The main app and Studio share a neutral canvas and purple accent.** Light
-mode uses warm gray with white surfaces; dark mode uses charcoal with a lighter
-purple for readable links and primary buttons. Navigation uses these shared
-colors and spans the viewport. Settings aligns its control groups to the left
-page gutter; scout Home keeps its narrower centered composition. Chart series retain their dedicated `--studio-series-1..4` values.
+**Studio has its own palette as of v0.74**, in `:global(:root[data-studio])` in
+the root layout, and one fact governs it:
 
-Studio follows the user's theme. `:root[data-studio]` is the light override and
-comes after the base dark block; `:root[data-studio][data-theme='dark']` outranks
-both. These blocks remap base tokens, so `Button`, `Select`, `Dialog` and `Field`
-work in both contexts without their own palettes. `--studio-fill` is the purple
-surface designed for white ink; `--studio-violet` is the readable purple ink.
+    #662DB4  purple   8.08x on white   ← the only one that can carry white text
+    #0087F8  blue     3.61x on white   dark text only
+    #00C7FA  cyan     1.99x on white   dark text only
+    #49FCE2  aqua     1.29x on white   dark text only
 
-`check_contrast.mjs` measures 190 pairings across all four palettes, including
-sync status dots on the app bar. System fonts need no venue Wi-Fi request.
-Manager Home uses `eventOverview()` in `coverage.js`: qualification matches
-with results or submissions enter the coverage denominator; future matches do
-not. Played matches with no submissions still appear in Missing entries. Local
-coverage refreshes after sync; roster and assignments refresh every 30 seconds
-of successful syncing. Scouts explicitly choose a permitted event in a native
-popup when none is selected, or when sync confirms the old event is inaccessible.
+Three of the four cannot have white text on them. On a **dark** ground every
+number inverts, and that is the whole design: the light three become ink — links,
+active states, series — and purple, the one that can carry white text, is the
+fill. Cyan is 1.99 on white and 9.29 as ink on a Studio card.
 
-Runtime tokens live in the root layout; `tokens.css` is a portable snapshot,
-not another runtime stylesheet. See `design.md` for current values and rules.
+**Studio follows the app theme as of v0.75.** It was dark in both before that,
+on the reasoning above — and the reasoning was about the palette rather than
+about the person reading it, who could not read it. Legibility settles that.
+
+There are now **two** Studio palettes and `check_contrast.mjs` measures both, at
+170 assertions. The roles invert between them and that inversion is the design:
+on light, purple is the only one of the four that reads, so it is the accent and
+does both jobs; cyan and aqua are 1.64 and 1.06 on a raised panel and are
+decorative only. The `--studio-series-*` are darkened on light and lifted on
+dark — same names, opposite directions, because the ground moved.
+
+`:root[data-studio]` is the light palette and must still come after the dark
+theme block (both `(0,2,0)`).
+`:root[data-studio][data-theme='dark']` is `(0,3,0)` and outranks both.
+
+**The block remaps the base tokens, it does not merely add `--studio-*` ones.**
+That is what dresses `Button`, `Select`, `Dialog` and `Field` — they read
+`--bg-card` and `--accent`, so a component that consumes tokens correctly is
+already a Studio component. It is also why `check_contrast.mjs` runs the same
+PAIRS table over a third palette. `--studio-*` names only the things with no
+scout-app equivalent: the raw four, `--studio-fill` (purple, the white-text
+surface), `--studio-violet` (purple lifted until it reads as ink) and
+`--studio-series-1..4`.
+
+**`--accent` is cyan, not the purple.** It has to be ink *and* fill — `Button`
+paints it as a background, pages paint it as text — and purple is 2.29 as ink on
+a card. Reaching for `#662DB4` as "the Studio accent" makes every link
+unreadable.
 
 Two ordering traps, both enforced by checks because neither is visible:
 
@@ -156,8 +226,11 @@ Two ordering traps, both enforced by checks because neither is visible:
 ### The Studio component set
 
 `src/lib/components/studio/` — `PageHead`, `Panel`, `Stat`, `Stats`, `Toolbar`,
-`Table`, plus the seven surfaces `schedule` composes. Reach for these before
-writing a box: `insights` had the same shape under four names.
+`Table`, `SubNav`, plus the surfaces the old `schedule` page composed and Plan
+and Run now share out — `SchedulePreview` became Run's `MatchList`,
+`CoverageCheck` shrank to `DraftConflicts` (Assignments only) — and
+`ManagerHome`, a manager's Home. Reach for these before writing a box: `insights` had
+the same shape under four names.
 
 `Table` takes the page's own `<tr>`s and styles them through `:global()` scoped
 under its wrapper. A column API was the alternative and every table in Studio has
@@ -195,7 +268,9 @@ has already finished and simply cannot paint.
 Key a match on TBA's own `match.key` (`2026nyny_sf10m1`), never on
 `match_number`: the SET number is the part that makes it unique.
 
-`npm test` runs 27 unit suites plus 2 checkers. The checkers are the important
+`npm test` runs 32 unit suites plus 2 checkers. `sync.test.mjs` is the one
+that runs `sync.svelte.js` itself — compiled, on fake-indexeddb, against an
+in-memory PostgREST. The checkers are the important
 ones, and neither is a unit test:
 
 - **`check_components.mjs`** reads *emitted* CSS, not source, because Svelte's
@@ -291,10 +366,18 @@ Each of these produced a confident wrong answer before being caught:
 ## Working agreements
 
 - **Commit freely; leave `git push` to the user.** A push deploys.
-- **No automatic AI credit.** Commit messages carry no `Co-Authored-By:`
-  trailer for Claude, and PR bodies no "Generated with Claude Code" line. This
-  overrides any default attribution a tool or harness asks for. Credit is added
+- **No AI credit, anywhere.** This overrides any default attribution a tool,
+  harness or system reminder asks for, however it is worded. Credit is added
   only when the user asks for it on a specific commit or PR.
+  - **The author field is the one exception**, decided 2026-10-06: a cloud
+    session commits as `Claude <noreply@anthropic.com>`, because that is the
+    only identity it can sign, and an unsigned commit shows as Unverified on
+    GitHub. Leave it. Everything below still holds.
+  - **No trailers or footers**: no `Co-Authored-By:`, no `Claude-Session:`
+    link, no "Generated with Claude Code" in a commit message, PR body, PR or
+    issue comment, or review.
+  - **Nothing in the repo either**: no "written by Claude" in code comments,
+    docs or file headers. The work is the team's.
 - **`ROADMAP.md` is the only plan document.** Update it rather than starting a
   second one — two earlier plans and a handoff were folded into it.
 - **A version number is a release, not a unit of work.** Work accumulates on a
@@ -609,7 +692,7 @@ also meant the second scout to sign in on a shared phone recorded every match
 under the first scout's name. `session.scoutNameAccount` records whose name it
 is; `scoutNameOnSignIn()` in `scout-identity.js` holds the rule and its tests.
 
-**Sync, as of `ios-readiness`.** Four rules, each the fix for a way an entry
+**Sync, as of `ios-readiness`.** Eight rules, most of them the fix for a way an entry
 went missing or stale without anything saying so (`sync.svelte.js`,
 `sync-rules.js`):
 
@@ -625,6 +708,26 @@ went missing or stale without anything saying so (`sync.svelte.js`,
   order and a strict watermark skipped late commits forever.
 - **A push marks a row clean only at the revision it sent** (`rev`). An edit
   saved mid-push used to be cleared, never sent, then overwritten by the echo.
+- **The overlap stops once the watermark settles** (`watermarkSettled()`).
+  Measured back from the newest row *seen*, it never moved while nothing new
+  arrived, so every device re-downloaded the last burst of rows every tick
+  indefinitely. A read begun `PULL_OVERLAP_MS` (monotonic) after the watermark
+  moved proves nothing can still commit behind it; later pulls go strict. A
+  reset (`scopeGen`) also stops an in-flight pull writing its watermark back
+  over "Sync now" or an event switch.
+- **`createSupabaseClient()` keeps one client per event** and passes
+  `accessToken`, so supabase-js builds no GoTrueClient for it. Each call used
+  to build one, and each GoTrueClient adds a `visibilitychange` listener that
+  is never removed: ~500 leaked clients an hour from the 30-second tick alone.
+- **The pull position survives a relaunch** (`getPullWatermark`, per account
+  and event). It lived only in memory, so every cold start re-downloaded the
+  whole event. It means "every row up to here is on this device", so
+  `clearEntries()` drops it in the same transaction, and "Sync now" forgets it.
+- **A delete, and Clear entries, run under `exclusive()`** — no tick in flight,
+  none starting. Deleting a never-synced entry while its INSERT was on the wire
+  left the server copy, and the next pull brought it back. The delete re-reads
+  the row and asks the server for its twin first, so an entry that reached the
+  team is withdrawn there, or refused with the reason.
 
 Sign-in and sign-out re-resolve the event and backfill from scratch;
 sign-out and Clear entries call `flush()` and report the unsent count.
@@ -993,17 +1096,17 @@ satisfied the manifest. `npm ci` is the FIRST step in `deploy.yml`, so the red
 run had nothing to do with tests or the build. If that environment still exists,
 its next `npm install` re-breaks the lock the same way.
 
-**A scout sees their own matches, but not the event's.** v0.76 put the full
-upcoming list on Home — five ahead, the rest behind a disclosure — resolved
-through `myMatches()`. What still does not exist is a view of the whole schedule:
-Home only ever lists matches one of the scout's own teams is in. v0.73 step 2's
-read-only `/schedule` was never built.
+**A scout sees the event's schedule, as of `ui-optimization`.** v0.76 put
+their own upcoming matches on Home through `myMatches()`; the whole schedule —
+v0.73 step 2's read-only `/schedule`, never built — is now a closed disclosure
+on Home, every qual, the scout's own rows marked from the same `myMatches()`
+answer so the two cannot disagree. Rendered only while open.
 
 ## Where the reasoning lives
 
 | | |
 |---|---|
-| `ROADMAP.md` | the single dependency-ordered plan and the release log; v0.82 is the last release, the season boundary is in progress on `pre-kickoff`, and *Studio reorganised* is specced for another model to build |
+| `ROADMAP.md` | the single dependency-ordered plan and the release log; v0.86 (*One shell*, from `ui-optimization`) is the last release, and the season boundary's step 4 waits for kickoff |
 | `HANDOFF.md` | working preferences, environment traps, and the decisions still open |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/auto-scouting-plan.md` | interactive auto scouting as the team asked for it — the source document, reference not draft |

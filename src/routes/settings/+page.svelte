@@ -3,8 +3,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { session } from '$lib/session.svelte.js';
-	import { clearEntries } from '$lib/db.js';
-	import { flush, resync } from '$lib/sync.svelte.js';
+	import { flush, resync, clearLocalEntries } from '$lib/sync.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
 	import EventPicker from '$lib/components/EventPicker.svelte';
@@ -102,7 +101,7 @@
 			danger: true
 		});
 		if (!ok) return;
-		await clearEntries();
+		await clearLocalEntries();
 		// Straight back down. Clearing used to leave the device without its own
 		// synced entries for good: the pull skipped rows this device recorded,
 		// and it only re-read the event on a cold start.
@@ -231,17 +230,11 @@
 </main>
 
 <style>
-	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
-	 * The first full page migrated onto the system. Raw rem values replaced
-	 * with named tokens, both pickers given the 44px floor, and the CTA voice
-	 * delegated to Button.svelte.
-	 */
 
 	main {
 		width: 100%;
 		margin: var(--space-4) 0;
-		padding: var(--space-6) var(--space-6) calc(var(--nav-bottom-h) + var(--space-5));
+		padding: var(--space-5) var(--space-5) calc(var(--nav-bottom-h) + var(--space-5));
 	}
 	section { max-width: var(--w-form); }
 	@media (max-width: 39.9375rem) {

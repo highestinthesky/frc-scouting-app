@@ -200,13 +200,20 @@ export async function syncDismissals(eventCode, owner) {
 			)
 		);
 	}
-	void quick(
-		s.client
-			.from('reminder_dismissals')
-			.delete()
-			.eq('event_id', s.eventId)
-			.lt('expires_at', new Date().toISOString())
-	);
+	// Only when there is something to prune. The read above returned every one of
+	// this account's dismissals for the event, so it already says whether any has
+	// expired — and the DELETE went out unconditionally, a write on every
+	// 30-second pull from every signed-in device that almost always matched
+	// nothing.
+	// Compared as times: the server spells the offset `+00:00` and toISOString()
+	// spells it `Z`, which do not sort against each other as text.
+	const now = Date.now();
+	const nowIso = new Date(now).toISOString();
+	if (Object.values(remote).some((exp) => exp && Date.parse(exp) < now)) {
+		void quick(
+			s.client.from('reminder_dismissals').delete().eq('event_id', s.eventId).lt('expires_at', nowIso)
+		);
+	}
 
 	const merged = mergeDismissals(local, remote, eventCode);
 	// Key sets, not counts: dropping one expired dismissal while gaining one from

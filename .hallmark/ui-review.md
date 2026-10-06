@@ -102,3 +102,25 @@ checks and 190 contrast assertions pass. The production build and diff whitespac
 check pass. The independent follow-up review has no remaining actionable
 findings. All applicable Hallmark visual and mobile gates pass against the
 existing app system; system fonts and the shared Workbench remain intentional.
+
+### Integration with the current shared shell
+
+The final changes preserve the current remote navigation: one full-width header,
+role-specific AppNav, and Plan, Run, Review and Pick routes. Home reads the shared
+event data. The manager's existing next-match, assignment and entry tools remain
+in a collapsed Your scouting section, with a single main landmark. Returning
+from recording and deleting an entry refreshes the same coverage data.
+
+Home, Run's Gaps filter and Review share the last-played cutoff. Earlier quals
+with no submissions remain missing when a later qual has been recorded, and
+zero scores establish a played match. Two additional regression tests cover
+these cases, bringing the overview suite to nine tests.
+
+The final Chromium pass repeated the 36 Home/Settings role/viewport checks and
+scout event states. A second pass exercised management routes and personal
+scouting at all six widths, the phone More menu, the coverage link to a match
+with zero entries, and a local save returning to Home without an inbound sync
+change. All passed. The independent integration review's findings were fixed
+and rechecked; no actionable findings remain. The full suite passes, including
+83 component and 190 contrast checks, and the production build succeeds with
+only the existing Select, SVG tabindex and Browserslist notices.

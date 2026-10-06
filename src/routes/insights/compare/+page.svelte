@@ -6,16 +6,13 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	$effect(() => {
-		goto(`${base}/studio/insights/compare/`, { replaceState: true });
+		goto(`${base}/studio/pick/compare/`, { replaceState: true });
 	});
 </script>
 
 <p class="wait">Opening…</p>
 
 <style>
-	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
-	 */
 
 	.wait {
 		margin: var(--space-6) auto;

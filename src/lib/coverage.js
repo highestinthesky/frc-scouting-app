@@ -136,6 +136,24 @@ export function coverageLevel(scoutedTeams, totalTeams) {
 	return 'none';
 }
 
+/** A result or a recorded robot establishes that a qual has happened. */
+export function wasPlayed(match, entryIndex) {
+	const scored = ['red', 'blue'].every(color => {
+		const score = match?.alliances?.[color]?.score;
+		return typeof score === 'number' && score >= 0;
+	});
+	return Boolean(match?.actual_time) || scored || matchCoverage(match, entryIndex).scoutedTeams > 0;
+}
+
+/** Earlier quals with no entries remain gaps once a later qual has happened. */
+export function lastPlayedIndex(qmList, entryIndex) {
+	let last = -1;
+	(qmList ?? []).forEach((match, i) => {
+		if (wasPlayed(match, entryIndex)) last = i;
+	});
+	return last;
+}
+
 /** Current event coverage, excluding future matches from the denominator.
  * Officially played matches with no entries still need follow-up. Submissions
  * also mark a match as started when its TBA result has not arrived yet.
@@ -145,13 +163,10 @@ export function eventOverview({ eventCode, matches = [], entries = [], roster = 
 	const index = buildEntryIndex(eventEntries, eventCode);
 	const rows = qualMatches(matches).map(match => {
 		const coverage = matchCoverage(match, index);
-		const scored = ['red', 'blue'].every(color => {
-			const score = match.alliances?.[color]?.score;
-			return typeof score === 'number' && score >= 0;
-		});
-		return { match, coverage, played: Boolean(match.actual_time) || scored };
+		return { match, coverage, played: wasPlayed(match, index) };
 	});
-	const tracked = rows.filter(r => r.played || r.coverage.scoutedTeams > 0);
+	const last = lastPlayedIndex(rows.map(r => r.match), index);
+	const tracked = rows.slice(0, last + 1);
 	const expected = tracked.reduce((n, r) => n + r.coverage.totalTeams, 0);
 	const recorded = tracked.reduce((n, r) => n + r.coverage.scoutedTeams, 0);
 	const activity = roster.filter(p => p.role === 'scout').map(person => {
@@ -168,8 +183,23 @@ export function eventOverview({ eventCode, matches = [], entries = [], roster = 
 		completeCount: tracked.filter(r => r.coverage.complete).length,
 		gaps: tracked.filter(r => !r.coverage.complete),
 		latestMatch: tracked.at(-1)?.match ?? null,
-		nextMatch: rows.find(r => !r.played && r.coverage.scoutedTeams === 0)?.match ?? null,
+		nextMatch: rows[last + 1]?.match ?? null,
 		teamsSeen: new Set(eventEntries.map(e => e.teamNumber)).size,
 		activity
 	};
+}
+
+/**
+ * Missing robot entries through the last played or recorded qual.
+ * Includes earlier matches with zero submissions; future matches are excluded.
+ *
+ * @param {object[]} qmList  quals only, in match order
+ * @param {Map} entryIndex
+ * @returns {Array<{match: object, cov: ReturnType<typeof matchCoverage>}>}
+ */
+export function gapMatches(qmList, entryIndex) {
+	return (qmList ?? [])
+		.slice(0, lastPlayedIndex(qmList, entryIndex) + 1)
+		.map((match) => ({ match, cov: matchCoverage(match, entryIndex) }))
+		.filter(({ cov }) => !cov.complete);
 }

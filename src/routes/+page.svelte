@@ -90,9 +90,6 @@
 	.later-btn:hover { color: var(--text-primary); }
 	.warn { color: var(--warning); text-decoration: none; }
 
-	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
-	 */
 
 	main {
 		max-width: 28rem;

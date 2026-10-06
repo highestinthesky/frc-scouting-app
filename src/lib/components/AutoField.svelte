@@ -799,9 +799,6 @@
 {/snippet}
 
 <style>
-	/* Hallmark · genre: modern-minimal · component: auto-field
-	 * design-system: design.md
-	 */
 	.field {
 		width: 100%;
 		height: auto;

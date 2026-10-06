@@ -29,6 +29,9 @@ import {
 	isReservedCode,
 	RESERVED_EVENT_CODES
 } from './event-rules.js';
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let pass = 0;
 let fail = 0;
@@ -310,6 +313,22 @@ const ok = (name, cond, detail = '') => {
 	// it, so the check is worth stating as an invariant rather than a constant.
 	ok('every reserved word is a plain lowercase segment',
 		RESERVED_EVENT_CODES.every((w) => /^[a-z]+$/.test(w)));
+
+	// And the list has to agree with the disk. Read rather than listed, unlike
+	// the moved-route pairs in check_components.mjs: the property is that NOTHING
+	// on disk shadows an event, so the disk is the thing to read. Plan, Run and
+	// Pick arrived as new static folders in one branch; this is what makes the
+	// next one impossible to forget.
+	const studio = path.join(path.dirname(fileURLToPath(import.meta.url)), '../routes/studio');
+	const statics = readdirSync(studio, { withFileTypes: true })
+		.filter((d) => d.isDirectory() && !d.name.startsWith('['))
+		.map((d) => d.name);
+	const unreserved = statics.filter((d) => !RESERVED_EVENT_CODES.includes(d));
+	ok(
+		'every static folder under routes/studio/ is a reserved code',
+		statics.length > 0 && unreserved.length === 0,
+		`not reserved: ${unreserved.join(', ')}`
+	);
 }
 
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);

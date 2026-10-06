@@ -1,7 +1,32 @@
 <script>
-	// Hallmark · Workbench · design-system: design.md · designed-as-app
-	// Next assignment, manager notes, upcoming matches and recorded entries.
-
+	// Where a scout lands.
+	//
+	// The app used to open on /scouting, which is a list of what you have already
+	// done. That is the wrong first thing: a scout opening the app in a gym is
+	// asking "what now", and answering it with a history means they have to
+	// derive the answer themselves, on a phone, between matches.
+	//
+	// So this page answers, in order, the questions actually being asked:
+	//
+	//   1. am I up?           the next match with one of my teams, unrecorded
+	//   2. has anyone told me anything?   reminders from a manager
+	//   3. what am I watching?            my teams for the event
+	//   4. what have I recorded?          the entries, to check or to fix
+	//
+	// ─── /scouting folded in here ─────────────────────────────────────────────
+	//
+	// There were two pages and only the fourth question separated them. Of the
+	// five things /scouting showed, three were already on this one — the next
+	// unrecorded match, the assigned teams, and the count for today — and its
+	// own tail link called the difference by its real name: "everything you have
+	// recorded". So the list came here and the page went.
+	//
+	// The list is rebuilt in THIS page's idiom rather than moved across with its
+	// markup. /scouting was a workbench — a heading, a CTA and a dense list;
+	// this is a page that speaks to a person and quiets down as it goes. Pasting
+	// one into the other would have produced a page with two voices, which is
+	// what the two pages already were.
+	//
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { listEntries } from '$lib/db.js';
@@ -15,26 +40,31 @@
 	import { syncState } from '$lib/sync.svelte.js';
 	import { reminders } from '$lib/reminders.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
+	import { eventData } from '$lib/event-data.svelte.js';
 	import Button from '$lib/components/Button.svelte';
 	import ManagerHome from '$lib/components/ManagerHome.svelte';
 
 	let entries = $state([]);
 	let qmList = $state([]);
 	let loading = $state(true);
-	/** Refreshed once a minute to keep relative match times current. */
+	/** Refreshed once a minute to keep relative times current. */
 	let now = $state(new Date());
 
 	async function refresh() {
-		entries = await listEntries();
+		if (auth.isManager) {
+			await eventData.refreshEntries();
+			entries = eventData.entries;
+		} else {
+			entries = await listEntries();
+		}
 	}
 	async function refreshSchedule() {
 		const cached = session.eventCode ? await getCachedSchedule(session.eventCode) : null;
 		qmList = cached ? qualMatches(cached.matches) : [];
 	}
 
-	onMount(async () => {
-		await Promise.all([refresh(), refreshSchedule()]);
-		loading = false;
+	onMount(() => {
+		void Promise.all([refresh(), refreshSchedule()]).then(() => loading = false);
 		const tick = setInterval(() => (now = new Date()), 60_000);
 		return () => clearInterval(tick);
 	});
@@ -92,8 +122,8 @@
 	// Scoped to the current event, and that is a change from /scouting, which
 	// listed every entry on the device from every event it had ever seen.
 	//
-	// Everything else on this page is event-scoped — the header names the
-	// event, "up next" comes from its schedule, the teams are its assignments —
+	// Everything else on this page is event-scoped — "up next" comes from its
+	// schedule, and the teams are its assignments —
 	// so an all-events list would have been the one thing here that silently
 	// meant something wider than the page around it. That is the same shape as
 	// the pooling invariant in CLAUDE.md: a list that looks like one thing and is
@@ -131,7 +161,6 @@
 		await refresh();
 	}
 
-
 	// ── what a scout is actually asking ───────────────────────────────────────
 
 	const myTeams = $derived(session.assignedTeams ?? []);
@@ -152,6 +181,7 @@
 			scout: auth.me
 		});
 	});
+
 
 
 	const nextRow = $derived(myRows.find((r) => r.pending.length > 0) ?? null);
@@ -209,6 +239,22 @@
 	const watchOne = (row) => (row.pending.length ? row.pending[0] : row.teams[0]);
 	const clashCount = (row) => Math.max(0, row.teams.length - 1);
 
+	// ── the whole schedule ────────────────────────────────────────────────────
+	//
+	// Everything above lists only the matches one of MY teams is in. A scout
+	// deciding whether they can leave the stand, or which match is on the field
+	// now, needs the event's — v0.73 planned a read-only /schedule for it and it
+	// was never built. It is a disclosure here instead of a page: the question is
+	// occasional, and a tab for it would be a third tab on a bar that has been two
+	// since it began.
+	//
+	// "Mine" is myRows — myMatches(), overrides applied — so a row marked as
+	// yours here is exactly a row in Up next or After that, never a second answer
+	// computed another way.
+	let scheduleOpen = $state(false);
+	const mineByMatch = $derived(new Map(myRows.map((r) => [r.match.match_number, r])));
+	const sideOf = (m, color) =>
+		(m.alliances?.[color]?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')));
 
 	const fromManager = $derived((reminders.visible ?? []).filter((r) => r.kind === 'manager'));
 
@@ -218,14 +264,7 @@
 
 <svelte:head><title>Home · FRC Scout</title></svelte:head>
 
-{#if auth.isManager}
-	<ManagerHome />
-{:else}
-<main>
-	<header class="page-head">
-		<h1>Home</h1>
-	</header>
-
+{#snippet scoutContent()}
 	{#if loading}
 		<p class="muted">Loading…</p>
 	{:else}
@@ -248,7 +287,7 @@
 						variant="primary"
 						href={newEntryHref(nextUp.match.match_number, watchOne(nextRow))}
 					>
-						Record
+						Record it
 					</Button>
 				</div>
 			{:else if !session.eventCode}
@@ -260,12 +299,12 @@
 						manager.
 					</p>
 				{:else if diagnosis?.kind === 'none-published'}
-					<p class="muted">No assignments yet.</p>
+					<p class="muted">No assignments published for this event yet.</p>
 				{:else}
 					<p class="muted">Nothing assigned yet.</p>
 				{/if}
 			{:else if !qmList.length}
-				<p class="muted">No schedule yet.</p>
+				<p class="muted">No schedule published for this event yet.</p>
 			{:else}
 				<p class="muted">All caught up.</p>
 			{/if}
@@ -274,7 +313,7 @@
 		<!-- ── 2. has anyone told me anything? ──────────────────────────── -->
 		{#if fromManager.length > 0}
 			<section>
-				<h2>Manager notes</h2>
+				<h2>From your manager</h2>
 				<ul class="notes">
 					{#each fromManager as r (r.id)}
 						<li>
@@ -292,7 +331,7 @@
 		<!-- ── 3. what am I watching? ───────────────────────────────────── -->
 		{#if upcoming.length > 0}
 			<section>
-				<h2>Upcoming</h2>
+				<h2>After that</h2>
 				<ul class="later">
 					{#each visibleUpcoming as row (row.match.match_number)}
 						<li>
@@ -334,6 +373,45 @@
 			</section>
 		{/if}
 
+		<!-- ── the event's schedule, when asked for ─────────────────────────── -->
+		{#if qmList.length > 0}
+			<section>
+				<h2>The schedule</h2>
+				<details class="whole" bind:open={scheduleOpen}>
+					<summary>All {qmList.length} quals</summary>
+					<!-- Rendered only while open: eighty rows nobody asked to see are
+					     eighty rows of work on every sync tick. -->
+					{#if scheduleOpen}
+						<ol class="whole-list">
+							{#each qmList as m (m.key ?? m.match_number)}
+								{@const mine = mineByMatch.get(m.match_number)}
+								{@const when = timeOfDay(m.predicted_time ?? m.time ?? null)}
+								<li class:mine={Boolean(mine)}>
+									<span class="qm">Q{m.match_number}</span>
+									<span class="sides">
+										{#each /** @type {const} */ (['red', 'blue']) as color (color)}
+											<span class="side {color}">
+												{#each sideOf(m, color) as t, i (t)}
+													{#if i > 0}<span class="dot" aria-hidden="true">·</span>{/if}
+													<span class:watching={mine?.teams.includes(t)}>{t}</span>
+												{/each}
+											</span>
+										{/each}
+									</span>
+									<span class="row-end">
+										{#if mine}
+											<span class="yours">{mine.done ? 'Yours · recorded' : 'Yours'}</span>
+										{/if}
+										{#if when}<span class="when">{when}</span>{/if}
+									</span>
+								</li>
+							{/each}
+						</ol>
+					{/if}
+				</details>
+			</section>
+		{/if}
+
 		<!-- ── 4. what have I recorded? ─────────────────────────────────── -->
 		<section class="mine">
 			<div class="mine-head">
@@ -342,7 +420,7 @@
 			</div>
 
 			{#if eventEntries.length === 0}
-				<p class="muted">No entries yet.</p>
+				<p class="muted">Nothing recorded here yet.</p>
 			{:else}
 				<ul class="entries">
 					{#each eventEntries as e (e.id)}
@@ -391,13 +469,18 @@
 	<section>
 		<Button href="{base}/practice/">Practice</Button>
 	</section>
-</main>
+{/snippet}
+
+{#if auth.isManager}
+	<ManagerHome scouting={scoutContent} />
+{:else}
+	<main>
+		<header class="page-head"><h1>Home</h1></header>
+		{@render scoutContent()}
+	</main>
 {/if}
 
 <style>
-	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
-	 */
 
 	main {
 		max-width: var(--w-read);
@@ -704,5 +787,90 @@
 	.next-row .qm { font-size: var(--fs-xl); }
 
 	.entry:last-child { border-bottom: 0; }
+
+
+	/* ── the whole schedule ────────────────────────────────────────────── */
+	.whole summary {
+		display: flex;
+		align-items: center;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--accent);
+		font-size: var(--fs-sm);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.whole summary:hover {
+		background: var(--bg-subtle);
+	}
+	.whole summary:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.whole-list {
+		list-style: none;
+		margin: var(--space-2) 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.whole-list li {
+		display: grid;
+		grid-template-columns: 3rem minmax(0, 1fr) auto;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		border-bottom: 1px solid var(--border);
+		border-left: 3px solid transparent;
+		font-size: var(--fs-sm);
+		font-variant-numeric: tabular-nums;
+	}
+	/* Yours is a rule down the side and the word "Yours" — never colour alone. */
+	.whole-list li.mine {
+		border-left-color: var(--accent);
+		background: var(--bg-card);
+	}
+	.whole-list .qm {
+		font-size: var(--fs-sm);
+	}
+	.whole-list .sides {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.whole-list .side.red {
+		color: var(--alliance-red);
+	}
+	.whole-list .side.blue {
+		color: var(--alliance-blue);
+	}
+	.whole-list .watching {
+		font-weight: 700;
+		text-decoration: underline;
+	}
+	/* Spacing in CSS, not in the text node: Svelte trims the whitespace around
+	   it and the numbers ran into the dots. */
+	.whole-list .dot {
+		margin: 0 0.3em;
+		color: var(--text-faint);
+	}
+	.row-end {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		white-space: nowrap;
+	}
+	.yours {
+		font-size: var(--fs-xs);
+		font-weight: 700;
+		color: var(--accent);
+	}
+	.whole-list .when {
+		font-size: var(--fs-xs);
+	}
+
 
 </style>

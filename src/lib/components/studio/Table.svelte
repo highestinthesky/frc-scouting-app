@@ -42,9 +42,6 @@
 </div>
 
 <style>
-	/* Hallmark · genre: modern-minimal · component: table
-	 * design-system: design.md · palette: Studio ([data-studio])
-	 */
 
 	/* The scroll lives here, on the table's own wrapper, never on the page. A
 	   wide table is the one thing in Studio that legitimately exceeds the

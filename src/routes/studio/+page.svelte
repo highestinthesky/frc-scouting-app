@@ -1,20 +1,18 @@
 <script>
-	// /studio has no content of its own — it is the tab group's root. Redirect to
-	// the first tab so a bookmark or a typed URL lands somewhere real rather than
-	// on an empty shell.
+	// /studio has no page of its own and never did — it redirected to the first
+	// Studio tab. With the shell merged there is no Studio to land in, so a
+	// bookmark or an installed PWA that still opens here goes Home, where a
+	// manager's day starts like anyone else's.
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	$effect(() => {
-		goto(`${base}/studio/event/`, { replaceState: true });
+		goto(`${base}/home/`, { replaceState: true });
 	});
 </script>
 
 <p class="wait">Opening…</p>
 
 <style>
-	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
-	 */
 
 	.wait {
 		color: var(--text-muted);

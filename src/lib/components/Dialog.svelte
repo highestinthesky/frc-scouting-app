@@ -64,11 +64,6 @@
 </dialog>
 
 <style>
-	/* Hallmark · genre: modern-minimal · component: dialog
-	 * design-system: design.md · designed-as-app
-	 * states: default · hover · focus-visible · active
-	 * contrast: AA pass, both themes
-	 */
 
 	/* A closed <dialog> is hidden by the browser's own
 	   `dialog:not([open]) { display: none }`, which is specificity (0,1,1).

@@ -99,6 +99,15 @@ function sameValue(x, y) {
 // So every pull reaches back by an overlap and re-reads the recent past.
 // Re-reading is free of side effects — an unchanged row compares equal and is
 // not applied — so the only cost is a few rows per tick.
+//
+// ...for as long as the watermark is young. The overlap is measured back from
+// the newest row SEEN, not from now, so with nothing new arriving the window
+// never moved: the last burst of rows came down again on every tick, forever.
+// A scout saving six entries at the end of a match had every other device
+// re-download all six every three seconds until somebody saved a seventh —
+// through lunch, through the night if a tab stayed open. Once the watermark is
+// older than the overlap nothing can still commit behind it, and the pull goes
+// strict; see watermarkSettled().
 
 /**
  * How far each pull reaches back behind the newest row it has seen.
@@ -108,7 +117,8 @@ function sameValue(x, y) {
  * statement_timeout is 8s (measured on the local stack; Supabase's default), so
  * nothing commits more than 8s after it was stamped. 30s is that with margin.
  * It is also a cost: every row changed inside the window is re-read on every
- * tick — 1,200 rows inserted at once were re-read for the whole window.
+ * tick until the watermark settles — 1,200 rows inserted at once were re-read
+ * for the whole window, and before watermarkSettled() for good.
  */
 export const PULL_OVERLAP_MS = 30_000;
 
@@ -127,6 +137,30 @@ export function pullFrom(watermark) {
 	const ms = Date.parse(watermark);
 	if (!Number.isFinite(ms)) return null;
 	return new Date(ms - PULL_OVERLAP_MS).toISOString();
+}
+
+/**
+ * Can the pull stop reaching back behind the watermark?
+ *
+ * The row that set the watermark was visible to a read that had finished by
+ * `movedAt`, so the server's clock had passed the watermark by then. A read that
+ * began a full overlap later is one whose snapshot is past every stamp at or
+ * below the watermark plus the slowest commit — so it saw every row that will
+ * ever carry such a stamp, and the reads after it need only what is strictly
+ * newer.
+ *
+ * Both arguments are MONOTONIC (performance.now()), never wall time: this is a
+ * question about elapsed time on this device, and the device's clock is the
+ * thing the server-stamped watermark exists not to trust. A clock that stops
+ * while the device sleeps only settles later, which is the safe direction.
+ *
+ * @param {number|null} movedAt  when the watermark last advanced
+ * @param {number} readAt        when the pull being judged began
+ * @returns {boolean}
+ */
+export function watermarkSettled(movedAt, readAt) {
+	if (!Number.isFinite(movedAt) || !Number.isFinite(readAt)) return false;
+	return readAt - movedAt >= PULL_OVERLAP_MS;
 }
 
 /**

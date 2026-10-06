@@ -81,8 +81,8 @@
 	<PageHead
 		title="Team {teamNumber}"
 		sub={eventCode}
-		back="{base}/studio/insights/"
-		backLabel="Back to Insights"
+		back="{base}/studio/review/"
+		backLabel="Back to Review"
 	/>
 
 	{#if loading}
@@ -307,9 +307,6 @@
 </main>
 
 <style>
-	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
-	 */
 
 	main {
 		max-width: var(--w-board);

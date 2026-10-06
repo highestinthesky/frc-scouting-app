@@ -2,102 +2,39 @@
 	import { base } from '$app/paths';
 	import { session } from '$lib/session.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
-	import { listEntries } from '$lib/db.js';
-	import { getCachedSchedule } from '$lib/tba.js';
-	import { eventIdForCode, eventRoster } from '$lib/events.js';
-	import { listAssignments } from '$lib/assignments.js';
+	import { eventData } from '$lib/event-data.svelte.js';
 	import { eventOverview } from '$lib/coverage.js';
 	import { rowScout, sameScout, scoutRef } from '$lib/scout-identity.js';
 	import { timeOfDay } from '$lib/format.js';
 	import Button from './Button.svelte';
 
-	let entries = $state([]);
-	let cached = $state(null);
-	let loading = $state(true);
-	let error = $state('');
-	let roster = $state([]);
-	let assignments = $state([]);
-	let peopleLoading = $state(true);
-	let peopleError = $state('');
-	let retry = $state(0);
-	let peopleCode = '';
-	// Planning rows refresh on sync without querying the roster every 3 seconds.
-	const planningRevision = $derived(syncState.lastSyncedAt ? Math.floor(Date.parse(syncState.lastSyncedAt) / 30_000) : 0);
-
-	const overview = $derived(eventOverview({ eventCode: session.eventCode, matches: cached?.matches ?? [], entries, roster }));
-	const assignedScouts = $derived(overview.activity.filter(r => assignments.some(a => sameScout(rowScout(a), scoutRef(r.name, r.person.profileId)))).length);
+	let { scouting } = $props();
+	let personalOpen = $state(false);
+	let peopleSlow = $state(false);
+	const loading = $derived(!eventData.localReady);
+	const peopleLoading = $derived(!eventData.rosterReady || !eventData.remoteReady);
+	const peopleError = $derived(eventData.rosterError || eventData.remoteError || (peopleSlow ? 'Scout activity is taking longer to load. Coverage is available from this device.' : ''));
+	const overview = $derived(eventOverview({ eventCode: session.eventCode, matches: eventData.cached?.matches ?? [], entries: eventData.entries, roster: eventData.roster }));
+	const assignedScouts = $derived(overview.activity.filter(r => eventData.assignments.some(a => sameScout(rowScout(a), scoutRef(r.name, r.person.profileId)))).length);
 	const nextTime = $derived(timeOfDay(overview.nextMatch?.predicted_time ?? overview.nextMatch?.time));
 	const matchHref = (number) => `${base}/studio/${encodeURIComponent(session.eventCode)}/q${number}/`;
-
-	// Local coverage stays available when the roster's network request is slow.
+	const reload = () => eventData.load(session.eventCode);
 	$effect(() => {
-		const code = session.eventCode;
-		void syncState.inboundChanges;
-		void syncState.lastSyncedAt;
-		void retry;
-		let stale = false;
-		(async () => {
-			try {
-				const [rows, schedule] = await Promise.all([listEntries(), getCachedSchedule(code)]);
-				if (stale) return;
-				entries = rows;
-				cached = schedule;
-				error = '';
-			} catch (e) {
-				if (!stale) error = e?.message ?? String(e);
-			} finally {
-				if (!stale) loading = false;
-			}
-		})();
-		return () => { stale = true; };
-	});
-
-	$effect(() => {
-		const code = session.eventCode;
-		void planningRevision;
-		void retry;
-		let stale = false;
-		if (peopleCode !== code) {
-			peopleCode = code;
-			peopleLoading = true;
-			roster = [];
-			assignments = [];
-		}
-		peopleError = '';
-		const slow = setTimeout(() => {
-			if (!stale) peopleError = 'Scout activity is taking longer to load. Coverage is available from this device.';
-		}, 8000);
-		(async () => {
-			try {
-				const id = await eventIdForCode(code);
-				if (!id) throw new Error('Reconnect to this event in Settings to load its scouts.');
-				const [people, assigned] = await Promise.all([eventRoster(id), listAssignments(code)]);
-				if (stale) return;
-				roster = people;
-				assignments = assigned;
-				peopleError = '';
-			} catch (e) {
-				if (!stale) peopleError = e?.message ?? String(e);
-			} finally {
-				clearTimeout(slow);
-				if (!stale) peopleLoading = false;
-			}
-		})();
-		return () => { stale = true; clearTimeout(slow); };
+		peopleSlow = false;
+		if (!peopleLoading) return;
+		const timer = setTimeout(() => peopleSlow = true, 8000);
+		return () => clearTimeout(timer);
 	});
 </script>
 
 <main>
 	<header class="page-head">
 		<h1>Home</h1>
-		<Button href="{base}/studio/schedule/">Open schedule</Button>
+		<div class="head-actions"><Button variant="primary" href="{base}/scouting/new/">New entry</Button><Button href="{base}/studio/plan/schedule/">Open schedule</Button></div>
 	</header>
 
 	{#if loading}
 		<p class="muted" role="status">Loading event coverage…</p>
-	{:else if error}
-		<p class="error" role="alert">{error}</p>
-		<Button onclick={() => retry++}>Try again</Button>
 	{:else}
 		<section class="coverage" aria-labelledby="coverage-title">
 			<div class="coverage-main">
@@ -121,7 +58,7 @@
 
 		<div class="details">
 			<section aria-labelledby="gaps-title">
-				<div class="section-head"><h2 id="gaps-title">Missing entries</h2><a href="{base}/studio/coverage/">View coverage →</a></div>
+				<div class="section-head"><h2 id="gaps-title">Missing entries</h2><a href="{base}/studio/run/matches/?show=gaps">View coverage →</a></div>
 				{#if overview.gaps.length}
 					<p class="section-note">{overview.gaps.length} {overview.gaps.length === 1 ? 'match needs' : 'matches need'} follow-up</p>
 					<ul class="rows">
@@ -133,20 +70,20 @@
 							</a></li>
 						{/each}
 					</ul>
-					{#if overview.gaps.length > 5}<p class="muted">{overview.gaps.length - 5} more in Coverage</p>{/if}
+					{#if overview.gaps.length > 5}<p class="muted">{overview.gaps.length - 5} more in Run</p>{/if}
 				{:else}
 					<p class="empty">{overview.trackedCount ? 'Every played or started match is fully recorded.' : 'No matches to review yet.'}</p>
 				{/if}
 			</section>
 
 			<section aria-labelledby="scouts-title">
-				<div class="section-head"><h2 id="scouts-title">Scout activity</h2><a href="{base}/studio/event/">Manage scouts →</a></div>
+				<div class="section-head"><h2 id="scouts-title">Scout activity</h2><a href="{base}/studio/plan/people/">Manage scouts →</a></div>
 				{#if peopleError}
-					<p class="muted" role="status">{peopleError}</p><div class="retry"><Button onclick={() => retry++}>Try again</Button></div>
+					<p class="muted" role="status">{peopleError}</p><div class="retry"><Button onclick={reload}>Try again</Button></div>
 				{:else if peopleLoading}
 					<p class="muted" role="status">Loading scouts…</p>
 				{:else if !overview.activity.length}
-					<p class="empty">No scouts on this event. Add scouts in Studio to start assigning teams.</p>
+					<p class="empty">No scouts on this event. Add scouts in Plan to start assigning teams.</p>
 				{:else}
 					<p class="section-note">{assignedScouts} of {overview.activity.length} scouts assigned to teams</p>
 					<ul class="rows scouts">
@@ -154,26 +91,27 @@
 							<li><span class="scout-name">{row.name}</span><span class:quiet={row.count === 0}>{row.count} {row.count === 1 ? 'entry' : 'entries'}</span></li>
 						{/each}
 					</ul>
-					{#if overview.activity.length > 6}<p class="muted">{overview.activity.length - 6} more in Coverage</p>{/if}
-					{#if assignedScouts < overview.activity.length}<div class="retry"><Button href="{base}/studio/schedule/">Assign teams</Button></div>{/if}
+					{#if overview.activity.length > 6}<p class="muted">{overview.activity.length - 6} more on the Scouts page</p>{/if}
+					{#if assignedScouts < overview.activity.length}<div class="retry"><Button href="{base}/studio/plan/assignments/">Assign teams</Button></div>{/if}
 				{/if}
 			</section>
 		</div>
 
 		<nav class="tools" aria-label="Event tools">
-			<a href="{base}/studio/insights/"><span>Team insights</span><span class="muted">{overview.teamsSeen} teams recorded</span><span aria-hidden="true">→</span></a>
-			<a href="{base}/studio/insights/picklist/"><span>Picklist</span><span aria-hidden="true">→</span></a>
+			<a href="{base}/studio/pick/"><span>Team insights</span><span class="muted">{overview.teamsSeen} teams recorded</span><span aria-hidden="true">→</span></a>
+			<a href="{base}/studio/pick/picklist/"><span>Picklist</span><span aria-hidden="true">→</span></a>
 			<a href="{base}/studio/accounts/"><span>Accounts</span><span aria-hidden="true">→</span></a>
 		</nav>
 		{#if syncState.status !== 'connected' || !syncState.lastSyncedAt || syncState.pendingCount > 0}<p class="data-note muted">Based on data available on this device. Check sync status for updates.</p>{/if}
 	{/if}
+	<details class="personal" bind:open={personalOpen}>
+		<summary>Your scouting</summary>
+		{#if personalOpen}<div class="personal-content">{@render scouting?.()}</div>{/if}
+	</details>
 </main>
 
 <style>
-	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
-	 */
-	main { max-width: var(--w-board); margin: var(--space-4) auto; padding: var(--space-6) var(--space-6) calc(var(--nav-bottom-h) + var(--space-5)); }
+	main { max-width: var(--w-board); margin: var(--space-4) 0; padding: var(--space-5) var(--space-5) calc(var(--nav-bottom-h) + var(--space-5)); }
 	.page-head, .section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
 	.page-head { border-bottom: 1px solid var(--border); padding-bottom: var(--space-5); margin-bottom: var(--space-6); }
 	h1 { margin: 0; font-size: var(--fs-page); letter-spacing: -0.02em; }
@@ -218,7 +156,10 @@
 	.tools a { min-height: var(--tap-min); display: flex; align-items: center; gap: var(--space-2); color: var(--accent); text-decoration: none; font-size: var(--fs-sm); white-space: nowrap; }
 	.tools a:hover { text-decoration: underline; }
 	.data-note { margin-top: var(--space-3); }
-	.error { color: var(--danger); margin-bottom: var(--space-3); }
+	.personal { margin-top: var(--space-5); border-top: 1px solid var(--border); }
+	.personal summary { min-height: var(--tap-min); padding: var(--space-3) 0; font-weight: 600; cursor: pointer; }
+	.personal-content { max-width: var(--w-read); padding-top: var(--space-3); }
+	.head-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 	@media (max-width: 47.9375rem) {
 		main { padding-left: var(--space-4); padding-right: var(--space-4); }
 		.coverage, .details { grid-template-columns: minmax(0, 1fr); }

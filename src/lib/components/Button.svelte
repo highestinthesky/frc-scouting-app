@@ -74,11 +74,6 @@
 {/if}
 
 <style>
-	/* Hallmark · genre: modern-minimal · component: button
-	 * design-system: design.md · designed-as-app
-	 * states: default · hover · focus-visible · active · disabled
-	 * contrast: AA pass, both themes
-	 */
 
 	.btn {
 		font: inherit;

@@ -148,9 +148,21 @@ const ok = (name, cond, detail = '') => {
 	const editSrc = readFileSync(path.join(here, '../routes/scouting/edit/+page.svelte'), 'utf8');
 
 	ok('event clients fetch the current auth-client session for each request',
-		/fetchWithCurrentAuth[\s\S]*?getAuthClient\(\)\.auth\.getSession\(\)/.test(supabaseSrc));
-	ok('event clients do not persist a second, stale auth session',
-		/persistSession:\s*false[\s\S]*?fetch:\s*fetchWithCurrentAuth/.test(supabaseSrc));
+		/accessToken:\s*currentAccessToken/.test(supabaseSrc) &&
+			/async function currentAccessToken[\s\S]*?getAuthClient\(\)\.auth\.getSession\(\)/.test(supabaseSrc));
+	// With `accessToken` supplied, supabase-js builds no auth client for an event
+	// client at all — no second session to go stale, and no window listener per
+	// client. Configuring one alongside would bring both back.
+	{
+		const factory = supabaseSrc.slice(
+			supabaseSrc.indexOf('export function createSupabaseClient'),
+			supabaseSrc.indexOf('const clients = new Map()')
+		);
+		ok('event clients do not own a second, stale auth session',
+			factory.length > 0 && !/persistSession|autoRefreshToken|auth:\s*\{/.test(factory));
+		ok('event clients are built once per event, not once per call',
+			/clients\.get\(sessionId\)[\s\S]*?clients\.set\(sessionId, client\)/.test(factory));
+	}
 	ok('an orphaned signed-in user is allowed to remain on the registration route',
 		/onRegisterRoute\s*&&\s*!auth\.orphaned/.test(layoutSrc));
 	ok('the registration form supports finishing an orphaned account',
@@ -173,12 +185,14 @@ const ok = (name, cond, detail = '') => {
 {
 	const shellSrc = readFileSync(path.join(here, '../routes/+layout.svelte'), 'utf8');
 	const settingsSrc = readFileSync(path.join(here, '../routes/settings/+page.svelte'), 'utf8');
-	// The manager surfaces moved to Studio in v0.73 — /scouting is the act of
-	// scouting now, which is what the word always meant. This assertion follows
-	// the job, not the path: whichever page renders the manager components is the
-	// one that must ask auth rather than re-deriving the answer.
+	// The manager surfaces moved to Studio in v0.73, and Studio folded into the
+	// app later, split by verb. This assertion follows the job, not the path: the
+	// page that renders the most manager components (Run › Matches, which took
+	// the match list, the modal and the coverage check from /studio/schedule) must
+	// not import the local role store, and whatever decides that the manager
+	// surfaces render at all — the shell's navigation now — must ask auth.
 	const scoutingSrc = readFileSync(
-		path.join(here, '../routes/studio/schedule/+page.svelte'),
+		path.join(here, '../routes/studio/run/matches/+page.svelte'),
 		'utf8'
 	);
 
@@ -186,7 +200,7 @@ const ok = (name, cond, detail = '') => {
 	for (const [label, text] of [
 		['the layout', shellSrc],
 		['settings', settingsSrc],
-		['the studio schedule page', scoutingSrc]
+		['the manager match page', scoutingSrc]
 	]) {
 		ok(`${label} no longer imports the local role store`, !/role\.svelte\.js/.test(text));
 	}
@@ -210,7 +224,7 @@ const ok = (name, cond, detail = '') => {
 	ok('no passphrase survives in auth', !/session\.managerToken/.test(src));
 	ok(
 		'the manager surface asks auth rather than re-deriving',
-		/isManager = \$derived\(auth\.showsManagerTools\)/.test(scoutingSrc)
+		/navFor\(\{\s*manager:\s*auth\.showsManagerTools\s*\}\)/.test(shellSrc)
 	);
 }
 

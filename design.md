@@ -112,17 +112,22 @@ form width. Its page heading spans the page rather than a centered form.
 Use whitespace and rules before adding a card. Upcoming entries form open rows;
 recorded entries share one list surface. Manager Home leads with event coverage and match status in one surface, then
 lists missing entries and scout activity as open rows. Coverage percentages use
-played or started qualification matches, excluding future matches; missing
-submissions remain visible even when a played match has zero entries.
+qualification matches through the last played or recorded qual, excluding
+future matches; earlier missing submissions stay visible even without a cached
+result. Personal manager recording tools remain in a collapsed Your scouting
+section below the overview.
 Studio summary figures share one strip with dividers. Panels belong to actual working groups, not every text block.
 Nested panels use a subtle surface without a shadow stack.
 
 ## Navigation and responsive behavior
 
-The scouting app shows event and account context. Its two destinations
-are docked at the bottom below 40rem and join the header above that breakpoint.
-Studio uses a 13.5rem sidebar with small functional icons. Below 48rem its links
-wrap into a top navigation with a visible route back to Home.
+One shared header spans the viewport and shows event and account context.
+Scout navigation has Home and Settings, docked below 40rem and displayed as a
+top strip above that breakpoint. Manager navigation uses a 15rem sidebar from
+48rem, a wrapping top strip on tablets, and a bottom bar with a More menu on
+phones. Plan, Run, Review and Pick group the work; Accounts and Settings remain
+reachable from the same shell. Home and management pages read the shared event
+data so coverage, scout activity and assignments agree across views.
 
 Every page must fit 320, 375, 414 and 768px, as well as desktop. Root overflow is
 clipped; wide tables scroll inside their own wrappers. Grid tracks must shrink.

@@ -31,9 +31,6 @@
 </div>
 
 <style>
-	/* Hallmark · genre: modern-minimal · component: stat
-	 * design-system: design.md · palette: Studio ([data-studio])
-	 */
 
 	.stat {
 		display: flex;

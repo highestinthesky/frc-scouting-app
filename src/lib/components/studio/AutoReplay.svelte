@@ -224,9 +224,6 @@
 {/if}
 
 <style>
-	/* Hallmark · genre: modern-minimal · component: auto-replay
-	 * design-system: design.md · palette: Studio ([data-studio])
-	 */
 	.replay {
 		display: grid;
 		gap: var(--space-3);

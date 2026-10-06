@@ -26,9 +26,6 @@
 </dialog>
 
 <style>
-	/* Hallmark · component: event prompt · genre: modern-minimal
-	 * design-system: design.md · designed-as-app
-	 */
 	.waiting { max-width: var(--w-list); margin: var(--space-6) auto; padding: var(--space-6) var(--space-4); }
 	h1 { font-size: var(--fs-page); margin: 0 0 var(--space-3); }
 	p { color: var(--text-muted); font-size: var(--fs-md); line-height: 1.5; margin: 0 0 var(--space-5); }

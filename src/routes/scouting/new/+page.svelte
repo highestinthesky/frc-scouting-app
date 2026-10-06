@@ -466,9 +466,6 @@
 </main>
 
 <style>
-	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
-	 * design-system: design.md · designed-as-app
-	 */
 
 	main {
 		max-width: var(--w-form);

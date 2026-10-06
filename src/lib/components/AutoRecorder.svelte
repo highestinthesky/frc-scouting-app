@@ -814,9 +814,6 @@
 {/if}
 
 <style>
-	/* Hallmark · genre: modern-minimal · component: auto-recorder
-	 * design-system: design.md
-	 */
 	.rec {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);

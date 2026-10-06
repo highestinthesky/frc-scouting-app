@@ -242,7 +242,9 @@ itself the way two sequential queries can.
 None of these are bugs to go and fix unasked. Each has more than one defensible
 answer.
 
-1. **A scout on two events is stranded.** `currentEvent()` returns `null` for
+1. **A scout on two events is stranded.** *Half addressed on `ui-optimization`:
+   Plan › Event can now set dates, so `currentEvent()` has something to choose
+   by. Creation still does not collect them.* `currentEvent()` returns `null` for
    two or more undated events, and nothing in the app ever sets `starts_on` —
    `createEvent({code, name})` never passes dates. Scouts have no picker since
    v0.75, so they see "A manager puts you on an event" when a manager already
@@ -261,7 +263,9 @@ answer.
 4. **Leaked-password protection is OFF** in the Supabase dashboard. Only the
    user can change it, and it is worth doing before more accounts are handed out.
 
-5. **Studio is per-event and they dislike it.** "I dislike how inconvenient it
+5. **Studio is per-event and they dislike it.** *Addressed on
+   `ui-optimization`: Studio folded into the app, and a manager switches event
+   from the app bar on every page (ROADMAP, One shell).* "I dislike how inconvenient it
    is for users to have to choose an event, and then there is a custom studio for
    each of them." No decision was reached. A Studio-level event switcher was the
    suggestion.

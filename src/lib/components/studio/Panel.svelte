@@ -50,10 +50,6 @@
 </section>
 
 <style>
-	/* Hallmark · genre: modern-minimal · component: panel
-	 * design-system: design.md · palette: Studio ([data-studio])
-	 * contrast: AA pass — verified per surface by check_contrast.mjs
-	 */
 
 	.panel {
 		border: 1px solid var(--border);
