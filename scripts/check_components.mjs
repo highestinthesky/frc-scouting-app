@@ -243,6 +243,10 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 		'Review: a played match row keeps the floor',
 		floors('src/routes/studio/review/+page.svelte', /\.played-row/)
 	);
+	ok(
+		'Accounts: Rename, Save and Cancel keep the floor',
+		floors('src/routes/studio/accounts/+page.svelte', /\.mini/)
+	);
 
 	// Sheet is a <dialog>, so it walks into the same trap Dialog did: Svelte's
 	// scoping hash outranks the browser's dialog:not([open]) { display: none }.

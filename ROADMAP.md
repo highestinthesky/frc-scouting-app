@@ -818,9 +818,10 @@ Done, with these departures, each deliberate:
 - **A scout's Home is no longer pixel-identical to `main`**: step 8 adds *The
   schedule*, a closed disclosure. The nav, the promise that made the merge safe,
   is unchanged.
-- **Two of the three small targets are fixed**: Run's `Q<n>` links and the
-  conflict buttons, now 44px and named in `check_components.mjs`. Accounts'
-  *Rename* is still 15px.
+- **All three small targets are fixed**: Run's `Q<n>` links, the conflict
+  buttons, and Accounts' *Rename* (with its Save and Cancel), now 44px and named
+  in `check_components.mjs`. Each sat in a row already 44px tall, so none made
+  a table taller.
 
 Checked against the local stack (the steps 1–4 seed plus entries on Q1–Q3, two
 with tracks): 75 checks by clicking — every tile number against the data,
