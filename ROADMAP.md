@@ -758,7 +758,7 @@ the replay findable by arriving.
 
 Done, with these departures from the plan below, each deliberate:
 
-- **Review was not in the nav yet** (it is now, step 6). It is step 6, and an entry that opens
+- **Review was not in the nav yet** (it is now, step 6). It was step 6, and an entry that opens
   nothing is worse than a missing one. Until then the match page lights Run and
   the team page lights Pick, and a manager's phone bar is Home · Run · Pick ·
   More. `review` is already a reserved event code.
