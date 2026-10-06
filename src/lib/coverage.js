@@ -135,3 +135,21 @@ export function coverageLevel(scoutedTeams, totalTeams) {
 	if (scoutedTeams > 0) return 'partial';
 	return 'none';
 }
+
+/**
+ * Matches somebody started recording and nobody finished — the Gaps filter on
+ * Run › Matches, and the count on Home.
+ *
+ * A match nobody has touched is usually just in the future; a match with two
+ * of six robots recorded is a gap that happened, and the most likely place a
+ * scout drifted off their assignment.
+ *
+ * @param {object[]} qmList  quals only — qualMatches() on the way in
+ * @param {Map} entryIndex
+ * @returns {Array<{match: object, cov: ReturnType<typeof matchCoverage>}>}
+ */
+export function gapMatches(qmList, entryIndex) {
+	return (qmList ?? [])
+		.map((match) => ({ match, cov: matchCoverage(match, entryIndex) }))
+		.filter(({ cov }) => cov.scoutedTeams > 0 && !cov.complete);
+}

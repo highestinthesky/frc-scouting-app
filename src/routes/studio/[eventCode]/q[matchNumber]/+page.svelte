@@ -118,8 +118,8 @@
 	<PageHead
 		title="Qual {matchNumber}"
 		sub={eventCode}
-		back="{base}/studio/schedule/"
-		backLabel="Back to Schedule"
+		back="{base}/studio/review/"
+		backLabel="Back to Review"
 	/>
 
 	{#if loading}

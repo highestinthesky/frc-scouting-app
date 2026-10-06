@@ -534,11 +534,12 @@
 </main>
 
 <style>
-	/* The rename control. `.mini` is a secondary action inside a dense table row,
-	   so it does NOT take the 44px floor — it is a word beside a name, the same
-	   shape as the match links in Schedule, and a full tap target per row would
-	   double the height of the table. The input beside it does take the floor,
-	   because it is the thing being aimed at. */
+	/* The rename control. `.mini` is a secondary action inside a table row, and it
+	   used to skip the 44px floor on the argument that a full target per row would
+	   double the table's height. It does not: the role Select and Revoke in the
+	   same row are already 44px, so the row is that tall anyway and Rename was a
+	   15px target inside it. Run's match links had the same argument and the same
+	   answer. It stays a quiet word — no border, no fill — just a tall one. */
 	.rename {
 		display: flex;
 		align-items: center;
@@ -557,9 +558,12 @@
 		font: inherit;
 	}
 	.mini {
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap-min);
 		border: none;
 		background: none;
-		padding: 0 var(--space-1);
+		padding: 0 var(--space-2);
 		color: var(--accent);
 		font: inherit;
 		font-size: var(--fs-xs);

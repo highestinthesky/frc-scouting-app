@@ -63,6 +63,7 @@
 	import { relativeTime, timeOfDay } from '$lib/format.js';
 	import { greetingFor } from '$lib/greeting.js';
 	import Button from '$lib/components/Button.svelte';
+	import HomeTiles from '$lib/components/studio/HomeTiles.svelte';
 
 	let entries = $state([]);
 	let qmList = $state([]);
@@ -274,6 +275,23 @@
 		return entries.filter((e) => new Date(e.createdAt) >= start).length;
 	});
 
+	// ── the whole schedule ────────────────────────────────────────────────────
+	//
+	// Everything above lists only the matches one of MY teams is in. A scout
+	// deciding whether they can leave the stand, or which match is on the field
+	// now, needs the event's — v0.73 planned a read-only /schedule for it and it
+	// was never built. It is a disclosure here instead of a page: the question is
+	// occasional, and a tab for it would be a third tab on a bar that has been two
+	// since it began.
+	//
+	// "Mine" is myRows — myMatches(), overrides applied — so a row marked as
+	// yours here is exactly a row in Up next or After that, never a second answer
+	// computed another way.
+	let scheduleOpen = $state(false);
+	const mineByMatch = $derived(new Map(myRows.map((r) => [r.match.match_number, r])));
+	const sideOf = (m, color) =>
+		(m.alliances?.[color]?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, '')));
+
 	const fromManager = $derived((reminders.visible ?? []).filter((r) => r.kind === 'manager'));
 
 	const newEntryHref = (matchNumber, teamNumber) =>
@@ -298,6 +316,13 @@
 			</p>
 		{/if}
 	</header>
+
+	<!-- A manager's tiles, under the greeting. Everything a scout sees follows
+	     unchanged, so a manager who also scouts loses nothing — and a scout's
+	     page is exactly what it was. -->
+	{#if auth.showsManagerTools}
+		<HomeTiles />
+	{/if}
 
 	{#if loading}
 		<p class="muted">Loading…</p>
@@ -404,6 +429,45 @@
 						<li>{t}</li>
 					{/each}
 				</ul>
+			</section>
+		{/if}
+
+		<!-- ── the event's schedule, when asked for ─────────────────────────── -->
+		{#if qmList.length > 0}
+			<section>
+				<h2>The schedule</h2>
+				<details class="whole" bind:open={scheduleOpen}>
+					<summary>All {qmList.length} quals</summary>
+					<!-- Rendered only while open: eighty rows nobody asked to see are
+					     eighty rows of work on every sync tick. -->
+					{#if scheduleOpen}
+						<ol class="whole-list">
+							{#each qmList as m (m.key ?? m.match_number)}
+								{@const mine = mineByMatch.get(m.match_number)}
+								{@const when = timeOfDay(m.predicted_time ?? m.time ?? null)}
+								<li class:mine={Boolean(mine)}>
+									<span class="qm">Q{m.match_number}</span>
+									<span class="sides">
+										{#each /** @type {const} */ (['red', 'blue']) as color (color)}
+											<span class="side {color}">
+												{#each sideOf(m, color) as t, i (t)}
+													{#if i > 0}<span class="dot" aria-hidden="true">·</span>{/if}
+													<span class:watching={mine?.teams.includes(t)}>{t}</span>
+												{/each}
+											</span>
+										{/each}
+									</span>
+									<span class="row-end">
+										{#if mine}
+											<span class="yours">{mine.done ? 'Yours · recorded' : 'Yours'}</span>
+										{/if}
+										{#if when}<span class="when">{when}</span>{/if}
+									</span>
+								</li>
+							{/each}
+						</ol>
+					{/if}
+				</details>
 			</section>
 		{/if}
 
@@ -776,6 +840,89 @@
 	}
 	.elsewhere {
 		margin-top: var(--space-2);
+	}
+
+	/* ── the whole schedule ────────────────────────────────────────────── */
+	.whole summary {
+		display: flex;
+		align-items: center;
+		min-height: var(--tap-min);
+		padding: 0 var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--bg-card);
+		color: var(--accent);
+		font-size: var(--fs-sm);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.whole summary:hover {
+		background: var(--bg-subtle);
+	}
+	.whole summary:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.whole-list {
+		list-style: none;
+		margin: var(--space-2) 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.whole-list li {
+		display: grid;
+		grid-template-columns: 3rem minmax(0, 1fr) auto;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		border-bottom: 1px solid var(--border);
+		border-left: 3px solid transparent;
+		font-size: var(--fs-sm);
+		font-variant-numeric: tabular-nums;
+	}
+	/* Yours is a rule down the side and the word "Yours" — never colour alone. */
+	.whole-list li.mine {
+		border-left-color: var(--accent);
+		background: var(--bg-card);
+	}
+	.whole-list .qm {
+		font-size: var(--fs-sm);
+	}
+	.whole-list .sides {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.whole-list .side.red {
+		color: var(--alliance-red);
+	}
+	.whole-list .side.blue {
+		color: var(--alliance-blue);
+	}
+	.whole-list .watching {
+		font-weight: 700;
+		text-decoration: underline;
+	}
+	/* Spacing in CSS, not in the text node: Svelte trims the whitespace around
+	   it and the numbers ran into the dots. */
+	.whole-list .dot {
+		margin: 0 0.3em;
+		color: var(--text-faint);
+	}
+	.row-end {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		white-space: nowrap;
+	}
+	.yours {
+		font-size: var(--fs-xs);
+		font-weight: 700;
+		color: var(--accent);
+	}
+	.whole-list .when {
+		font-size: var(--fs-xs);
 	}
 
 	.teams-list li {

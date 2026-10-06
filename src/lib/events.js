@@ -184,6 +184,41 @@ export async function setEventArchived(eventId, archived = true) {
 }
 
 /**
+ * Rename an event or set its dates.
+ *
+ * Dates are what `currentEvent()` uses to pick a scout's event when they are on
+ * more than one, and nothing in the app could set them: `createEvent()` was
+ * only ever called with a code and a name, so every event was undated and a
+ * scout on two of them was stranded on "A manager puts you on an event".
+ *
+ * `events_manager_update` decides who may; an update RLS filters out returns no
+ * error and no row, so the row count is checked rather than trusted.
+ *
+ * @param {string} eventId
+ * @param {{ name?: string, startsOn?: string|null, endsOn?: string|null }} details
+ */
+export async function setEventDetails(eventId, details) {
+	const patch = {};
+	if (details.name !== undefined) {
+		const name = String(details.name ?? '').trim();
+		if (!name) throw new Error('An event needs a name.');
+		patch.name = name;
+	}
+	if (details.startsOn !== undefined) patch.starts_on = details.startsOn || null;
+	if (details.endsOn !== undefined) patch.ends_on = details.endsOn || null;
+	const starts = patch.starts_on;
+	const ends = patch.ends_on;
+	if (starts && ends && ends < starts) throw new Error('The event ends before it starts.');
+	const { data, error } = await getAuthClient()
+		.from('events')
+		.update(patch)
+		.eq('id', eventId)
+		.select('id');
+	if (error) throw new Error(`Could not save the event: ${error.message}`);
+	if (!data?.length) throw new Error('Could not save the event: you do not manage it.');
+}
+
+/**
  * Who is on this event.
  *
  * @param {string} eventId

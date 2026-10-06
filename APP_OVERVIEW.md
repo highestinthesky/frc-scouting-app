@@ -19,14 +19,16 @@ target, Supabase as the shared mirror.
 `vite-plugin-pwa`, Dexie, `@supabase/supabase-js`. JavaScript with JSDoc, not
 TypeScript.
 
-## Two applications, one deployment
+## One shell, navigation by role
 
-    the scout app     Home · Scouting · Settings      + a Studio button for managers
-    Studio            Event · Schedule · Coverage · Insights · Accounts
+    a scout      Home · Settings
+    a manager    Home · Plan · Run · Pick · Accounts · Settings
 
-Different jobs, different devices, different rooms. v0.73 split them, and Studio
-renders with **no app shell at all** — the root layout returns early on
-`/studio` — because the global tab bar was a trapdoor out of it.
+Studio was a separate application from v0.73 and folded back in on
+`ui-optimization`: scouts never saw it, and the split cost managers an event
+picker outside their tools. `nav-items.js` is the list and `AppNav.svelte`
+renders it; a manager's modes have sub-pages in a segmented control, and the
+event is chosen in the app bar. See CLAUDE.md for the detail.
 
 ## The core model
 
@@ -54,20 +56,27 @@ never receives an email merely for knowing a username.
 |---|---|
 | `/` | Sign in. Every other route redirects here when signed out |
 | `/register` | Redeem an invite code; shows whose invite it is |
-| `/home` | Where a scout lands: greeting, up next, manager notes, upcoming |
-| `/scouting` | The scout's own entries, and what they have recorded |
+| `/home` | Where a scout lands: greeting, up next, manager notes, upcoming, the whole schedule behind a disclosure. A manager also gets one tile per manager page |
+| `/scouting` | A redirect to `/home`; folded into Home at v0.82 |
 | `/scouting/new` | Record a match observation |
 | `/scouting/edit` | Correct a saved observation |
 | `/settings` | Device settings, event, theme, sign out |
 | `/practice` | The auto recorder on the current season, nothing kept. In `NEEDS_NO_EVENT`, so a signed-in device reaches it with no event or scout name |
-| `/studio/event` | Who is on this event — drag scouts on and off |
-| `/studio/schedule` | Publish a TBA schedule, auto-assign, overrides, reminders |
-| `/studio/coverage` | What is being watched and what is not |
-| `/studio/insights` | Team metrics, with `/team/[teamNumber]`, `/compare`, `/picklist` |
+| `/studio/plan/people` | Who is on this event, and who is assigned and recording |
+| `/studio/plan/schedule` | Fetch and publish the TBA schedule |
+| `/studio/plan/assignments` | Assign scouts, auto-assign, conflicts in the draft |
+| `/studio/plan/event` | Name, dates, archive, reset planning data |
+| `/studio/run/matches` | Coverage numbers, quals with coverage and conflicts on their rows, a Gaps/Conflicts filter, per-match overrides |
+| `/studio/run/scouts` | Entries by scout; reminders; collect a file from a phone that cannot sync |
+| `/studio/review` | Next match and its six teams, matches played, find a team |
+| `/studio/[code]/q[n]`, `/studio/[code]/team/[n]` | One match with its replay; one team. Under Review |
+| `/studio/pick` | Team metrics and CSV, with `/compare` and `/picklist` |
 | `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles |
 
-`/accounts` and `/insights/*` still exist as **redirect stubs**, not duplicates.
-v0.73 moved those surfaces into Studio, and deleting the old paths would 404 an
+`/accounts`, `/insights/*`, `/studio`, `/studio/event`, `/studio/schedule`,
+`/studio/coverage`, `/studio/run/coverage` and `/studio/insights/*` exist as **redirect stubs**, not
+duplicates. Those surfaces moved (into Studio at v0.73, then into Plan, Run and
+Pick; Coverage then into Run › Matches), and deleting the old paths would 404 an
 installed PWA that still holds a bundle whose links point at them. Same reasoning
 as the username-lookup rollout gate: a service worker can serve an old bundle
 long after a deploy. Retire them when that window is judged closed, not for
@@ -99,7 +108,11 @@ tidiness.
 - **`metrics.js` / `aggregate.js`** — numeric summaries. Blank means *not
   recorded*; `0` means a recorded zero.
 - **`auto-assign.js` / `assignments.js` / `coverage.js`** — DSATUR assignment,
-  per-match overrides, coverage maths.
+  per-match overrides, coverage maths (`gapMatches()` is Run's Gaps filter).
+- **`event-data.svelte.js` / `plan-state.js` / `review.js`** — the manager
+  pages' one copy of the current event, the derivations Plan and Run share
+  (conflicts, watchers, `scoutCounts()`), and Review's split of the quals into
+  next and played.
 - **`tba.js` / `alliances.js`** — schedule and alliance data. `myMatches()` is
   the single resolver for which robot a scout watches in a match; `auto-assign`
   depends on its answer.

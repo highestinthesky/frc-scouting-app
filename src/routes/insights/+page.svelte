@@ -6,7 +6,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	$effect(() => {
-		goto(`${base}/studio/insights/`, { replaceState: true });
+		goto(`${base}/studio/pick/`, { replaceState: true });
 	});
 </script>
 
