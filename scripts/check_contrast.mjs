@@ -154,13 +154,16 @@ const PAIRS = [
 	['--warning', '--bg-card', 4.5, 'warning text'],
 	['--warning', '--warning-bg', 4.5, 'warning text in a warning banner'],
 
-	// The app bar is fixed purple in both themes, so these do not vary.
+	// The app bar follows the neutral light/dark surfaces.
 	['--bar-ink', '--bar-bg', 4.5, 'app bar text'],
 	['--bar-badge-ink', '--bar-badge-bg', 4.5, 'manager badge'],
 	// The Studio button: outlined at rest, filled with the bar's ink on hover.
 	['--bar-edge', '--bar-bg', 3.0, 'the Studio button outline'],
 	['--bar-bg', '--bar-ink', 4.5, 'the Studio button label when hovered'],
 	['--pending-ink', '--dot-pending', 4.5, 'unsynced count bubble'],
+	...['ok', 'pending', 'offline', 'err', 'idle'].map((status) => [
+		`--dot-${status}`, '--bar-bg', 3.0, `${status} sync status indicator`
+	]),
 
 	// Non-text: a boundary only has to be distinguishable, not readable.
 	['--border-strong', '--bg-card', 3.0, 'input outline'],

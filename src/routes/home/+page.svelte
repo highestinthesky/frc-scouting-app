@@ -1,52 +1,6 @@
 <script>
-	// Hallmark · genre: modern-minimal · macrostructure: Workbench
-	// design-system: design.md (locked — this page follows it, it does not differ)
-	// enrichment: none — design.md forbids it on app pages; function carries it
-	// contrast: AA pass, all four palettes
-	//
-	// Where a scout lands.
-	//
-	// The app used to open on /scouting, which is a list of what you have already
-	// done. That is the wrong first thing: a scout opening the app in a gym is
-	// asking "what now", and answering it with a history means they have to
-	// derive the answer themselves, on a phone, between matches.
-	//
-	// So this page answers, in order, the questions actually being asked:
-	//
-	//   1. am I up?           the next match with one of my teams, unrecorded
-	//   2. has anyone told me anything?   reminders from a manager
-	//   3. what am I watching?            my teams for the event
-	//   4. what have I recorded?          the entries, to check or to fix
-	//
-	// ─── /scouting folded in here ─────────────────────────────────────────────
-	//
-	// There were two pages and only the fourth question separated them. Of the
-	// five things /scouting showed, three were already on this one — the next
-	// unrecorded match, the assigned teams, and the count for today — and its
-	// own tail link called the difference by its real name: "everything you have
-	// recorded". So the list came here and the page went.
-	//
-	// The list is rebuilt in THIS page's idiom rather than moved across with its
-	// markup. /scouting was a workbench — a heading, a CTA and a dense list;
-	// this is a page that speaks to a person and quiets down as it goes. Pasting
-	// one into the other would have produced a page with two voices, which is
-	// what the two pages already were.
-	//
-	// ─── on "pretty" ──────────────────────────────────────────────────────────
-	//
-	// design.md § Per-page allowances: app pages must not use enrichment — no
-	// hero art, no decorative SVG, no illustration. Function carries the page.
-	// That rule is not suspended because this page is the friendly one, so the
-	// warmth here is typographic: one large greeting in the display size, real
-	// generosity of space around it, and everything below it quiet. A gradient
-	// and an illustration would be the easy version and would make this the only
-	// page in the app that looks like a different app.
-	//
-	// ─── and no invented numbers ──────────────────────────────────────────────
-	//
-	// design.md again: every number on screen traces to a recorded entry. The
-	// counts below are computed from IndexedDB, and when there is nothing to
-	// count the line is absent rather than showing a zero that looks like data.
+	// Hallmark · Workbench · design-system: design.md · designed-as-app
+	// Next assignment, manager notes, upcoming matches and recorded entries.
 
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
@@ -61,13 +15,13 @@
 	import { syncState } from '$lib/sync.svelte.js';
 	import { reminders } from '$lib/reminders.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
-	import { greetingFor } from '$lib/greeting.js';
 	import Button from '$lib/components/Button.svelte';
+	import ManagerHome from '$lib/components/ManagerHome.svelte';
 
 	let entries = $state([]);
 	let qmList = $state([]);
 	let loading = $state(true);
-	/** Refreshed once a minute so "in 8 min" and the greeting stay honest. */
+	/** Refreshed once a minute to keep relative match times current. */
 	let now = $state(new Date());
 
 	async function refresh() {
@@ -109,7 +63,7 @@
 	let diagnosis = $state(/** @type {null | {kind: string, total: number}} */ (null));
 
 	async function diagnose() {
-		if (!session.eventCode || myTeams.length > 0 || !auth.signedIn) {
+		if (auth.isManager || !session.eventCode || myTeams.length > 0 || !auth.signedIn) {
 			diagnosis = null;
 			return;
 		}
@@ -138,7 +92,7 @@
 	// Scoped to the current event, and that is a change from /scouting, which
 	// listed every entry on the device from every event it had ever seen.
 	//
-	// Everything else on this page is event-scoped — the greeting names the
+	// Everything else on this page is event-scoped — the header names the
 	// event, "up next" comes from its schedule, the teams are its assignments —
 	// so an all-events list would have been the one thing here that silently
 	// meant something wider than the page around it. That is the same shape as
@@ -177,17 +131,6 @@
 		await refresh();
 	}
 
-	// ── the greeting ──────────────────────────────────────────────────────────
-	//
-	// greeting.js owns the choice, and owns the one hard constraint: `now` ticks
-	// every 60 seconds to keep relative times honest, which re-runs this derived.
-	// Anything seeded on the clock would reshuffle the greeting under whoever is
-	// reading it. It is seeded on the day and the person instead.
-
-	// auth.displayName, not session.scoutName. The typed name is the JOIN KEY and
-	// may be a lowercase handle; this is the one place the app is speaking TO the
-	// person rather than about their rows. scout-identity.js owns that split.
-	const who = $derived(auth.displayName || session.scoutName || '');
 
 	// ── what a scout is actually asking ───────────────────────────────────────
 
@@ -210,7 +153,6 @@
 		});
 	});
 
-	const greeting = $derived(greetingFor(now, who));
 
 	const nextRow = $derived(myRows.find((r) => r.pending.length > 0) ?? null);
 	const nextUp = $derived(
@@ -267,12 +209,6 @@
 	const watchOne = (row) => (row.pending.length ? row.pending[0] : row.teams[0]);
 	const clashCount = (row) => Math.max(0, row.teams.length - 1);
 
-	/** Entries this device recorded today. Real rows only — see the header note. */
-	const todayCount = $derived.by(() => {
-		const start = new Date(now);
-		start.setHours(0, 0, 0, 0);
-		return entries.filter((e) => new Date(e.createdAt) >= start).length;
-	});
 
 	const fromManager = $derived((reminders.visible ?? []).filter((r) => r.kind === 'manager'));
 
@@ -282,21 +218,12 @@
 
 <svelte:head><title>Home · FRC Scout</title></svelte:head>
 
+{#if auth.isManager}
+	<ManagerHome />
+{:else}
 <main>
-	<!-- The one warm moment, carried by type rather than decoration. -->
-	<header class="hello">
-		<h1>
-			{greeting}{#if who}, <span class="name">{who}</span>{/if}
-		</h1>
-		{#if session.eventCode}
-			<p class="context">
-				<span class="event">{session.eventCode}</span>
-				{#if todayCount > 0}
-					<span class="sep" aria-hidden="true">·</span>
-					{todayCount} {todayCount === 1 ? 'entry' : 'entries'} recorded today
-				{/if}
-			</p>
-		{/if}
+	<header class="page-head">
+		<h1>Home</h1>
 	</header>
 
 	{#if loading}
@@ -321,7 +248,7 @@
 						variant="primary"
 						href={newEntryHref(nextUp.match.match_number, watchOne(nextRow))}
 					>
-						Record it
+						Record
 					</Button>
 				</div>
 			{:else if !session.eventCode}
@@ -333,12 +260,12 @@
 						manager.
 					</p>
 				{:else if diagnosis?.kind === 'none-published'}
-					<p class="muted">No assignments published for this event yet.</p>
+					<p class="muted">No assignments yet.</p>
 				{:else}
 					<p class="muted">Nothing assigned yet.</p>
 				{/if}
 			{:else if !qmList.length}
-				<p class="muted">No schedule published for this event yet.</p>
+				<p class="muted">No schedule yet.</p>
 			{:else}
 				<p class="muted">All caught up.</p>
 			{/if}
@@ -347,7 +274,7 @@
 		<!-- ── 2. has anyone told me anything? ──────────────────────────── -->
 		{#if fromManager.length > 0}
 			<section>
-				<h2>From your manager</h2>
+				<h2>Manager notes</h2>
 				<ul class="notes">
 					{#each fromManager as r (r.id)}
 						<li>
@@ -365,7 +292,7 @@
 		<!-- ── 3. what am I watching? ───────────────────────────────────── -->
 		{#if upcoming.length > 0}
 			<section>
-				<h2>After that</h2>
+				<h2>Upcoming</h2>
 				<ul class="later">
 					{#each visibleUpcoming as row (row.match.match_number)}
 						<li>
@@ -415,7 +342,7 @@
 			</div>
 
 			{#if eventEntries.length === 0}
-				<p class="muted">Nothing recorded here yet.</p>
+				<p class="muted">No entries yet.</p>
 			{:else}
 				<ul class="entries">
 					{#each eventEntries as e (e.id)}
@@ -465,64 +392,48 @@
 		<Button href="{base}/practice/">Practice</Button>
 	</section>
 </main>
+{/if}
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	main {
-		max-width: var(--w-list);
-		/* One page rhythm across Home, Scouting and Settings. The top space lives
-		   HERE rather than on the first child, because each page has a different
-		   first child — Scouting can open with a next-match banner — and hanging
-		   it off the child made the three tabs start at three different heights. */
+		max-width: var(--w-read);
 		margin: var(--space-4) auto;
 		padding: var(--space-6) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
 	}
 
-	/* ── the greeting ──────────────────────────────────────────────────────
-	   The only place in the app that gets this much air. It is the first thing
-	   read eleven times a day, so it is large, quiet, and says the person's name
-	   properly rather than their join key. */
-	.hello {
+	/* Functional page heading. */
+	.page-head {
 		padding: 0 0 var(--space-5);
+		padding-bottom: var(--space-5);
+		border-bottom: 1px solid var(--border);
 	}
 	h1 {
 		margin: 0;
-		font-size: var(--fs-display);
+		font-size: var(--fs-page);
 		font-weight: 700;
 		letter-spacing: -0.02em;
 		line-height: 1.15;
-		/* Long names must break inside the word rather than push the page wide. */
+		/* Long headings stay inside the page. */
 		overflow-wrap: anywhere;
-	}
-	.name {
-		color: var(--accent);
-	}
-	.context {
-		margin: var(--space-2) 0 0;
-		font-size: var(--fs-sm);
-		color: var(--text-muted);
-	}
-	.event {
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		font-weight: 600;
-	}
-	.sep {
-		margin: 0 var(--space-1);
-		color: var(--text-faint);
 	}
 
 	/* ── sections: design.md's shared rhythm — uppercase tracked label, then
 	   content. Every page in the app opens a section this way. */
 	section {
-		margin-top: var(--space-5);
+		margin-top: var(--space-6);
 	}
 	h2 {
 		margin: 0 0 var(--space-2);
-		font-size: var(--fs-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
-		font-weight: 700;
+		font-size: var(--fs-md);
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--text-primary);
+		font-weight: 600;
+		margin-bottom: var(--space-3);
 	}
 
 	.muted {
@@ -539,14 +450,11 @@
 		background: var(--bg-card);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
-		padding: var(--space-4);
+		padding: var(--space-5);
 	}
 	/* When there IS something to do, the card says so with a left rule rather
 	   than a fill — a filled card here would be the loudest thing on a page whose
 	   job is to be calm. */
-	.up-next.ready {
-		border-left: 3px solid var(--accent);
-	}
 	.next-row {
 		display: flex;
 		align-items: center;
@@ -621,10 +529,11 @@
 		gap: var(--space-2);
 	}
 	.notes li {
-		background: var(--banner-info-bg);
+		background: var(--bg-card);
 		border: 1px solid var(--banner-info-border);
 		border-radius: var(--radius-md);
-		padding: var(--space-3);
+		padding: var(--space-4);
+
 	}
 	.note-text {
 		margin: 0;
@@ -642,19 +551,21 @@
 	.later {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1);
+		gap: 0;
+		border-top: 1px solid var(--border);
 	}
 	.later-link {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		gap: var(--space-3);
 		min-height: var(--tap-min);
-		padding: var(--space-2) var(--space-3);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-		background: var(--bg-card);
+		padding: var(--space-3) 0;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
 		color: var(--text-primary);
 		text-decoration: none;
+		border-bottom: 1px solid var(--border);
 	}
 	.later-link:hover {
 		background: var(--bg-subtle);
@@ -680,7 +591,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-3);
-		margin-bottom: var(--space-2);
+		margin-bottom: var(--space-3);
 	}
 	/* h2 carries its own bottom margin for every other section; here the flex
 	   row owns the spacing, so the heading gives it back. */
@@ -693,24 +604,23 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1);
+		gap: 0;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		overflow: clip;
 	}
 	.entry {
 		border: 1px solid var(--border);
-		border-left: 3px solid var(--border);
-		border-radius: var(--radius-md);
+
+		border-radius: 0;
 		background: var(--bg-card);
+		border-top: 0;
+		border-right: 0;
 	}
 	/* The alliance is on the edge of the card rather than only in the text: it
 	   is the one property of an entry a scout scans for, and a rule down the side
 	   survives being glanced at where a word does not. The word stays too —
 	   colour is never the only signal. */
-	.entry[data-color='red'] {
-		border-left-color: var(--alliance-red);
-	}
-	.entry[data-color='blue'] {
-		border-left-color: var(--alliance-blue);
-	}
 	.entry-row {
 		display: flex;
 		align-items: stretch;
@@ -719,12 +629,15 @@
 	.entry-link {
 		flex: 1;
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		gap: var(--space-3);
 		min-height: var(--tap-min);
 		padding: var(--space-2) var(--space-3);
 		color: var(--text-primary);
 		text-decoration: none;
+		padding-top: var(--space-3);
+		padding-bottom: var(--space-3);
+		min-width: 0;
 	}
 	.entry-link:hover {
 		background: var(--bg-subtle);
@@ -787,5 +700,9 @@
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
 	}
+
+	.next-row .qm { font-size: var(--fs-xl); }
+
+	.entry:last-child { border-bottom: 0; }
 
 </style>

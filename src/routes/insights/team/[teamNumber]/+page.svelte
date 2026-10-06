@@ -11,9 +11,13 @@
 	});
 </script>
 
-<p class="wait">This team moved into Studio. Taking you there…</p>
+<p class="wait">Opening…</p>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	.wait {
 		margin: var(--space-6) auto;
 		max-width: 32rem;

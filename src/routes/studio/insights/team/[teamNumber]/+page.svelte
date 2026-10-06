@@ -26,10 +26,14 @@
 	});
 </script>
 
-<p class="redirect">Opening team {page.params.teamNumber}…</p>
+<p class="wait">Opening…</p>
 
 <style>
-	.redirect {
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
+	.wait {
 		padding: var(--space-4);
 		color: var(--text-muted);
 	}

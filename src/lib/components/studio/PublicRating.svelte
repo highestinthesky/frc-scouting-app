@@ -28,7 +28,6 @@
 
 	let state = $state('idle'); // idle | loading | done
 	let compared = $state([]);
-	let reached = $state(0);
 	let failed = $state(0);
 	let unreadable = $state([]);
 	let reason = $state('');
@@ -42,7 +41,6 @@
 		state = 'loading';
 		reason = '';
 		unreadable = [];
-		reached = 0;
 		failed = 0;
 
 		const withRating = [];
@@ -55,7 +53,6 @@
 				withRating.push({ team: r.team, ours: r.ours, theirs: null });
 				continue;
 			}
-			reached += 1;
 			if (res.epa === null && res.sawKeys?.length) {
 				// A response ARRIVED and could not be read. Completely different
 				// from the service being down, and it must not look the same —
@@ -87,18 +84,14 @@
 			<!-- Not an error state. Statbotics being unavailable is a normal
 			     afternoon, and every number on this page is still true without it. -->
 			<p class="note">
-				Statbotics did not answer for {failed}
-				{failed === 1 ? 'team' : 'teams'}{reached > 0 ? `, answered for ${reached}` : ''}.
+				Statbotics unavailable for {failed} {failed === 1 ? 'team' : 'teams'}.
 				{reason}
-				Your own numbers are unaffected.
 			</p>
 		{/if}
 
 		{#if unreadable.length > 0}
 			<p class="note warn">
-				Statbotics answered but this app could not find a rating in the reply. It sent:
-				<code>{unreadable.join(', ')}</code>. That is a mapping to fix in
-				<code>statbotics.js</code>, not an outage.
+				Statbotics returned an unreadable rating.
 			</p>
 		{/if}
 
@@ -156,10 +149,6 @@
 		background: var(--warning-bg);
 		border-color: var(--warning-border);
 		color: var(--warning);
-	}
-	.note code {
-		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-		font-size: var(--fs-xs);
 	}
 	.team {
 		font-weight: 700;

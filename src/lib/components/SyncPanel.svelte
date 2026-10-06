@@ -108,41 +108,41 @@
 			return {
 				tone: 'idle',
 				head: 'No event chosen',
-				body: 'Pick an event in Settings to share what you record with your team.'
+				body: 'Choose an event in Settings.'
 			};
 		}
 		if (syncState.reason === 'signed-out') {
 			return {
 				tone: 'idle',
-				head: 'Paused — not signed in',
-				body: 'Everything you record is saved on this phone. Sign in to send it to your team — do that before you leave the venue.'
+				head: 'Sign in to sync',
+				body: 'Entries are saved on this device.'
 			};
 		}
 		if (syncState.reason === 'no-such-event') {
 			return {
 				tone: 'warn',
 				head: 'Not on this event',
-				body: `You are set to ${session.eventCode}, which is not an event you belong to. A manager has to add you — recording still works meanwhile.`
+				body: `Ask a manager to add you to ${session.eventCode}. Entries remain on this device.`
 			};
 		}
 		if (syncState.status === 'offline') {
 			return {
 				tone: 'warn',
 				head: 'Offline',
-				body: 'Keep scouting. Everything is saved here and goes up the moment you have signal again.'
+				body: 'Entries are saved here and sync when online.'
 			};
 		}
 		if (syncState.status === 'error') {
 			return {
 				tone: 'err',
 				head: 'Sync problem',
-				body: syncState.error || 'Something went wrong talking to the server. It will keep retrying.'
+				body: syncState.error || 'Could not reach the server. Retrying.'
 			};
 		}
 		if (syncState.status === 'connecting') {
-			return { tone: 'pending', head: 'Syncing…', body: 'Sending and collecting entries.' };
+			return { tone: 'pending', head: 'Syncing…', body: '' };
 		}
-		return { tone: 'ok', head: 'Synced', body: 'Everything on this device has reached your team.' };
+		return { tone: 'ok', head: 'Synced', body: '' };
 	});
 
 	const pending = $derived(syncState.pendingCount ?? 0);
@@ -170,7 +170,7 @@
 	></button>
 	<div class="sheet {view.tone}" role="status">
 		<strong class="head">{view.head}</strong>
-		<p class="body">{view.body}</p>
+		{#if view.body}<p class="body">{view.body}</p>{/if}
 
 		<dl class="facts">
 			<div>

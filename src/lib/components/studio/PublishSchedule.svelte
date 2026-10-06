@@ -35,12 +35,6 @@
 		/>
 	</label>
 
-	<p class="key-summary">
-		Your code: <strong>{session.eventCode}</strong>
-		<span class="key-sep">·</span>
-		TBA key: <strong>{(tbaEventKey || '').trim() || session.eventCode}</strong>
-	</p>
-
 	<label class="field">
 		<span class="label">TBA API key</span>
 		<input
@@ -54,20 +48,18 @@
 
 	<div class="actions-row">
 		<Button variant="primary" disabled={busy || !tbaApiKey} onclick={onFetch}>
-			{busy ? '…' : '1. Fetch from TBA'}
+			{busy ? '…' : 'Fetch schedule'}
 		</Button>
 		<Button variant="primary" disabled={busy || !cached} onclick={onPublish}>
-			{busy ? '…' : '2. Publish to teammates'}
+			{busy ? '…' : 'Publish'}
 		</Button>
 		<Button disabled={busy || !cached} onclick={onClearCache}>Clear local cache</Button>
 	</div>
 
 	{#if cached}
 		<p class="muted small">
-			Local cache: {qmList.length} qual matches · fetched
+			Fetched
 			{relativeTime(cached.cachedAt, now)}
-			({new Date(cached.cachedAt).toLocaleString()})
-			{#if cached.fetchedBy} by {cached.fetchedBy}{/if}
 		</p>
 	{:else}
 		<p class="muted small">No schedule fetched yet.</p>
@@ -90,17 +82,6 @@
 	}
 	.label { font-weight: 600; font-size: var(--fs-md); }
 	.help { color: var(--text-faint); font-size: var(--fs-sm); }
-	.key-summary {
-		margin: 0 0 var(--space-4);
-		padding: var(--space-2) var(--space-3);
-		background: var(--bg-subtle);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-		font-size: var(--fs-sm);
-		color: var(--text-muted);
-	}
-	.key-summary strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
-	.key-sep { opacity: 0.5; margin: 0 var(--space-2); }
 	input {
 		font: inherit;
 		padding: var(--space-2) var(--space-3);

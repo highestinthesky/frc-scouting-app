@@ -68,27 +68,17 @@
 	     a manager should learn why it will not open, not conclude the app is
 	     broken and ask someone mid-match. -->
 	<div class="gate">
-		<h1>Studio is a manager surface</h1>
+		<h1>Manager access required</h1>
 		<p>
-			Your account is a {auth.role ?? 'scout'}. A super can change that — everything
-			you record is unaffected either way.
+			Ask a team admin for access.
 		</p>
 		<a href="{base}/home/">Back to Home</a>
 	</div>
 {:else}
 	<div class="studio">
 		<nav aria-label="Studio sections">
-			<div class="brand">
-				<span class="mark">Studio</span>
-				<!-- The event this surface is operating on. "Which event am I editing"
-				     is the one thing that must never be ambiguous here, and the app bar
-				     that used to answer it is gone.
-				     Sitting ON the purple fill rather than under it: this is the one
-				     member of the palette that takes light text, and the event code is
-				     the fact that must never be missed. -->
-				{#if session.eventCode}
-					<span class="at">{session.eventCode}</span>
-				{/if}
+			<div class="event-context">
+				<span class="at">{session.eventCode || 'No event'}</span>
 			</div>
 			<ul>
 				{#each TABS as tab (tab.href)}
@@ -98,6 +88,15 @@
 							aria-current={current === tab.href ? 'page' : undefined}
 							class:on={current === tab.href}
 						>
+							<span class="nav-symbol" aria-hidden="true">
+								<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+									{#if tab.href === 'event'}<path d="M7 4v4m10-4v4M4 10h16M5 6h14a1 1 0 0 1 1 1v13H4V7a1 1 0 0 1 1-1Z" />
+									{:else if tab.href === 'schedule'}<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />
+									{:else if tab.href === 'coverage'}<path d="M12 3 3 7v6c0 4 9 8 9 8s9-4 9-8V7l-9-4Z" /><path d="m8 12 3 3 5-6" />
+									{:else if tab.href === 'insights'}<path d="M4 4v16h16M8 16v-5m5 5V7m5 9v-8" />
+									{:else}<circle cx="9" cy="8" r="3" /><path d="M3 20v-2a6 6 0 0 1 12 0v2m1-15a3 3 0 0 1 0 6m3 9v-2a6 6 0 0 0-3-5" />{/if}
+								</svg>
+							</span>
 							<span class="label">{tab.label}</span>
 						</a>
 					</li>
@@ -107,7 +106,7 @@
 			     The global tab bar used to be the escape route and it was a trapdoor:
 			     it left Studio without offering a way back. -->
 			<a class="out" href="{base}/home/">
-				<span aria-hidden="true">←</span> Leave Studio
+				<span aria-hidden="true">←</span> Home
 			</a>
 		</nav>
 
@@ -116,206 +115,43 @@
 {/if}
 
 <style>
-	.gate {
-		max-width: 32rem;
-		margin: calc(var(--space-6) + var(--safe-top)) auto var(--space-6);
-		padding: 0 var(--space-4);
-		color: var(--text-muted);
-	}
-	.gate h1 {
-		font-size: var(--fs-xl);
-		color: var(--text-primary);
-		margin: 0 0 var(--space-3);
-	}
-	.gate a {
-		color: var(--accent);
-	}
-
-	/* The sidebar is a SURFACE, flush to the viewport edge and running its full
-	   height, rather than a floating column with padding around it. That is the
-	   difference between "an application with a navigation rail" and "a page that
-	   happens to have links down the side", and it was the second one. */
-	.studio {
-		display: grid;
-		grid-template-columns: 15rem minmax(0, 1fr);
-		align-items: stretch;
-		/* No reservation for the phone shell's bottom bar — Studio does not render
-		   it. This used to subtract a nav's height from a viewport that has none. */
-		min-height: 100dvh;
-	}
-
-
-	/* No `align-self: start` here, and that is the whole rule.
-	   A sticky element can only stick INSIDE its containing block, which for a
-	   grid item is its grid area. `align-self: start` shrinks that area to the
-	   item's own height, so the rail pinned for exactly one viewport and then
-	   scrolled away with the page — on Insights, where the table is the thing you
-	   scroll and the navigation is the thing you need while scrolling it.
-	   Stretching keeps the area the full height of the row. */
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app · tone: quiet utilitarian
+	 * pre-emit critique: P5 H5 E4 S5 R5 V4
+	 */
+	.gate { max-width: var(--w-form); margin: calc(var(--space-7) + var(--safe-top)) auto; padding: 0 var(--space-4); color: var(--text-muted); }
+	.gate h1 { font-size: var(--fs-page); color: var(--text-primary); }
+	.gate a { color: var(--accent); }
+	.studio { display: grid; grid-template-columns: 13.5rem minmax(0, 1fr); align-items: stretch; min-height: 100dvh; }
 	nav {
-		position: sticky;
-		top: 0;
-		/* The app has no box-sizing reset — everything is content-box — so
-		   `height: 100dvh` plus 2rem of padding made this 752px against a 720px
-		   viewport. A sticky element taller than the viewport pins to the TOP only
-		   until its bottom edge arrives, then travels with the page: the rail slid
-		   32px and looked like sticky was simply broken. Border-box here rather
-		   than globally, because flipping the box model under every page in the app
-		   is not a thing to do inside a visual pass. */
-		box-sizing: border-box;
-		height: 100dvh;
-		/* And if the rail ever outgrows the viewport, IT scrolls. */
-		overflow-y: auto;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-		/* Clear of the status bar and the notch. app.html asks for
-		   viewport-fit=cover and a translucent status bar, so on an installed
-		   iPhone app page content starts at y=0 — and Studio, having no app bar
-		   to carry the inset, put its event code under the clock. The scout
-		   shell's app bar already does this; Studio skipped the shell and the
-		   inset with it. Zero everywhere else, so max() changes nothing there. */
-		padding: max(var(--space-4), env(safe-area-inset-top, 0px)) var(--space-3)
-			max(var(--space-4), env(safe-area-inset-bottom, 0px))
-			max(var(--space-3), env(safe-area-inset-left, 0px));
-		background: var(--bg-card);
-		border-right: 1px solid var(--border);
+		position: sticky; top: 0; height: 100dvh; overflow-y: auto;
+		display: flex; flex-direction: column; gap: var(--space-2);
+		padding: max(var(--space-6), env(safe-area-inset-top, 0px)) var(--space-3) max(var(--space-5), env(safe-area-inset-bottom, 0px));
+		padding-left: max(var(--space-3), env(safe-area-inset-left, 0px));
+		background: var(--bg-card); border-right: 1px solid var(--border);
 	}
-
-	/* The one fill in the palette that takes light text, spent on the one fact
-	   that must never be ambiguous: which event this surface is editing. */
-	.brand {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		padding: var(--space-3);
-		border-radius: var(--radius-md);
-		background: var(--studio-fill);
-		color: var(--on-studio-fill);
-	}
-	.mark {
-		font-size: var(--fs-lg);
-		font-weight: 700;
-		letter-spacing: -0.01em;
-	}
-	/* Named .at, not .on — `nav a.on` marks the current tab, and a bare `.on`
-	   rule would have matched it too, rendering the active link tiny and
-	   uppercase. Two meanings, one class name, one of them silently wrong. */
-	.at {
-		font-size: var(--fs-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		font-weight: 600;
-		opacity: 0.85;
-	}
-	nav ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		margin-right: auto;
-		width: 100%;
-	}
-	nav a {
-		display: flex;
-		align-items: center;
-		min-height: var(--tap-min);
-		padding: var(--space-2) var(--space-3);
-		border-radius: var(--radius-md);
-		border-left: 3px solid transparent;
-		color: var(--text-muted);
-		text-decoration: none;
-	}
-	nav a:hover {
-		background: var(--bg-subtle);
-		color: var(--text-primary);
-	}
-	/* Current section carries a rule, a fill and a weight change — never colour
-	   alone. The rule is what survives being looked at from across a table. */
-	nav a.on {
-		background: var(--accent-soft);
-		border-left-color: var(--accent);
-		color: var(--text-primary);
-	}
-	nav a.on .label {
-		color: var(--accent);
-	}
-	.label {
-		font-weight: 600;
-		font-size: var(--fs-md);
-	}
-	.out {
-		display: inline-flex;
-		align-items: center;
-		/* start, not stretch. As a stretched column child it filled the rail and
-		   its two words centred themselves over two lines on a phone. */
-		align-self: flex-start;
-		gap: var(--space-2);
-		min-height: var(--tap-min);
-		padding: var(--space-2) var(--space-3);
-		border-radius: var(--radius-md);
-		font-size: var(--fs-sm);
-		font-weight: 600;
-		color: var(--accent);
-		text-decoration: none;
-	}
-	.out:hover {
-		background: var(--bg-subtle);
-	}
-
-	main {
-		min-width: 0; /* lets wide tables scroll instead of stretching the grid */
-		/* Dense by design, but not unboundedly: --w-board is the width a table is
-		   readable at, and a 2400px row is not more information, it is a longer
-		   saccade. Left-aligned against the rail rather than centred, because the
-		   rail is where the eye starts. */
-		max-width: var(--w-board);
-		padding: var(--space-5);
-		/* A phone on its side puts the notch on one edge or the other. */
-		padding-right: max(var(--space-5), env(safe-area-inset-right, 0px));
-		padding-bottom: max(var(--space-5), env(safe-area-inset-bottom, 0px));
-	}
-
-	/* Below the tablet breakpoint the sidebar becomes a strip above the content.
-	   Studio is a laptop surface, but a manager WILL open it on a phone to check
-	   one thing, and a 15rem column beside content at 375px is unreadable.
-
-	   LAST in the file, not next to .studio where it reads better. A media query
-	   adds no specificity, so `nav { position: static }` in here and
-	   `nav { position: sticky }` outside it are a tie broken by source order —
-	   and with this block written first, every phone override silently lost. The
-	   rail stayed a 15rem sticky column at 375px. */
+	.event-context { display: flex; align-items: center; min-height: var(--tap-min); padding: var(--space-2) var(--space-3) var(--space-4); }
+	.at { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-muted);  overflow-wrap: anywhere; }
+	nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); width: 100%; }
+	nav a { display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap-min); padding: var(--space-2) var(--space-3); border: 1px solid transparent; border-radius: var(--radius-md); color: var(--text-muted); text-decoration: none; white-space: nowrap; }
+	nav a:hover { background: var(--bg-subtle); color: var(--text-primary); }
+	nav a.on { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); }
+	.nav-symbol { display: flex; flex: none; opacity: 0.85; }
+	.label { font-weight: 500; font-size: var(--fs-sm); }
+	.on .label { font-weight: 650; }
+	.out { align-self: flex-start; margin-top: auto; font-size: var(--fs-sm); }
+	main { min-width: 0; width: 100%; max-width: var(--w-board); padding: var(--space-7); padding-right: max(var(--space-7), env(safe-area-inset-right, 0px)); padding-bottom: max(var(--space-7), env(safe-area-inset-bottom, 0px)); }
+	@media (max-width: 63.9375rem) { main { padding: var(--space-5); padding-right: max(var(--space-5), env(safe-area-inset-right, 0px)); padding-bottom: max(var(--space-5), env(safe-area-inset-bottom, 0px)); } }
 	@media (max-width: 47.9375rem) {
-		.studio {
-			grid-template-columns: minmax(0, 1fr);
-		}
-		nav {
-			position: static;
-			height: auto;
-			border-right: none;
-			border-bottom: 1px solid var(--border);
-		}
-		nav ul {
-			flex-direction: row !important;
-			overflow-x: auto;
-		}
-		nav li {
-			flex: 1 0 auto;
-		}
-		/* The exit stays visible on phones. It is the only way out of Studio, and
-		   hiding it was the bug: on a phone there was no route back at all. */
-		.brand {
-			flex-direction: row;
-			align-items: center;
-			justify-content: space-between;
-		}
-		main {
-			padding: var(--space-4);
-			padding-left: max(var(--space-4), env(safe-area-inset-left, 0px));
-			padding-right: max(var(--space-4), env(safe-area-inset-right, 0px));
-			padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
-		}
+		.studio { grid-template-columns: minmax(0, 1fr); }
+		nav { position: static; height: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); padding: max(var(--space-3), env(safe-area-inset-top, 0px)) var(--space-3) var(--space-2); padding-left: max(var(--space-3), env(safe-area-inset-left, 0px)); padding-right: max(var(--space-3), env(safe-area-inset-right, 0px)); border-right: 0; border-bottom: 1px solid var(--border); }
+		.event-context { padding: var(--space-2) var(--space-1); }
+		.at { padding-left: 0; }
+		nav ul { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; gap: var(--space-1); }
+		nav li { flex: 1 0 auto; }
+		nav ul a { justify-content: center; gap: var(--space-2); padding: var(--space-2); }
+		.nav-symbol { display: none; }
+		.out { grid-column: 2; grid-row: 1; align-self: center; margin: 0; padding: var(--space-2); }
+		main { padding: var(--space-5) var(--space-4); padding-left: max(var(--space-4), env(safe-area-inset-left, 0px)); padding-right: max(var(--space-4), env(safe-area-inset-right, 0px)); padding-bottom: max(var(--space-5), env(safe-area-inset-bottom, 0px)); }
 	}
 </style>

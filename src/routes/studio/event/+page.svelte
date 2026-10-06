@@ -257,7 +257,7 @@
 
 {#if !selected}
 	<Panel tone="quiet">
-		<p class="empty-line">No event yet. Create one and it becomes yours to staff.</p>
+		<p class="empty-line">No event yet.</p>
 		<EventPicker />
 	</Panel>
 {:else}
@@ -326,7 +326,7 @@
 				aria-label="Team members not on this event"
 			>
 				{#if available.length === 0}
-					<p class="drop-hint">Everyone is on this event. Drag a name here to take them off.</p>
+					<p class="drop-hint">Everyone is assigned.</p>
 				{/if}
 			<ul>
 				{#each available as p (p.id)}
@@ -374,6 +374,10 @@
 {#if msg}<p class="ok">{msg}</p>{/if}
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	/* Panel owns the two columns now. What is left is the roster row itself and
 	   the drag state it carries. */
 

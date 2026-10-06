@@ -273,7 +273,7 @@
 				</label>
 				<label class="field wide">
 					<span class="label">Email</span>
-					<small class="help">Only ever used for a password reset.</small>
+					<small class="help">For password recovery.</small>
 					<input type="email" bind:value={newEmail} autocomplete="off" />
 				</label>
 				<div class="field">
@@ -290,7 +290,7 @@
 
 			{#if handover}
 				<div class="handover">
-					<p class="handover-lead">Give these to {handover.username ? 'them' : 'them'} now.</p>
+					<p class="handover-lead">Share these credentials now.</p>
 					<dl>
 						<dt>Username</dt>
 						<dd><code>{handover.username}</code></dd>
@@ -298,8 +298,7 @@
 						<dd><code>{handover.temporaryPassword}</code></dd>
 					</dl>
 					<p class="handover-warn">
-						This is the only time the password is shown. Nothing stores it — if it
-						is lost before they sign in, delete the account and make another.
+						The password is shown once. If lost, recreate the account.
 					</p>
 				</div>
 			{/if}
@@ -307,8 +306,7 @@
 
 		<Panel title="Invite someone instead">
 			<p class="muted">
-				Read the code out to them. They pick their own username and password at
-				<a href="{base}/register/">the sign-up page</a>.
+				Use this code at <a href="{base}/register/">sign-up</a>.
 			</p>
 
 			<!-- ─── paste a roster ──────────────────────────────────────────
@@ -318,7 +316,7 @@
 			     mode is not a bug, it is a queue. 0023 made an invite carry a name,
 			     which makes a batch of invites just a batch of names. -->
 			<details class="bulk">
-				<summary>Paste a whole roster</summary>
+				<summary>Paste roster</summary>
 
 				<label class="field">
 					<span class="label">One name per line</span>
@@ -509,6 +507,7 @@
 									disabled={busy || self}
 									onchange={(e) => changeRole(p, e.currentTarget.value)}
 									label=""
+									ariaLabel="Role for {p.username}"
 									options={[
 										...roleOptions.map((r) => ({ value: r, label: r })),
 										...(roleOptions.includes(p.role) ? [] : [{ value: p.role, label: p.role }])
@@ -628,7 +627,7 @@
 	.handover dt { color: var(--text-muted); font-size: var(--fs-sm); }
 	.handover dd { margin: 0; }
 	.handover code {
-		font-family: ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: var(--fs-md);
 		/* One tap selects the whole password. WebKit only honours the prefix. */
 		-webkit-user-select: all;
@@ -729,7 +728,7 @@
 		border-radius: var(--radius-md);
 	}
 	.code {
-		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-family: var(--font-mono);
 		font-size: var(--fs-xl);
 		font-weight: 700;
 		letter-spacing: 0.12em;

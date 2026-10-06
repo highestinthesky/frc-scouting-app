@@ -33,7 +33,9 @@
 <svelte:head><title>Sign in · FRC Scout</title></svelte:head>
 
 <main>
-	<h1>FRC Scout</h1>
+	<header class="welcome">
+		<h1>Sign in</h1>
+	</header>
 
 	<form onsubmit={submit}>
 		<label class="field">
@@ -61,7 +63,7 @@
 	</form>
 
 	<p class="alt">
-		Got an invite code? <a href="{base}/register/">Create your account</a>.
+		<a href="{base}/register/">Create account</a>
 	</p>
 
 	{#if !AUTH_ENFORCED}
@@ -93,22 +95,28 @@
 	 */
 
 	main {
-		max-width: 22rem;
+		max-width: 28rem;
 		margin: 0 auto;
-		padding: calc(var(--space-6) + var(--safe-top)) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
+		padding: calc(var(--space-8) + var(--safe-top)) var(--space-5) var(--space-7);
 	}
 	h1 {
 		margin: 0;
-		font-size: var(--fs-xl);
+		font-size: var(--fs-page);
 		letter-spacing: -0.02em;
+		font-weight: 650;
+		line-height: 1.2;
+		max-width: 16ch;
 	}
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1);
-		margin-bottom: var(--space-4);
+		gap: var(--space-2);
+		margin-bottom: var(--space-5);
 	}
-	.label { font-weight: 600; font-size: var(--fs-md); }
+	.label {
+		font-weight: 600;
+		font-size: var(--fs-sm);
+	}
 	input {
 		font: inherit;
 		min-height: var(--tap-min);
@@ -133,8 +141,21 @@
 	}
 	.alt {
 		margin: var(--space-5) 0 0;
-		font-size: var(--fs-md);
+		font-size: var(--fs-sm);
 		color: var(--text-muted);
+		text-align: center;
+		line-height: 1.7;
 	}
-	.alt a { color: var(--accent); }
+	.alt a {
+		color: var(--accent);
+		display: inline-block;
+		padding: var(--space-1) 0;
+	}
+
+	.welcome { margin-bottom: var(--space-5); }
+
+	form { padding: var(--space-5); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+
+	@media (max-width: 40rem) { main { padding-top: calc(var(--space-7) + var(--safe-top)); padding-left: var(--space-4); padding-right: var(--space-4); } }
+
 </style>

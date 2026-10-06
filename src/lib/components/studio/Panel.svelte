@@ -61,7 +61,7 @@
 		background: var(--bg-card);
 		/* Clips a flush table's first and last rows to the radius. Without it the
 		   corners of a full-bleed table square off the panel they sit in. */
-		overflow: hidden;
+		overflow: clip;
 	}
 	/* Raised, for a panel inside a panel. On a dark ground elevation is a lighter
 	   surface, not a shadow — a 6%-black drop shadow is invisible at #14121f. */
@@ -80,7 +80,7 @@
 		justify-content: space-between;
 		gap: var(--space-3);
 		flex-wrap: wrap;
-		padding: var(--space-3) var(--space-4);
+		padding: var(--space-4) var(--space-5);
 		border-bottom: 1px solid var(--border);
 	}
 	.titles {
@@ -89,11 +89,12 @@
 	h2 {
 		margin: 0;
 		font-size: var(--fs-md);
+		color: var(--text-primary);
 		font-weight: 600;
 		letter-spacing: -0.01em;
 	}
 	.hint {
-		margin: 2px 0 0;
+		margin: var(--space-1) 0 0;
 		font-size: var(--fs-sm);
 		color: var(--text-muted);
 	}
@@ -105,9 +106,14 @@
 	}
 
 	.body {
-		padding: var(--space-4);
+		padding: var(--space-5);
 	}
 	.body.flush {
 		padding: 0;
+	}
+	@media (max-width: 40rem) {
+		header, .body { padding: var(--space-4); }
+		.body.flush { padding: 0; }
+		.actions { width: 100%; }
 	}
 </style>

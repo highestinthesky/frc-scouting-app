@@ -352,7 +352,7 @@
 	<PageHead
 		title="Insights"
 		sub={summary
-			? `${summary.totalEntries} entries · last ${relTime(summary.lastCreatedAt)} ago`
+			? `Last entry ${relTime(summary.lastCreatedAt)}`
 			: ''}
 	>
 		{#snippet actions()}
@@ -375,7 +375,6 @@
 		<!-- ── Empty state ─────────────────────────────────────────────── -->
 		<Panel tone="quiet">
 			<p class="empty-title">No entries yet.</p>
-			<p class="muted">Scout entries appear here as they sync in.</p>
 		</Panel>
 
 	{:else}
@@ -383,14 +382,7 @@
 			<Stat label="Entries" value={summary.totalEntries} />
 			<Stat label="Teams" value={summary.teamCount} />
 			<Stat label="Matches" value={summary.matchCount} />
-			<Stat
-				label="Scouts"
-				value={summary.scoutCount}
-				note={thinCoverageTeams.length > 0
-					? `${thinCoverageTeams.length} thin`
-					: ''}
-				tone={thinCoverageTeams.length > 0 ? 'warn' : 'default'}
-			/>
+			<Stat label="Scouts" value={summary.scoutCount} />
 		</Stats>
 
 		<!-- ── Toolbar ─────────────────────────────────────────────────── -->
@@ -692,6 +684,10 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	/* What is left after Panel, Stat, Stats, Toolbar and Table took their share.
 	   This page had 92 rules; four shapes repeated made up most of them, and the
 	   remainder is genuinely about teams and entries rather than about boxes. */
@@ -844,8 +840,7 @@
 	.thin-bar {
 		background: var(--bg-subtle);
 	}
-	/* Colour is not the only signal — the count carries a title, and the Scouts
-	   stat above the table names the number of thin teams in words. */
+	/* The count has a title; the coverage notice also names the thin teams. */
 	.thin-count {
 		color: var(--warning);
 		font-weight: 600;
@@ -968,16 +963,11 @@
 		gap: var(--space-2);
 	}
 	.team-entry {
+		border: 1px solid var(--border);
 		background: var(--bg-card);
 		border-radius: var(--radius-md);
 		padding: var(--space-2) var(--space-3);
-		border-left: 3px solid var(--border-strong);
-	}
-	.team-entry[data-color='red'] {
-		border-left-color: var(--alliance-red);
-	}
-	.team-entry[data-color='blue'] {
-		border-left-color: var(--alliance-blue);
+
 	}
 	.hdr {
 		display: flex;

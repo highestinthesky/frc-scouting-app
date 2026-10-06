@@ -12,8 +12,8 @@
 //   - No quality gate: a saved-but-sparse entry still counts as submitted.
 // (See IMPROVEMENTS.md §1B for the rationale.)
 
-import { rowScout } from './scout-identity.js';
-import { teamsInMatch } from './tba.js';
+import { rowScout, sameScout, scoutRef } from './scout-identity.js';
+import { teamsInMatch, qualMatches } from './tba.js';
 
 /** Stable key for a (match, team) cell. */
 export function cellKey(matchNumber, teamNumber) {
@@ -134,4 +134,42 @@ export function coverageLevel(scoutedTeams, totalTeams) {
 	if (scoutedTeams >= totalTeams) return 'full';
 	if (scoutedTeams > 0) return 'partial';
 	return 'none';
+}
+
+/** Current event coverage, excluding future matches from the denominator.
+ * Officially played matches with no entries still need follow-up. Submissions
+ * also mark a match as started when its TBA result has not arrived yet.
+ */
+export function eventOverview({ eventCode, matches = [], entries = [], roster = [] }) {
+	const eventEntries = entries.filter(e => e.eventCode === eventCode);
+	const index = buildEntryIndex(eventEntries, eventCode);
+	const rows = qualMatches(matches).map(match => {
+		const coverage = matchCoverage(match, index);
+		const scored = ['red', 'blue'].every(color => {
+			const score = match.alliances?.[color]?.score;
+			return typeof score === 'number' && score >= 0;
+		});
+		return { match, coverage, played: Boolean(match.actual_time) || scored };
+	});
+	const tracked = rows.filter(r => r.played || r.coverage.scoutedTeams > 0);
+	const expected = tracked.reduce((n, r) => n + r.coverage.totalTeams, 0);
+	const recorded = tracked.reduce((n, r) => n + r.coverage.scoutedTeams, 0);
+	const activity = roster.filter(p => p.role === 'scout').map(person => {
+		const name = `${person.first_name ?? ''} ${person.last_name ?? ''}`.trim() || person.username || '';
+		const who = scoutRef(name, person.profileId);
+		return {
+			person, name: name || 'Unnamed scout',
+			count: eventEntries.filter(e => sameScout(rowScout(e), who)).length
+		};
+	}).sort((a, b) => a.count - b.count || a.name.localeCompare(b.name));
+	return {
+		matchCount: rows.length, trackedCount: tracked.length, expected, recorded,
+		percent: expected ? Math.round(recorded / expected * 100) : null,
+		completeCount: tracked.filter(r => r.coverage.complete).length,
+		gaps: tracked.filter(r => !r.coverage.complete),
+		latestMatch: tracked.at(-1)?.match ?? null,
+		nextMatch: rows.find(r => !r.played && r.coverage.scoutedTeams === 0)?.match ?? null,
+		teamsSeen: new Set(eventEntries.map(e => e.teamNumber)).size,
+		activity
+	};
 }

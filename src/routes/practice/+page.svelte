@@ -11,10 +11,8 @@
 	// The alliance is a choice rather than a given because there is no match to
 	// derive it from. Changing it re-keys the recorder, so a half-finished
 	// recording from the other end of the field is not carried across.
-	import { currentSeason } from '$lib/seasons/index.js';
 	import AutoRecorder from '$lib/components/AutoRecorder.svelte';
 
-	const season = currentSeason();
 
 	/** @type {'red'|'blue'} */
 	let alliance = $state('red');
@@ -27,7 +25,6 @@
 <main>
 	<header class="page-head">
 		<h1>Practice</h1>
-		<p class="season">{season.year} {season.name}</p>
 	</header>
 
 	<div class="alliance-row" role="group" aria-label="Alliance">
@@ -48,24 +45,26 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	/* Same column as the entry form, which is the screen this rehearses. */
 	main {
 		max-width: var(--w-form);
 		margin: var(--space-4) auto;
-		padding: var(--space-6) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
+		padding: var(--space-5) var(--space-4) calc(var(--nav-bottom-h) + var(--space-6));
 	}
 	.page-head {
 		margin: 0 0 var(--space-4);
+		padding-bottom: var(--space-4);
+		margin-bottom: var(--space-5);
+		border-bottom: 1px solid var(--border);
 	}
 	h1 {
 		margin: 0;
-		font-size: var(--fs-xl);
+		font-size: var(--fs-page);
 		letter-spacing: -0.02em;
-	}
-	.season {
-		margin: var(--space-1) 0 0;
-		font-size: var(--fs-sm);
-		color: var(--text-muted);
 	}
 
 	.alliance-row {
@@ -107,4 +106,5 @@
 			transition-duration: 0.01ms;
 		}
 	}
+
 </style>

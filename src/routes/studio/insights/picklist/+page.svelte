@@ -376,7 +376,6 @@
 <main>
 	<PageHead
 		title="Picklist"
-		sub={eventCode ?? ''}
 		back="{base}/studio/insights/"
 		backLabel="Back to Insights"
 	/>
@@ -385,17 +384,16 @@
 	     things a manager needs to know before alliance selection, not during. -->
 	<p class="share" class:ro={!isManager}>
 		{#if isManager}
-			Shared with everyone on <strong>{eventCode || 'this event'}</strong>.
+			Shared picklist.
 			{#if syncing}
 				Saving…
 			{:else if pendingCount > 0}
 				<span class="stale">
-					{pendingCount} {pendingCount === 1 ? 'change' : 'changes'} not saved yet — retrying.
+					{pendingCount} {pendingCount === 1 ? 'change' : 'changes'} pending.
 				</span>
 			{/if}
 		{:else}
-			Read-only on this device — the shared list is a manager surface. Ask a
-			manager to edit it, or to change your role.
+			Read-only. A manager can edit this list.
 		{/if}
 	</p>
 
@@ -403,7 +401,7 @@
 		<p class="muted">Loading…</p>
 	{:else if (!summary || summary.totalEntries === 0) && rows.length === 0}
 		<div class="empty">
-			<p>No entries on file. Record some entries first, then come back to build a picklist.</p>
+			<p>No entries yet.</p>
 		</div>
 	{:else}
 		<!-- ── Alliance selection ───────────────────────────────────── -->
@@ -428,9 +426,9 @@
 			{#if !selectionLive}
 				<p class="muted hint">
 					{#if alliancesAt}
-						Not started yet. Check again when captains are called.
+						Selection has not started.
 					{:else}
-						Once selection starts, check here to see which of your picks are gone.
+						Check when selection starts.
 					{/if}
 				</p>
 			{:else}
@@ -449,7 +447,7 @@
 					{primary.length === 1 ? 'pick' : 'picks'} taken.
 					<!-- Stated rather than implied: a declined team is out of selection
 					     entirely under FRC rules, and "declined" reads like "available". -->
-					Teams that declined an invitation are gone too.
+					Includes declined invitations.
 				</p>
 			{/if}
 		</Panel>
@@ -473,7 +471,7 @@
 			{/snippet}
 			{#if copyFlash}<small class="muted">{copyFlash}</small>{/if}
 			{#if primary.length === 0}
-				<p class="hint muted">Pick teams from the available list below to start ranking.</p>
+				<p class="hint muted">Add teams from the available list.</p>
 			{:else}
 				<ol class="picked">
 					{#each primary as r, i (r.teamNumber)}
@@ -591,7 +589,7 @@
 						{/each}
 					</ol>
 					<p class="muted small">
-						Scores are relative to the teams still available, not an absolute rating.
+						Scores are relative to available teams.
 					</p>
 				{/if}
 			{/if}

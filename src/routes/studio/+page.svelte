@@ -9,9 +9,13 @@
 	});
 </script>
 
-<p class="wait">Opening Studio…</p>
+<p class="wait">Opening…</p>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	.wait {
 		color: var(--text-muted);
 		font-size: var(--fs-sm);

@@ -1,278 +1,218 @@
 # Design — FRC Scout
 
-A locked design system for this app. Every page redesign reads this file before
-emitting code. Do not regenerate per page — extend or amend this file when the
-system needs to grow.
+The shared visual system for the scouting app and Manager Studio. Updated by
+the visual layout updates on 2026-10-06. Pages share this system; consistency
+across the app takes precedence over catalog diversification.
 
-Produced by a Hallmark multi-page redesign, 2026-07-29. Across pages of one app
-the diversification rule is **inverted**: consistency is the goal. A page that
-drifts from this file is the bug.
+## Audience and use
 
----
+Scouts record matches on phones, often one-handed in a noisy gym. Managers use
+Studio to staff events, publish schedules, inspect coverage and compare teams.
+The design should make the next task easy to find and the data easy to scan.
 
-## The brief this system serves
+## Genre and tone
 
-A scout standing in a loud gym, holding a phone one-handed, watching a match
-that lasts two and a half minutes. They are not sitting at a desk and they are
-not browsing. Every decision below resolves in favour of that person.
-
-The manager's surfaces have a different shape — dense tables read while making
-alliance-selection decisions — but they inherit the same system.
-
-## Genre
-
-**modern-minimal.** A dense operational tool, not editorial prose. Restrained,
-declarative, monochrome-plus-one-accent.
+Modern-minimal, quiet and utilitarian. Warm neutral surfaces in light mode,
+charcoal in dark mode, restrained team purple for actions and selected states.
+No gradients, glow, glass, ornamental art, or marketing sections.
 
 ## Macrostructure family
 
-- **App pages (all nine routes): Workbench.** "Less marketing copy, more here's
-  what you do with it." The content is the app in use.
-- Marketing pages: none exist. If one is ever added, amend this file first.
-- Content pages: none exist.
+Workbench throughout: functional headings, a clear primary task, and sections
+shaped by the actual content. Forms stay narrow; tables get more room. There
+are no marketing pages. Auth pages use a functional heading and lead directly into the form.
 
-Variation knobs within the family: section density, whether a page leads with a
-summary strip, table vs. card rendering of rows. Everything else is shared.
+## Copy
 
-## Three deviations from stock Hallmark, and why
-
-Recorded so they are not "fixed" by a later run.
-
-1. **System fonts, not a webfont.** Both modern-minimal themes specify one
-   (Coral: Geist. Cobalt: Space Grotesk + Inter + JetBrains Mono). This app is a
-   PWA used on venue wifi shared by several hundred phones. A webfont is a
-   first-paint risk exactly when the app matters most. Type discipline comes
-   from scale, weight and tracking instead of from a face.
-
-2. **Bottom tab bar on phones.** All fourteen Hallmark nav archetypes
-   (N1a–N13) are top-of-page marketing bars, because the catalogue is for
-   landing pages. A top tab strip is the hardest place on a phone for a thumb to
-   reach. Below `40rem` the nav is fixed to the bottom; above it, a top strip.
-
-3. **The accent stays purple** (`#5f24a2`). It is the team's colour, not a
-   theme pick. The catalog accents (Coral's warm, Cobalt's electric blue) were
-   considered and rejected.
+No logos, wordmarks, greeting copy, decorative section labels, or repeated
+explanations. Use functional page headings, concise labels and short empty
+states. Keep instructions only when they explain an unfamiliar control, prevent
+a destructive mistake, or change how a number should be interpreted. Show event
+context once in the navigation; detail pages retain their own event when their
+route can differ from the selected event.
 
 ## Theme
 
-Anchored on the existing brand purple. Hex is the implementation (already
-shipped and contrast-tested); OKLCH is given for portability.
+Runtime tokens are defined in `src/routes/+layout.svelte`, the existing single
+source of truth. `tokens.css` is a portable snapshot, not a second runtime
+stylesheet. Components always use named tokens.
 
 ### Light
 
-| Token | Hex | OKLCH |
-|---|---|---|
-| `--bg-page` | `#fafafa` | `oklch(98.5% 0 0)` |
-| `--bg-card` | `#ffffff` | `oklch(100% 0 0)` |
-| `--bg-subtle` | `#f5f5f5` | `oklch(97.0% 0 0)` |
-| `--text-primary` | `#1a1a1a` | `oklch(21.8% 0 0)` |
-| `--text-muted` | `#555555` | `oklch(45.0% 0 0)` |
-| `--text-faint` | `#707070` | `oklch(54.5% 0 0)` |
-| `--border` | `#e0e0e0` | `oklch(90.7% 0 0)` |
-| `--border-strong` | `#8f8f8f` | `oklch(65.0% 0 0)` |
-| `--accent` | `#5f24a2` | `oklch(42.1% 0.187 299.3)` |
-| `--accent-soft` | `#f4ebfa` | `oklch(95.1% 0.022 312.2)` |
-| `--on-accent` | `#ffffff` | `oklch(100% 0 0)` |
-| `--alliance-red` | `#c0392b` | `oklch(54.3% 0.174 29.7)` |
-| `--alliance-blue` | `#2c5cb0` | `oklch(48.8% 0.144 260.7)` |
-| `--on-alliance` | `#ffffff` | `oklch(100% 0 0)` |
-| `--success` | `#047857` | `oklch(50.8% 0.105 165.6)` |
-| `--warning` | `#92400e` | `oklch(47.3% 0.125 46.2)` |
+| Token | Value |
+|---|---|
+| `--bg-page` | `#f6f5f2` |
+| `--bg-card` | `#ffffff` |
+| `--bg-subtle` | `#eeede9` |
+| `--bg-elev` | `#f0efec` |
+| `--text-primary` | `#252525` |
+| `--text-muted` | `#595750` |
+| `--text-faint` | `#6b6862` |
+| `--border` | `#dedcd6` |
+| `--border-strong` | `#8a877f` |
+| `--accent` | `#5f24a2` |
+| `--accent-soft` | `#f1ebf7` |
+| `--on-accent` | `#ffffff` |
 
 ### Dark
 
-| Token | Hex | OKLCH |
-|---|---|---|
-| `--bg-page` | `#0e0e10` | `oklch(16.5% 0.004 285.9)` |
-| `--bg-card` | `#1a1a1c` | `oklch(21.9% 0.004 286.1)` |
-| `--bg-subtle` | `#1f1f22` | `oklch(24.1% 0.006 286.0)` |
-| `--text-primary` | `#e8e8e8` | `oklch(93.1% 0 0)` |
-| `--text-muted` | `#a0a0a3` | `oklch(70.7% 0.004 286.3)` |
-| `--text-faint` | `#8a8a8a` | `oklch(63.3% 0 0)` |
-| `--border` | `#2a2a2d` | `oklch(28.6% 0.005 286.1)` |
-| `--border-strong` | `#6a6a70` | `oklch(52.0% 0.006 286.1)` |
-| `--accent` | `#b18de0` | `oklch(70.8% 0.124 303.3)` |
-| `--accent-soft` | `#2a1e3d` | `oklch(26.6% 0.058 300.4)` |
-| `--on-accent` | `#1a1a1c` | `oklch(21.9% 0.004 286.1)` |
-| `--alliance-red` | `#f1746a` | `oklch(70.4% 0.156 26.4)` |
-| `--alliance-blue` | `#6fa8ec` | `oklch(72.0% 0.116 253.6)` |
-| `--on-alliance` | `#101014` | `oklch(17.7% 0.005 286.0)` |
-| `--success` | `#6ee7b7` | `oklch(84.5% 0.130 165.0)` |
-| `--warning` | `#fcd34d` | `oklch(87.9% 0.153 91.6)` |
+| Token | Value |
+|---|---|
+| `--bg-page` | `#151517` |
+| `--bg-card` | `#1d1d20` |
+| `--bg-subtle` | `#27272a` |
+| `--bg-elev` | `#29292d` |
+| `--text-primary` | `#f0eeea` |
+| `--text-muted` | `#bbb8b2` |
+| `--text-faint` | `#a09d98` |
+| `--border` | `#38383c` |
+| `--border-strong` | `#7f7d84` |
+| `--accent` | `#bba1e1` |
+| `--accent-soft` | `#30283c` |
+| `--on-accent` | `#1d1d20` |
 
-### Contrast
+### Contrast and semantic color
 
-Every foreground token clears **WCAG AA (4.5:1)** against every background it can
-land on, in both themes. Worst case: `--text-faint` at 4.54 in both.
+`npm test` measures 190 color pairings across the main and Studio palettes in
+light and dark. Body text needs 4.5:1; focus rings and required input boundaries
+need 3:1. Dark primary buttons use dark ink on a light purple fill.
 
-**This is enforced, not asserted.** `scripts/check_contrast.mjs` parses the real
-token values out of `+layout.svelte` and measures every pair the app renders, in
-both themes, on every `npm test`. Do not edit the table above by hand and trust
-it — change the layout and run the check.
+Red and blue identify alliances. They are always accompanied by text or position;
+state colors identify success, warning and failure. Chart series use dedicated
+Studio tokens. None of these colors are used to decorate the navigation.
 
-Three failures it has already caught, none of which were visible by looking:
-
-| | Was | Why it mattered |
-|---|---|---|
-| `--text-faint` | 3.54 / 3.42 | the smallest type in the app — timestamps, help text |
-| `--on-accent` (dark) | 2.71 on `--accent`, 2.06 on `--accent-hover` | white on light lavender: **every primary button**, in the theme people use in a dark gym |
-| `--border-strong` | 1.61 / 1.49 | an input's border is the only thing that says "input" (WCAG 1.4.11 → 3:1) |
-
-Two pairs are deliberately **not** checked: `--warning-border` on `--warning-bg`
-and `--success-border` on `--success-bg`. 1.4.11 covers boundaries required to
-identify a component; a banner is identified by its fill and its text, and
-deleting its border loses nothing. Forcing decoration to 3:1 would darken those
-tints until they read as errors.
-
-### Alliance colours are semantic
-
-Red and blue mean alliance, never decoration. Three rules:
-
-- They must survive a retheme. Do not reuse them for state.
-- They must never be the only signal. Every place an alliance colour appears, a
-  text label or position carries the same information — colour-blind scouts,
-  and glare on a phone screen under gym lighting.
-- **Text on an alliance fill uses `--on-alliance`, never `#fff`.** The fills
-  lighten in dark mode; white collapses to 2.47:1 on blue. The ink flips instead
-  of the fill, so red stays red.
-
-The literals `#c0392b`, `#2c5cb0`, `#e24b4a` and `#378add` appeared in six
-places between them — light-mode alliance values, hardcoded, which stayed dark
-against a dark card once dark mode existed. Each looked deliberate in isolation.
-`check_components.mjs` now rejects a hex literal anywhere outside
-`+layout.svelte`.
-
-### One dark block
-
-The dark palette is defined **once**, under `:root[data-theme='dark']`. There is
-no `@media (prefers-color-scheme: dark)` copy; "system" is resolved to an
-explicit `data-theme` by an inline script in `app.html` (before first paint) and
-kept in sync by `+layout.svelte` thereafter.
-
-This is not a preference. The two blocks existed, and they had already drifted —
-`--on-alliance` was in one and not the other, so a scout on OS-level dark saw
-white text on a light blue pill while a scout who chose dark in Settings saw the
-correct ink, and neither could reproduce what the other was looking at.
-`check_contrast.mjs` fails if a second block returns.
+The dark palette is defined once under `data-theme='dark'`. `app.html` resolves
+the user's preference before paint; the layout follows changes thereafter.
+Studio's overrides stay after the dark block and remap existing token names.
 
 ## Typography
 
-- **Display / body / mono:** `system-ui, -apple-system, sans-serif`. One family.
-- **Display tracking:** `-0.02em` at `--fs-xl` and above; `0` below.
-- **Section labels:** uppercase, `0.06em` tracking, `--text-muted`. Existing
-  `h2` voice — keep it.
-- Headings are always roman. No italic display type anywhere.
-- Numerals in any table, stat or team number use `font-variant-numeric:
-  tabular-nums`, so columns align and a changing count doesn't jitter.
+System fonts load without a network request. `--font-body` and `--font-display`
+share the system stack; `--font-mono` is reserved for codes. Body font is declared
+once on `body` and inherited. Inputs use `--fs-control` (16px) to avoid iOS zoom.
 
-## Spacing
+- Page headings: `--fs-page`, tight tracking, roman, weight 650–700.
+- Section headings: sentence case, weight 600, `--fs-md` or `--fs-lg`.
+- Small table labels: sentence case, `--fs-xs`, muted.
+- Counts, team numbers and table figures: tabular numerals.
+- Uppercase is reserved for compact semantic metadata, such as alliance or role.
 
-The 4-point scale already in `+layout.svelte`: `--space-1` (0.25rem) through
-`--space-6` (2rem). Pages must consume the named tokens, not raw rem values.
-Radii: `--radius-sm` 0.3, `--radius-md` 0.4, `--radius-lg` 0.6, `--radius-pill`.
+## Spacing and surfaces
 
-## Touch targets
+The 4-point scale is `--space-1` through `--space-8`: 4, 8, 12, 16, 24, 32, 48,
+and 64px. Controls use `--radius-md` (6px); panels use `--radius-lg` (8px).
+Pages consume tokens rather than hardcoded spacing or type sizes.
 
-**Minimum 44×44px for anything tappable. Non-negotiable** — this is the one
-rule most likely to be broken by a visual pass, because a 32px chip looks
-better in a screenshot and fails in a gym. Counter buttons are already 3rem.
+Content widths: `--w-form` 34rem, `--w-read` 42rem, `--w-list` 60rem,
+`--w-board` 78rem. Scout Home uses the reading width; manager Home and Studio
+use the board width. Navigation spans the viewport with safe-area gutters.
+Settings aligns to the left page gutter, with each control group limited to
+form width. Its page heading spans the page rather than a centered form.
 
-## Motion
+Use whitespace and rules before adding a card. Upcoming entries form open rows;
+recorded entries share one list surface. Manager Home leads with event coverage and match status in one surface, then
+lists missing entries and scout activity as open rows. Coverage percentages use
+played or started qualification matches, excluding future matches; missing
+submissions remain visible even when a played match has zero entries.
+Studio summary figures share one strip with dividers. Panels belong to actual working groups, not every text block.
+Nested panels use a subtle surface without a shadow stack.
 
-Motion-cut. No library, and none is to be added.
+## Navigation and responsive behavior
 
-- Permitted: `opacity` and `width` transitions up to 240ms, `--ease-out`
-  `cubic-bezier(0.16, 1, 0.3, 1)`.
-- Banned: scroll reveals, entrance animations, overshoot/bounce easings,
-  parallax, skeleton shimmer.
-- `prefers-reduced-motion: reduce` → opacity only, ≤150ms.
+The scouting app shows event and account context. Its two destinations
+are docked at the bottom below 40rem and join the header above that breakpoint.
+Studio uses a 13.5rem sidebar with small functional icons. Below 48rem its links
+wrap into a top navigation with a visible route back to Home.
 
-Nothing in this app should animate to feel designed. The coverage bar animates
-because a changing number is easier to read when it moves.
+Every page must fit 320, 375, 414 and 768px, as well as desktop. Root overflow is
+clipped; wide tables scroll inside their own wrappers. Grid tracks must shrink.
+Buttons and navigation labels stay on one line. Long headings wrap inside words.
+Safe-area insets remain part of the installed app layout.
 
-## Microinteractions stance
+## Controls and interactions
 
-- **Silent success.** A saved entry updates the list. No toast, no confetti.
-- Errors are inline and specific, next to the thing that failed.
-- Focus is always visible: `2px solid var(--accent)`, `outline-offset: 1px`.
-  Never remove an outline without replacing it.
-- Destructive actions confirm with a dialog naming what will be lost.
+Primary actions use purple, secondary actions a quiet outline, and destructive
+actions a danger outline. Full-width buttons fill their form's available width.
+Keep at least 44px touch targets on scout-facing controls. Studio may use denser
+pointer controls only where the existing desktop workflow requires it.
 
-## CTA voice
+Focus is visible and instant. Disabled controls retain native disabled behavior
+and a not-allowed cursor. Errors are inline; success updates the relevant content.
+Native dialogs handle confirmations, the scout event prompt and the match editor, including keyboard
+focus, an inert background and Escape. The editor returns focus to its trigger.
+Recording actions keep single-line labels; desktop shortcuts hide on phones.
 
-- **Primary:** filled `--accent`, `--radius-md`, `var(--tap-min)` tall with
-  `var(--space-4)` of horizontal padding, weight 600. One per screen region.
-- **Secondary:** `--bg-card` with a `--border-strong` outline, same geometry.
-- **Danger:** outlined in `--danger`, filled only on hover.
-- Copy is a verb: "Save assignments", "Publish to teammates". Never "Submit",
-  never "Click here".
+Motion stays brief (`--dur-short`: 150ms), with no entrance or scroll animation.
+Reduced-motion preferences are supported. No motion library or webfont is added.
 
-## Per-page allowances
+## Scope
 
-- App pages **must not** use enrichment — no hero art, no decorative SVG, no
-  illustration. Function carries the page.
-- No re-drawn chrome: no fake phone frames, no fake browser bars.
-- No invented data. Every number on screen traces to a recorded entry.
-
-## What pages MUST share
-
-- The accent and its placement (≤5% of any viewport).
-- The type scale, weights and tracking.
-- The CTA voice — button shape, radius, padding rhythm.
-- Section heading rhythm: uppercase tracked label, then content.
-- Card surface: `--bg-card`, 1px `--border`, `--radius-lg`.
-
-  The radius ladder, which this file previously collapsed into one value:
-
-  | | |
-  |---|---|
-  | `--radius-sm` 0.3 | dense rows inside a surface — schedule rows, match rows |
-  | `--radius-md` 0.4 | **controls** — buttons, inputs, selects, chips with square ends |
-  | `--radius-lg` 0.6 | **surfaces** — cards, panels, dialogs |
-  | `--radius-pill` | badges and filter chips |
-
-  Corrected in v0.75 rather than enforced: the line said `--radius-md` for
-  cards, and eighteen places used `--radius-lg` — including `Dialog`, which
-  predates every one of them. The code was coherent (controls at md, surfaces at
-  lg) and the document was the part that had drifted. Changing eighteen files to
-  match a sentence that never described them would have been enforcing a typo.
-- The nav: bottom bar under `40rem`, top strip above.
-
-## What pages MAY differ on
-
-- Density — the manager's tables may be tighter than the scout's forms.
-- Whether a page leads with a summary strip.
-- Table vs. card rendering, chosen per surface by what the data needs.
+Routes, component ownership, auth, event permissions, recording, draft recovery,
+sync and data fetching retain their existing boundaries. Scouts with no selected
+or accessible event receive a dismissible event prompt and explicitly choose
+from their membership-limited event list. Practice remains available without
+an event. Managers and supers receive the event overview on Home. No sample figures enter production.
+Visual QA uses an isolated local copy with synthetic event data.
 
 ## Exports
 
 ### tokens.css
 
-```css
-:root {
-  /* light */
-  --bg-page: #fafafa;      --bg-card: #ffffff;      --bg-subtle: #f5f5f5;
-  --text-primary: #1a1a1a; --text-muted: #555555;   --text-faint: #707070;
-  --border: #e0e0e0;       --border-strong: #8f8f8f;
-  --accent: #5f24a2;       --accent-soft: #f4ebfa;  --on-accent: #ffffff;
-  --alliance-red: #c0392b; --alliance-blue: #2c5cb0; --on-alliance: #ffffff;
-  --success: #047857;      --warning: #92400e;      --danger: #c0392b;
+`tokens.css` contains the complete four-palette snapshot, including typography,
+spacing, geometry, semantic colors and chart series. Regenerate it when the
+layout's tokens change; do not import it back into the running app.
 
-  --space-1: 0.25rem; --space-2: 0.5rem;  --space-3: 0.75rem;
-  --space-4: 1rem;    --space-5: 1.5rem;  --space-6: 2rem;
-  --radius-sm: 0.3rem; --radius-md: 0.4rem; --radius-lg: 0.6rem;
-  --radius-pill: 999px;
-  --fs-xs: 0.75rem; --fs-sm: 0.85rem; --fs-md: 0.95rem;
-  --fs-lg: 1.1rem;  --fs-xl: 1.5rem;
-  --fs-display: 2.25rem;   /* Home's greeting only */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --dur-short: 240ms;
-  --tap-min: 2.75rem;
+### Tailwind v4 `@theme`
+
+```css
+@theme {
+  --color-paper: #f6f5f2;
+  --color-surface: #ffffff;
+  --color-ink: #252525;
+  --color-muted: #595750;
+  --color-accent: #5f24a2;
+  --color-rule: #dedcd6;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --spacing-panel: 1.5rem;
+  --radius-control: 0.375rem;
+  --radius-panel: 0.5rem;
 }
 ```
 
-Dark overrides live under `:root[data-theme='dark']` — one block, no media
-query. See "One dark block" above.
+### DTCG `tokens.json`
+
+```json
+{
+  "color": {
+    "paper": { "$value": "#f6f5f2", "$type": "color" },
+    "surface": { "$value": "#ffffff", "$type": "color" },
+    "ink": { "$value": "#252525", "$type": "color" },
+    "accent": { "$value": "#5f24a2", "$type": "color" }
+  },
+  "space": { "panel": { "$value": "1.5rem", "$type": "dimension" } },
+  "radius": { "panel": { "$value": "0.5rem", "$type": "dimension" } }
+}
+```
+
+### shadcn/ui CSS variables
+
+```css
+:root {
+  --background: #f6f5f2;
+  --foreground: #252525;
+  --card: #ffffff;
+  --card-foreground: #252525;
+  --primary: #5f24a2;
+  --primary-foreground: #ffffff;
+  --muted: #eeede9;
+  --muted-foreground: #595750;
+  --border: #dedcd6;
+  --input: #8a877f;
+  --ring: #5f24a2;
+  --radius: 0.5rem;
+}
+```
 
 ## Shared components
 
@@ -304,7 +244,7 @@ reimplements one in its own `<style>` block is drifting.
   remove-row × — those are page furniture with their own shape, and routing
   them through a variant prop would turn this into a dumping ground.
 
-### Why there is no Card or PageHeader component
+### Page ownership
 
 Extracting them was attempted and abandoned on evidence. The copies have
 **drifted**: `.muted` has four different definitions across 18 uses, `h2` five
@@ -331,7 +271,7 @@ different: sixteen buttons, one voice, and the duplication was genuine.
 | `/insights` and its four sub-pages | done |
 | `lib/components/*` (16 files) | done |
 
-**All surfaces are migrated.** The remaining visual work is composition — what
+**All surfaces use this system.** The remaining visual work is composition — what
 each page leads with and how dense it is — not tokens. Two checks keep it that
 way, and both run on `npm test`:
 
@@ -378,56 +318,12 @@ to — a rule it doesn't own.
 
 ## Variants
 
-### Studio (desktop-first)
-
-`/studio/*` is the manager's laptop surface. It is the **only** surface allowed
-to escape phone-first, and the permission is specific to it.
-
-**Shares** — every colour token, the type scale, weights and tracking, the accent
-and its placement rule, the CTA voice, the card surface, motion stance.
-
-**Differs on:**
-
-- **Nav** — a left sidebar, not the bottom tab bar. Studio has more
-  destinations than a thumb-reachable bar can carry.
-- **Breakpoint floor** — designed at 1024px and up. It should stay legible
-  narrower, but it is not optimised for a phone and does not pretend to be.
-- **Density** — tighter row rhythm and smaller type steps are permitted, because
-  the reader is seated with a mouse rather than standing in a gym.
-- **Touch targets** — the 44px floor relaxes to 32px for pointer-only controls
-  inside Studio. It still applies to anything that can be reached on a tablet.
-
-**Does not differ on:** the fonts, the CTA voice, or the enrichment ban.
-
-**Amended v0.74–v0.75 — Studio does have its own palette.** This section used to
-read "not through a second palette or a glow", and that was overtaken by a
-decision taken with its eyes open, so it is recorded here rather than left as a
-rule the code quietly breaks.
-
-What changed, and why the original worry does not apply:
-
-- The block **remaps the base tokens** rather than adding a parallel set. Every
-  shared component — `Button`, `Select`, `Dialog`, `Field` — reads `--bg-card`
-  and `--accent` and is dressed correctly with no Studio-specific branch. There
-  is one system with a second set of values, not two systems.
-- The type scale, spacing, radii, motion stance and CTA geometry are untouched.
-- `check_contrast.mjs` runs the **same PAIRS table** over all four palettes —
-  light, dark, Studio light, Studio dark — at 170 assertions. The second palette
-  costs a table row, not a second system to maintain.
-- Studio follows the app theme as of v0.75. It was dark in both themes on the
-  reasoning that the four brand colours only work on a dark ground; that was
-  reasoning about the palette rather than about the reader, and the reader could
-  not read it.
-
-The roles invert between the two Studio palettes, and that inversion is the
-design: on dark, cyan and aqua are ink and purple is a fill; on light, purple is
-the only one of the four that reads and the others are decorative. See
-`CLAUDE.md` § Design system for the numbers.
-
-Schedule stays in the main app. A manager may need to publish or reassign from a
-phone on the venue floor.
+Studio shares the main canvas, type, purple accent, controls and motion. Its
+sidebar, wider content area and denser tables serve the manager's work. Its
+chart-series tokens remain distinct and are contrast-tested on both panel
+surfaces. Studio follows the user's light/dark preference.
 
 ## Amending this file
 
-If a page needs something this system doesn't allow, **amend here first**, then
-redesign. Per-page overrides are how a design system dies.
+Amend this system before introducing a visual exception. Keep changes shared
+where the meaning is shared; let page content determine its layout.

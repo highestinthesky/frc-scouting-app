@@ -161,7 +161,7 @@
 		{#if !report.hasLineup}
 			<Panel
 				title="No schedule for this match"
-				hint="Publish a schedule from Studio → Schedule and this fills in with who was actually in it. Anything already recorded is below."
+				hint="Publish a schedule to identify the robots in this match."
 			/>
 		{/if}
 
@@ -229,8 +229,8 @@
 
 		{#if report.stray.length}
 			<Panel
-				title="Recorded against this match, not in it"
-				hint="The schedule does not place these teams here. Most likely a match number typed wrong — the observation is real either way, so it is kept."
+				title="Unscheduled teams"
+				hint="These teams are not listed in the schedule for this match."
 			>
 				<ul class="seats">
 					{#each report.stray as seat}
@@ -248,16 +248,14 @@
 			</Panel>
 		{/if}
 
-		{#if report.entryCount === 0 && !report.hasLineup}
-			<Panel
-				title="Nothing here yet"
-				hint="No entries recorded for qual {matchNumber} at {eventCode}, and no schedule cached to say who was in it."
-			/>
-		{/if}
 	{/if}
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	main {
 		max-width: var(--w-board);
 		margin: 0 auto;
@@ -316,13 +314,6 @@
 		min-width: 0;
 	}
 
-	.seats.red > li {
-		border-left: 3px solid var(--alliance-red);
-	}
-
-	.seats.blue > li {
-		border-left: 3px solid var(--alliance-blue);
-	}
 
 	.seats > li.uncovered {
 		border-style: dashed;

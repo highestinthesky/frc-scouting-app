@@ -666,7 +666,7 @@
 		</div>
 	{:else if phase === 'place'}
 		<p class="say">
-			{#if start}Starting {zone ?? 'position'} set.{:else}Drag the robot to where it starts.{/if}
+			{#if start}{zone ?? 'Start position'}{:else}Drag the robot to its start.{/if}
 		</p>
 		<div class="row">
 			<Button variant="primary" disabled={!start} onclick={begin}>
@@ -1005,20 +1005,11 @@
 		user-select: none;
 		-webkit-touch-callout: none;
 	}
-	/* The label WRAPS rather than truncating.
-	   A truncated control is one a scout has to remember instead of read, and
-	   shortening a season's label only moves the problem: an already-short label
-	   on a 375px phone still came out cut off with an ellipsis. There is no name
-	   that is guaranteed to survive a quarter of a phone's width on one line, so
-	   it gets two: the button is 55px tall for the thumb and two lines of body
-	   text fit inside that without changing the rail's height. Shrinking the type
-	   instead would have kept the baseline tidy and made the control harder to
-	   hit, which is the wrong trade on the one surface that is used against the
-	   clock. */
+	/* Action labels stay on one line; narrow layouts omit keyboard hints. */
 	.act .what {
 		min-width: 0;
-		overflow-wrap: break-word;
-		hyphens: none;
+		white-space: nowrap;
+		color: inherit;
 		line-height: 1.15;
 		text-align: center;
 	}
@@ -1048,6 +1039,11 @@
 		.act kbd {
 			display: none;
 		}
+	}
+	@media (max-width: 39.9375rem) {
+		.rail { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(min(4rem, 100%), 1fr)); }
+		.act { padding: 0 var(--space-1); gap: var(--space-1); font-size: var(--fs-sm); }
+		.act kbd, kbd.on-btn { display: none; }
 	}
 	/* The tone is the season's, per action. Only a warning has its own on-state;
 	   `accent` and `success` both light up in the accent. */

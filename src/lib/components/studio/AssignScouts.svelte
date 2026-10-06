@@ -57,7 +57,7 @@
 
 	{#if draftRestored}
 		<p class="draft-note">
-			Restored unsaved changes{#if draftSavedAt} from {relativeTime(draftSavedAt, now)}{/if}.
+			Draft restored{#if draftSavedAt} from {relativeTime(draftSavedAt, now)}{/if}.
 			<button type="button" class="draft-discard" onclick={onDiscardDraft}>Discard</button>
 		</p>
 	{/if}
@@ -101,12 +101,10 @@
 		<p class="muted small"><strong>{linked}</strong> of {named} linked to an account.</p>
 	{/if}
 
-	
 
 	{#if pendingOverrideCount > 0}
 		<p class="muted small pending-note">
-			{pendingOverrideCount} per-match override{pendingOverrideCount === 1 ? '' : 's'}
-			staged — saved along with the assignments.
+			{pendingOverrideCount} override{pendingOverrideCount === 1 ? '' : 's'} pending.
 		</p>
 	{/if}
 
@@ -116,7 +114,7 @@
 			disabled={busy || !qmList.length}
 			onclick={onAutoAssign}
 			title={qmList.length ? '' : 'Fetch the schedule from TBA first'}
-		>✨ Auto-assign</Button>
+		>Auto-assign</Button>
 		<Button variant="primary" disabled={busy} onclick={onSave}>
 			{busy ? 'Saving…' : 'Save assignments'}
 		</Button>

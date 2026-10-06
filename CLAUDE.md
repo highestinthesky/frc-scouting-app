@@ -29,7 +29,7 @@ on `/studio` — because the global tab bar was a trapdoor out of it.
 | `/scouting/new`, `/scouting/edit` | The entry form. |
 | `/settings` | Device settings, event picker, sign out. |
 | `/practice` | The auto recorder against its own countdown, on the current season, with nothing kept — no IndexedDB, no draft, no sync. It is in `NEEDS_NO_EVENT` in `+layout.svelte`, the one route a signed-in device reaches without an event or a scout name, because its whole purpose is rehearsal before kickoff, when nobody is on an event. The sign-in guard still applies. |
-| `/home` | The scout's whole page: what is next, what a manager has said, what they are watching, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. |
+| `/home` | Manager/super event overview, or the scout's whole page: what is next, what a manager has said, what they are watching, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. |
 | `/studio/event` | Who is on this event — drag scouts on and off. |
 | `/studio/schedule` | Publish a TBA schedule, auto-assign, per-match overrides, reminders. |
 | `/studio/coverage` | What is being watched and what is not. |
@@ -107,7 +107,7 @@ could not fire it before cached clients had moved over.
 
 ### Design system
 
-`design.md` is the locked system: spacing (`--space-1..6`), type (`--fs-xs..xl`),
+`design.md` is the locked system: spacing (`--space-1..8`), type (`--fs-xs..xl`),
 radii, motion and an explicit light/dark palette. Components consume tokens and
 never hardcode a value — the `:root` block is the only place literals belong.
 
@@ -118,47 +118,29 @@ Content width is a decision about the content, not the device:
     --w-list   60rem   cards and entry lists
     --w-board  78rem   tables and dense grids
 
-**Studio has its own palette as of v0.74**, in `:global(:root[data-studio])` in
-the root layout, and one fact governs it:
+**The main app and Studio share a neutral canvas and purple accent.** Light
+mode uses warm gray with white surfaces; dark mode uses charcoal with a lighter
+purple for readable links and primary buttons. Navigation uses these shared
+colors and spans the viewport. Settings aligns its control groups to the left
+page gutter; scout Home keeps its narrower centered composition. Chart series retain their dedicated `--studio-series-1..4` values.
 
-    #662DB4  purple   8.08x on white   ← the only one that can carry white text
-    #0087F8  blue     3.61x on white   dark text only
-    #00C7FA  cyan     1.99x on white   dark text only
-    #49FCE2  aqua     1.29x on white   dark text only
+Studio follows the user's theme. `:root[data-studio]` is the light override and
+comes after the base dark block; `:root[data-studio][data-theme='dark']` outranks
+both. These blocks remap base tokens, so `Button`, `Select`, `Dialog` and `Field`
+work in both contexts without their own palettes. `--studio-fill` is the purple
+surface designed for white ink; `--studio-violet` is the readable purple ink.
 
-Three of the four cannot have white text on them. On a **dark** ground every
-number inverts, and that is the whole design: the light three become ink — links,
-active states, series — and purple, the one that can carry white text, is the
-fill. Cyan is 1.99 on white and 9.29 as ink on a Studio card.
+`check_contrast.mjs` measures 190 pairings across all four palettes, including
+sync status dots on the app bar. System fonts need no venue Wi-Fi request.
+Manager Home uses `eventOverview()` in `coverage.js`: qualification matches
+with results or submissions enter the coverage denominator; future matches do
+not. Played matches with no submissions still appear in Missing entries. Local
+coverage refreshes after sync; roster and assignments refresh every 30 seconds
+of successful syncing. Scouts explicitly choose a permitted event in a native
+popup when none is selected, or when sync confirms the old event is inaccessible.
 
-**Studio follows the app theme as of v0.75.** It was dark in both before that,
-on the reasoning above — and the reasoning was about the palette rather than
-about the person reading it, who could not read it. Legibility settles that.
-
-There are now **two** Studio palettes and `check_contrast.mjs` measures both, at
-170 assertions. The roles invert between them and that inversion is the design:
-on light, purple is the only one of the four that reads, so it is the accent and
-does both jobs; cyan and aqua are 1.64 and 1.06 on a raised panel and are
-decorative only. The `--studio-series-*` are darkened on light and lifted on
-dark — same names, opposite directions, because the ground moved.
-
-`:root[data-studio]` is the light palette and must still come after the dark
-theme block (both `(0,2,0)`).
-`:root[data-studio][data-theme='dark']` is `(0,3,0)` and outranks both.
-
-**The block remaps the base tokens, it does not merely add `--studio-*` ones.**
-That is what dresses `Button`, `Select`, `Dialog` and `Field` — they read
-`--bg-card` and `--accent`, so a component that consumes tokens correctly is
-already a Studio component. It is also why `check_contrast.mjs` runs the same
-PAIRS table over a third palette. `--studio-*` names only the things with no
-scout-app equivalent: the raw four, `--studio-fill` (purple, the white-text
-surface), `--studio-violet` (purple lifted until it reads as ink) and
-`--studio-series-1..4`.
-
-**`--accent` is cyan, not the purple.** It has to be ink *and* fill — `Button`
-paints it as a background, pages paint it as text — and purple is 2.29 as ink on
-a card. Reaching for `#662DB4` as "the Studio accent" makes every link
-unreadable.
+Runtime tokens live in the root layout; `tokens.css` is a portable snapshot,
+not another runtime stylesheet. See `design.md` for current values and rules.
 
 Two ordering traps, both enforced by checks because neither is visible:
 

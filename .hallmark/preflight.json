@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-06",
+  "framework": "SvelteKit 2 / Svelte 5",
+  "designSystem": "design.md",
+  "fonts": "System sans and system mono; no font requests",
+  "palette": "Shared neutral light/dark surfaces with purple accent; runtime tokens in src/routes/+layout.svelte",
+  "spacing": "Named 4-point scale, --space-1 through --space-8",
+  "motion": "Brief CSS transitions; reduced motion supported; no motion library",
+  "preserved": [
+    "palette",
+    "fonts",
+    "spacing",
+    "routes",
+    "component ownership"
+  ]
+}

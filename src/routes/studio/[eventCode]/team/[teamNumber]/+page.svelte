@@ -115,7 +115,7 @@
 		{#if !here && season}
 			<Panel
 				title="Not seen at this event yet"
-				hint="Everything below is from earlier events this season. It is context, not a reading of what this team is doing here."
+				hint="Showing earlier events this season."
 			/>
 		{/if}
 
@@ -123,8 +123,8 @@
 		<Panel
 			title="Metrics"
 			hint={seasonAdds
-				? 'Each number carries its own sample size. A season figure pools every event this season and never crosses a year.'
-				: 'Each number carries its own sample size. Blank means not recorded, which is not the same as zero.'}
+				? 'Season figures include all events this year.'
+				: 'Blank means not recorded.'}
 			flush
 		>
 			<Table>
@@ -167,7 +167,6 @@
 		{#if seasonAdds}
 			<Panel
 				title="By event"
-				hint="Oldest first, so it reads as a history. A team that has improved since its last event is the thing this is for."
 				flush
 			>
 				<Table>
@@ -202,7 +201,7 @@
 			{@const scope = profile.auto.n ? 'at this event' : 'this season'}
 			<Panel
 				title="Auto"
-				hint="From {a.n} of {a.ofEntries} {a.ofEntries === 1 ? 'entry' : 'entries'} {scope}. An entry with no recording contributes nothing here — it is not a robot that did not move."
+				hint="From {a.n} of {a.ofEntries} {a.ofEntries === 1 ? 'entry' : 'entries'} {scope}. "
 				flush
 			>
 				<Table>
@@ -224,7 +223,7 @@
 			{#if a.routes.length}
 				<Panel
 					title="Routes"
-					hint="A route is where it started and what it did, in order. A robot knocked off its path ran the same route, so a disruption does not split a cluster."
+					hint="Grouped by starting position and action order."
 					flush
 				>
 					<Table>
@@ -308,6 +307,10 @@
 </main>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	main {
 		max-width: var(--w-board);
 		margin: 0 auto;

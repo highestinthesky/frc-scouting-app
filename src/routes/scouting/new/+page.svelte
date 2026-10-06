@@ -355,7 +355,7 @@
 	<!-- Say so. A form that fills itself in looks like stale data from someone
 	     else's match unless it explains itself. -->
 	{#if restoredDraft}
-		<p class="restored">Picked up where you left off.</p>
+		<p class="restored">Draft restored.</p>
 	{/if}
 
 	<!--
@@ -424,7 +424,7 @@
 
 			{#if scheduleCheck?.ok === false}
 				<p class="sched-warn">
-					<strong>Schedule check:</strong> {scheduleCheck.reason}
+					{scheduleCheck.reason}
 				</p>
 			{/if}
 		</section>
@@ -471,15 +471,17 @@
 	 */
 
 	main {
-		max-width: 32rem;
-		margin: var(--space-5) auto;
-		padding: 0 var(--space-4) calc(var(--nav-bottom-h) + var(--space-6));
+		max-width: var(--w-form);
+		margin: var(--space-4) auto;
+		padding: var(--space-5) var(--space-4) calc(var(--nav-bottom-h) + var(--space-6));
 	}
 	.page-head {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		margin-bottom: var(--space-4);
+		margin-bottom: var(--space-5);
+		padding-bottom: var(--space-4);
+		border-bottom: 1px solid var(--border);
 	}
 	.back {
 		font-size: var(--fs-xl);
@@ -503,15 +505,17 @@
 	}
 	.back:hover { background: var(--bg-subtle); }
 	.back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
+	h1 { margin: 0; font-size: var(--fs-page); letter-spacing: -0.02em; }
 	h2 {
 		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--text-primary);
 		margin: var(--space-5) 0 var(--space-3);
 		border-bottom: 1px solid var(--border);
-		padding-bottom: var(--space-1);
+		padding-bottom: var(--space-3);
+		margin-top: var(--space-6);
+		margin-bottom: var(--space-4);
 	}
 
 	/* ── next-match banner ─────────────────────────────── */
@@ -585,7 +589,6 @@
 		font-size: var(--fs-sm);
 		color: var(--warning);
 	}
-	.sched-warn strong { color: var(--warning); filter: brightness(0.85); }
 
 	/* ── form controls ─────────────────────────────── */
 	.error {
@@ -627,4 +630,7 @@
 	form button[type='submit']:hover:not(:disabled) { background: var(--accent-hover); }
 	form button[type='submit']:disabled { opacity: 0.6; cursor: progress; }
 	form button[type='submit']:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+	form section { margin-bottom: var(--space-6); }
+
 </style>

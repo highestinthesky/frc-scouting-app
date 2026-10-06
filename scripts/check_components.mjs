@@ -595,50 +595,13 @@ for (const [label, file] of [
 			'the nav-label check reads a title prop and trusts it to become the heading'
 		);
 	}
-	// Home is the one deliberate exception, and it is asserted here rather than
-	// omitted so the exception is visible instead of being a gap.
-	//
-	// Its <h1> is a greeting — "Good afternoon, Ada" — because the page's job is
-	// to speak to the person, not to title itself. A tab reading "Home" opening a
-	// page headed "Good afternoon" is not the drift this check exists to catch:
-	// that was "Insights" opening a page headed "Manager", where the two names
-	// described different things. Here they describe the same place and one of
-	// them is a salutation. What IS asserted is that the greeting is really there
-	// — so the exception cannot quietly become an untitled page.
-	{
-		// The greeting itself moved to greeting.js in v0.76 — it has to vary, and a
-		// varying string needs a seed and a test. So this asserts the STRUCTURE
-		// rather than three literals: the <h1> renders the greeting and the
-		// person, and the pool it draws from really is time-appropriate. Matching
-		// literals here would have made moving the pool look like deleting it.
-		const src = readFileSync(path.join(root, 'src/routes/home/+page.svelte'), 'utf8');
-		// Stripped, not raw. greeting.js documents its own return type as
-		// {'morning'|'afternoon'|'evening'}, so searching the prose finds the very
-		// words this asserts and passes for a file that returns none of them. That
-		// is the third time a checker here has matched its own explanation.
-		const greet = readFileSync(path.join(root, 'src/lib/greeting.js'), 'utf8')
-			.replace(/\/\*[\s\S]*?\*\//g, '')
-			.split('\n')
-			.filter((l) => !l.trim().startsWith('//'))
-			.join('\n');
-		const h1 = src.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? '';
-		ok(
-			'"Home" opens a page that greets the scout by name',
-			/\{greeting\}/.test(h1) && /\{who\}/.test(h1),
-			'Home is exempt from label==heading only because its heading is a greeting'
-		);
-		ok(
-			'and the greeting it draws from names the time of day',
-			/morning/.test(greet) && /afternoon/.test(greet) && /evening/.test(greet),
-			'greeting.js no longer offers a time-appropriate greeting'
-		);
-	}
 
 	// "Scouting" is not here any more: v0.82 folded that page into Home and the
 	// tab went with it. The pair is removed rather than pointed at the redirect,
 	// because a redirect has no heading and asserting one against it would be
 	// asserting the absence of a page.
 	for (const [label, file] of [
+		['Home', 'src/routes/home/+page.svelte'],
 		['Settings', 'src/routes/settings/+page.svelte'],
 		['Event', 'src/routes/studio/event/+page.svelte'],
 		['Schedule', 'src/routes/studio/schedule/+page.svelte'],

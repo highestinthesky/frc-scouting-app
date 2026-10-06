@@ -97,12 +97,8 @@
 <svelte:head><title>Create account · FRC Scout</title></svelte:head>
 
 <main>
-	<h1>{resuming ? 'Finish account setup' : 'Create your account'}</h1>
-	<p class="lede">
-		{resuming
-			? 'Your login exists, but its invite was not redeemed. Enter a valid invite code to finish.'
-			: 'Ask a manager for an invite code.'}
-	</p>
+	<h1>{resuming ? 'Finish account setup' : 'Create account'}</h1>
+	{#if resuming}<p class="lede">Enter an invite code to finish setup.</p>{/if}
 
 	<form onsubmit={submit}>
 		<label class="field">
@@ -119,9 +115,7 @@
 				<small class="note">Checking…</small>
 			{:else if invite?.valid}
 				<small class="note good">
-				✓ Valid — you'll join as {invite.role}{invite.first_name
-					? ` (${invite.first_name} ${invite.last_name ?? ''})`.trimEnd() + ''
-					: ''}.
+				Valid {invite.role} invite.
 			</small>
 			{:else if invite}
 				<small class="note bad">Not valid, already used, or expired.</small>
@@ -145,8 +139,7 @@
 			<p class="named">
 				Joining as <strong>{invite.first_name} {invite.last_name ?? ''}</strong>.
 				<small
-					>Your manager set this so your assignments reach you. Not you? Ask them for your
-					own code.</small
+					>Not you? Ask your manager for your own code.</small
 				>
 			</p>
 		{/if}
@@ -172,12 +165,12 @@
 
 		{#if resuming}
 			<p class="resume-note">
-				Signed in as <strong>{auth.authEmail}</strong>. Your existing password is unchanged.
+				Signed in as <strong>{auth.authEmail}</strong>.
 			</p>
 		{:else}
 			<label class="field">
 				<span class="label">Email</span>
-				<small class="help">If this is wrong, nobody can get you back into your account.</small>
+				<small class="help">Used for password recovery.</small>
 				<input type="email" bind:value={email} autocomplete="email" required />
 			</label>
 
@@ -201,7 +194,7 @@
 			<button type="button" class="text-button" onclick={() => auth.signOut()}>Sign out</button>
 		</p>
 	{:else}
-		<p class="alt">Already have one? <a href="{base}/">Sign in</a>.</p>
+		<p class="alt"><a href="{base}/">Sign in</a></p>
 	{/if}
 </main>
 
@@ -211,15 +204,22 @@
 	 */
 
 	main {
-		max-width: 26rem;
+		max-width: 30rem;
 		margin: 0 auto;
-		padding: calc(var(--space-5) + var(--safe-top)) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
+		padding: calc(var(--space-7) + var(--safe-top)) var(--space-5) var(--space-7);
 	}
-	h1 { margin: 0; font-size: var(--fs-xl); letter-spacing: -0.02em; }
+	h1 {
+		margin: 0;
+		font-size: var(--fs-page);
+		letter-spacing: -0.02em;
+		font-weight: 650;
+		line-height: 1.2;
+	}
 	.lede {
 		margin: var(--space-1) 0 var(--space-5);
 		color: var(--text-muted);
 		font-size: var(--fs-md);
+		margin-top: var(--space-3);
 	}
 	.named {
 		margin: 0;
@@ -238,15 +238,16 @@
 		color: var(--text-muted);
 	}
 
-	.row { display: flex; gap: var(--space-3); }
-	.row .field { flex: 1 1 0; min-width: 0; }
 	.field {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1);
-		margin-bottom: var(--space-4);
+		gap: var(--space-2);
+		margin-bottom: var(--space-5);
 	}
-	.label { font-weight: 600; font-size: var(--fs-md); }
+	.label {
+		font-weight: 600;
+		font-size: var(--fs-sm);
+	}
 	.help { color: var(--text-faint); font-size: var(--fs-xs); line-height: 1.45; }
 	input {
 		font: inherit;
@@ -286,6 +287,7 @@
 		margin: var(--space-5) 0 0;
 		font-size: var(--fs-md);
 		color: var(--text-muted);
+		text-align: center;
 	}
 	.alt a { color: var(--accent); }
 	.text-button {
@@ -297,4 +299,10 @@
 		text-decoration: underline;
 		cursor: pointer;
 	}
+
+
+	form { padding: var(--space-5); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+
+	@media (max-width: 40rem) { main { padding-left: var(--space-4); padding-right: var(--space-4); } form { padding: var(--space-4); } }
+
 </style>

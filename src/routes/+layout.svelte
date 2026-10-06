@@ -3,7 +3,6 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import favicon from '$lib/assets/favicon.svg';
 	import { session } from '$lib/session.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
 	import {
@@ -14,6 +13,7 @@
 	import { reminders } from '$lib/reminders.svelte.js';
 	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
 	import SessionSetup from '$lib/components/SessionSetup.svelte';
+	import ScoutEventPrompt from '$lib/components/ScoutEventPrompt.svelte';
 	import ReminderFlyby from '$lib/components/ReminderFlyby.svelte';
 	import SyncPanel from '$lib/components/SyncPanel.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
@@ -209,10 +209,6 @@
 	// thing, in words, and is tappable.
 </script>
 
-<svelte:head>
-	<link rel="icon" href={favicon} />
-</svelte:head>
-
 {#if !session.loaded || auth.loading}
 	<p class="boot">Loading…</p>
 {:else if onPublicRoute}
@@ -222,8 +218,7 @@
 	<main class="gate">
 		<h1>Choose a password</h1>
 		<p>
-			You signed in with the temporary password you were given. Whoever set up
-			your account knows it, so pick your own before you carry on.
+			Replace your temporary password before continuing.
 		</p>
 		<form class="pw-form" onsubmit={choosePassword}>
 			<label class="field">
@@ -247,15 +242,15 @@
 	<main class="gate">
 		<h1>No access</h1>
 		<p>
-			This account isn't part of a team yet. If a manager gave you an invite
-			code, finish signing up. If your access was revoked, ask them to invite
-			you again.
+			Enter an invite code from your manager to restore access.
 		</p>
 		<div class="gate-actions">
 			<a class="gate-link" href="{base}/register/">Enter an invite code</a>
 			<button type="button" class="gate-out" onclick={() => auth.signOut()}>Sign out</button>
 		</div>
 	</main>
+{:else if auth.signedIn && auth.role === 'scout' && !needsNoEvent && (!session.eventCode || syncState.reason === 'no-such-event')}
+	<ScoutEventPrompt />
 {:else if !session.isConfigured && !(needsNoEvent && auth.signedIn)}
 	<SessionSetup />
 {:else if inStudio}
@@ -263,6 +258,7 @@
 	     viewport and supplies its own chrome and its own exit. -->
 	{@render children()}
 {:else}
+	<div class="app-chrome"><div class="app-shell">
 	<header class="app-bar">
 		<div class="app-bar-inner">
 			<!-- Context, not controls: this group is allowed to shrink and truncate.
@@ -276,12 +272,6 @@
 				<span class="name">{shellIdentity.name}</span>
 			</div>
 			<SyncPanel />
-			<!-- Hidden on narrow screens. On a phone the Studio button already says
-			     "manager" more usefully than a badge does, and at 375px the bar was
-			     overflowing the viewport by 37px with this in it. -->
-			<span class="role-badge" class:manager={shellIdentity.isManager}>
-				{shellIdentity.role}
-			</span>
 			{#if shellIdentity.isManager}
 				<!-- Same window, not target=_blank. From an iOS home-screen install a
 				     new tab opens in an in-app Safari sheet whose storage is not the
@@ -310,6 +300,7 @@
 			Settings
 		</a>
 	</nav>
+	</div></div>
 
 	{#if !AUTH_ENFORCED && auth.orphaned}
 		<div class="account-warning" role="status">
@@ -333,9 +324,9 @@
 	 * design-system: design.md · designed-as-app
 	 * deviations: system fonts (no webfont — venue wifi) · bottom-docked nav
 	 *             on phones (no N1–N13 archetype is thumb-reachable) ·
-	 *             brand purple retained over the genre accents
-	 * pre-emit critique: P5 H4 E4 S5 R5 V4
-	 * contrast: AA pass, both themes, worst case 4.54 (--text-faint)
+	 *             brand purple retained as a restrained accent
+	 * pre-emit critique: P5 H5 E5 S5 R5 V4
+	 * contrast: AA pass · four palettes · 190 automated assertions
 	 */
 
 	/* ── Theme variables ───────────────────────────────────────────────
@@ -344,8 +335,7 @@
 	   explicitly chose dark via Settings → data-theme="dark".
 
 	   Components consume these vars instead of hardcoding hex values. The
-	   accent (purple brand) stays the same in both themes for the app bar;
-	   everything else flips. */
+	   purple accent and neutral surfaces each have a light and dark value. */
 	/* ─── the focus ring, once, for everything ──────────────────────────────
 	 *
 	 * Eight component files had interactive elements and no :focus-visible at
@@ -394,27 +384,24 @@
 	}
 
 	:global(:root) {
-		--bg-page: #fafafa;
+		color-scheme: light;
+		--bg-page: #f6f5f2;
 		--bg-card: #ffffff;
-		--bg-subtle: #f5f5f5;
-		--bg-elev: #ffffff;
-		--text-primary: #1a1a1a;
-		--text-muted: #555;
-		--text-faint: #707070;
-		--border: #e0e0e0;
-		/* Was #ccc — 1.61:1 on a card. An input's border is the only thing
-		   that says "input", which WCAG 1.4.11 puts at 3:1. Now 3.23 / 3.10. */
-		--border-strong: #8f8f8f;
+		--bg-subtle: #eeede9;
+		--bg-elev: #f0efec;
+		--text-primary: #252525;
+		--text-muted: #595750;
+		--text-faint: #6b6862;
+		--border: #dedcd6;
+
+		--border-strong: #8a877f;
 		--accent: #5f24a2;
 		--accent-hover: #4e1c87;
-		--accent-soft: #f4ebfa;
+		--accent-soft: #f1ebf7;
 		--on-accent: #ffffff;
 		--alliance-red: #c0392b;
 		--alliance-blue: #2c5cb0;
-		/* Ink for text sitting ON an alliance fill. Light mode's alliances are
-		   dark, so white reads (5.44 / 6.43). Dark mode lightens them to
-		   #f1746a / #6fa8ec, where white collapses to 2.82 / 2.47 — both well
-		   under AA. Flipping the ink instead of the fill keeps red red. */
+
 		--on-alliance: #ffffff;
 		--danger: #c0392b;
 		--danger-bg: #fdecea;
@@ -424,106 +411,70 @@
 		--warning: #92400e;
 		--warning-bg: #fffbeb;
 		--warning-border: #fcd34d;
-		--banner-info-bg: #ece1f5;
-		--banner-info-border: #d4c2e8;
+		--banner-info-bg: #f1edf5;
+		--banner-info-border: #ded4e9;
 		--banner-red-bg: #fef2f2;
 		--banner-red-border: #fca5a5;
 		--banner-blue-bg: #eff6ff;
 		--banner-blue-border: #93c5fd;
 
-		/* ── structural tokens (theme-independent) ──────────────────────
-		   Spacing, radius, type-scale and elevation. These are the single
-		   source of truth the design system is migrating onto so spacing
-		   and corners stop drifting page-to-page. New UI should consume
-		   these instead of hardcoding rem values. */
 		--space-1: 0.25rem;
 		--space-2: 0.5rem;
 		--space-3: 0.75rem;
 		--space-4: 1rem;
 		--space-5: 1.5rem;
 		--space-6: 2rem;
-		--radius-sm: 0.3rem;
-		--radius-md: 0.4rem;
-		--radius-lg: 0.6rem;
+		--radius-sm: 0.25rem;
+		--radius-md: 0.375rem;
+		--radius-lg: 0.5rem;
 		--radius-pill: 999px;
 		--fs-xs: 0.75rem;
-		--fs-sm: 0.85rem;
-		--fs-md: 0.95rem;
-		--fs-lg: 1.1rem;
-		--fs-xl: 1.5rem;
-		/* The floor for a focusable text control. iOS zooms the page in when a
-		   control under 16px takes focus and does not zoom back out, so a manager
-		   picking from a Select at --fs-md (15.2px) was left on a magnified page.
-		   WKWebView does the same, so the native app inherits it. */
-		--fs-control: 1rem;
-		/* One step above the scale, for the single greeting on Home. It is the only
-		   warm moment in an app that is otherwise a tool, and design.md forbids
-		   enrichment on app pages — so the warmth has to be typographic or it does
-		   not exist. Nothing else may use this. */
-		--fs-display: 2.25rem;
-		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-		--shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+		--fs-sm: 0.875rem;
+		--fs-md: 0.9375rem;
+		--fs-lg: 1.125rem;
+		--fs-xl: 1.625rem;
 
-		/* Minimum tap target. 44px is the floor for a thumb on a moving
-		   phone; design.md § Touch targets treats it as non-negotiable. */
+		--fs-control: 1rem;
+
+		--fs-display: clamp(1.875rem, 4.5vw, 2.5rem);
+		--shadow-sm: 0 1px 3px rgba(37, 37, 37, 0.04);
+		--shadow-md: 0 12px 36px rgba(37, 37, 37, 0.12);
+		--overlay-scrim: rgba(0, 0, 0, 0.5);
+
 		--tap-min: 2.75rem;
 		--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-		--dur-short: 240ms;
-		/* Height the bottom nav occupies on phones, so pages can reserve it. */
+		--dur-short: 150ms;
+
 		--nav-bottom-h: calc(3.25rem + env(safe-area-inset-bottom, 0px));
-		/* The app bar's height, exposed the same way the bottom bar's is, so
-		   anything positioned against the top of the viewport can clear it instead
-		   of guessing. The reminder popup landed 12px under the bar because it
-		   guessed. Tracks the bar's own padding + line-height, plus the notch. */
+
 		--app-bar-h: calc(2.75rem + var(--space-2) * 2 + env(safe-area-inset-top, 0px));
-		/* The status bar and notch, for a screen with no app bar to carry it.
-		   viewport-fit=cover plus a translucent status bar means an installed
-		   app (home screen or native) starts drawing at y=0, under the clock.
-		   Zero in a browser tab, so adding it costs nothing there. */
+
 		--safe-top: env(safe-area-inset-top, 0px);
 
-		/* ─── how wide content is allowed to get ────────────────────────────────
-		 *
-		 * Every page picked its own number before this — 38rem here, 32rem there,
-		 * 42rem in the bar — so a 1280px screen showed a 672px column with a third
-		 * of the window empty, and no two surfaces agreed on why.
-		 *
-		 * Width is a decision about the CONTENT, not the device. A form stays
-		 * narrow because line length is readability and a 900px-wide text input is
-		 * harder to use, not easier. A list of cards or a table goes wide because
-		 * density is the whole point — a manager comparing teams wants more rows
-		 * visible, not more whitespace.
-		 *
-		 * Breakpoints stay literal in @media because custom properties cannot be
-		 * used there. The scale is 30rem / 40rem / 64rem — phone, tablet, desktop —
-		 * and it replaces the four ad-hoc values that were in use (28rem, 40rem,
-		 * 47.9375rem, 600px).
-		 */
-		--w-form: 34rem;   /* one column of fields */
-		--w-read: 42rem;   /* prose, settings, anything mostly sentences */
-		--w-list: 60rem;   /* cards and entry lists */
-		--w-board: 78rem;  /* tables, coverage grids, anything dense */
+		--w-form: 34rem;
+		--w-read: 42rem;
+		--w-list: 60rem;
+		--w-board: 78rem;
 
-		/* App-bar palette. Deliberately NOT redefined in the dark block: the bar
-		   is identity, not a surface, and stays team purple in both themes. The
-		   status dots sit on that fixed purple, so they are fixed too — a token
-		   that flipped with the theme would be wrong against an unflipping
-		   background. Named rather than inlined so the set is visible in one
-		   place instead of scattered through six rules. */
-		--bar-bg: #5f24a2;
-		--bar-ink: #ffffff;
-		--bar-chip-bg: rgba(255, 255, 255, 0.18);
-		/* The outline on the bar's one action. Non-text, so it is held to the 3:1
-		   boundary floor rather than the text floor. */
-		--bar-edge: rgba(255, 255, 255, 0.55);
-		--bar-badge-bg: #ffb000;
+		--bar-bg: #ffffff;
+		--bar-ink: #252525;
+		--bar-chip-bg: #eeede9;
+
+		--bar-edge: #8a877f;
+		--bar-badge-bg: #f1ebf7;
 		--bar-badge-ink: #5f24a2;
-		--dot-ok: #4ade80;
-		--dot-pending: #facc15;
-		--dot-offline: #999999;
-		--dot-err: #f87171;
-		--dot-idle: rgba(255, 255, 255, 0.35);
-		--pending-ink: #442222;
+		--dot-ok: #047857;
+		--dot-pending: #a16207;
+		--dot-offline: #6b6862;
+		--dot-err: #c0392b;
+		--dot-idle: #8a877f;
+		--pending-ink: #ffffff;
+		--font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+		--font-display: var(--font-body);
+		--font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+		--fs-page: clamp(1.625rem, 3vw, 2rem);
+		--space-7: 3rem;
+		--space-8: 4rem;
 	}
 	/* Dark palette — defined ONCE. There used to be a second copy inside an
 	   @media (prefers-color-scheme: dark) block, and the two had already
@@ -533,26 +484,24 @@
 	   an explicit data-theme in JS (and pre-paint in app.html), which makes
 	   one block sufficient. */
 	:global(:root[data-theme='dark']) {
-		--bg-page: #0e0e10;
-		--bg-card: #1a1a1c;
-		--bg-subtle: #1f1f22;
-		--bg-elev: #232326;
-		--text-primary: #e8e8e8;
-		--text-muted: #a0a0a3;
-		--text-faint: #8a8a8a;
-		--border: #2a2a2d;
-		--border-strong: #6a6a70; /* was #38383b at 1.49:1; now 3.23 / 3.59 */
-		--accent: #b18de0;
-		--accent-hover: #c5a8eb;
-		--accent-soft: #2a1e3d;
-		/* Dark mode lightens the accent, so the ink on top has to darken with
-		   it. White was 2.71:1 on --accent and 2.06:1 on --accent-hover — every
-		   primary button in the app, unreadable, in the theme people use in a
-		   dark gym. #1a1a1c gives 6.42 / 8.42. */
-		--on-accent: #1a1a1c;
+		color-scheme: dark;
+		--bg-page: #151517;
+		--bg-card: #1d1d20;
+		--bg-subtle: #27272a;
+		--bg-elev: #29292d;
+		--text-primary: #f0eeea;
+		--text-muted: #bbb8b2;
+		--text-faint: #a09d98;
+		--border: #38383c;
+		--border-strong: #7f7d84;
+		--accent: #bba1e1;
+		--accent-hover: #cdb8eb;
+		--accent-soft: #30283c;
+
+		--on-accent: #1d1d20;
 		--alliance-red: #f1746a;
 		--alliance-blue: #6fa8ec;
-		--on-alliance: #101014; /* 6.73 on red, 7.67 on blue */
+		--on-alliance: #101014;
 		--danger: #f7857a;
 		--danger-bg: #3a1a18;
 		--success: #6ee7b7;
@@ -561,119 +510,55 @@
 		--warning: #fcd34d;
 		--warning-bg: #2a200a;
 		--warning-border: #5a4318;
-		--banner-info-bg: #2a1e3d;
-		--banner-info-border: #4a3a6e;
+		--banner-info-bg: #30283c;
+		--banner-info-border: #4d415e;
 		--banner-red-bg: #3a1a18;
 		--banner-red-border: #5a2a22;
 		--banner-blue-bg: #16233a;
 		--banner-blue-border: #2c4a7a;
+		--bar-bg: #1d1d20;
+		--bar-ink: #f0eeea;
+		--bar-chip-bg: #27272a;
+		--bar-edge: #7f7d84;
+		--bar-badge-bg: #30283c;
+		--bar-badge-ink: #bba1e1;
+		--dot-ok: #6ee7b7;
+		--dot-pending: #facc15;
+		--dot-offline: #999999;
+		--dot-err: #f87171;
+		--dot-idle: #a09d98;
+		--pending-ink: #442222;
+		--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+		--shadow-md: 0 12px 36px rgba(0, 0, 0, 0.35);
 	}
 
-	/* ─── Studio ───────────────────────────────────────────────────────────────
-	 *
-	 * A second palette on one system, not a second design system. Spacing, type,
-	 * radii and motion still come from the block above and design.md still governs
-	 * them; only colour changes here.
-	 *
-	 * MUST STAY AFTER THE DARK BLOCK. `:root[data-theme='dark']` and
-	 * `:root[data-studio]` are both (0,2,0), so source order is the only thing
-	 * deciding which wins on a dark-themed Studio. check_contrast.mjs asserts the
-	 * ordering, because nothing else would notice it being moved.
-	 *
-	 * ── why dark, in both themes ──
-	 *
-	 * Studio is dark whatever the app theme says, the same way the app bar stays
-	 * purple in both. It is a laptop-at-a-table surface read under competition
-	 * lighting, and the palette only works on a dark ground:
-	 *
-	 *     #662DB4  purple  8.08 on white   ← the only one that can carry white text
-	 *     #0087F8  blue    3.61 on white   dark text only
-	 *     #00C7FA  cyan    1.99 on white   dark text only
-	 *     #49FCE2  aqua    1.29 on white   dark text only
-	 *
-	 * Three of the four cannot have white text on them. That is not a detail to
-	 * discover during implementation, it decides the scheme: on a dark ground the
-	 * numbers invert term for term, and the three that were unusable become the
-	 * readable ones. Cyan is 1.99 on white and 9.29 as ink on a Studio card.
-	 *
-	 * So the light three are INK — links, active states, series, accents — and
-	 * purple, the one that can carry white text, is the FILL. That is the whole
-	 * assignment, and every rule below follows from it.
-	 *
-	 * ── why base tokens are remapped, not just added to ──
-	 *
-	 * `--studio-*` alone would have dressed the pages and left every shared
-	 * component behind: Button, Select, Dialog and Field all read `--bg-card`,
-	 * `--accent` and `--text-primary`, so a white button would have sat on a dark
-	 * panel until each was given a Studio variant. Remapping the base names inside
-	 * this scope costs nothing and dresses all of them at once — a component that
-	 * consumes tokens correctly is already a Studio component.
-	 *
-	 * The `--studio-*` names are the ones with no scout-app equivalent: the raw
-	 * four, the white-text fill, and the chart series.
-	 */
-	/* ─── Studio, light ────────────────────────────────────────────────────────
-	 *
-	 * Studio followed the app theme from v0.75. It was dark in both themes before
-	 * that, and the reasoning was sound — the four brand colours only sing on a
-	 * dark ground — but it was reasoning about the palette rather than about the
-	 * person reading it, and the reader could not read it. Legibility settles
-	 * that argument; a manager who has to squint is the whole answer.
-	 *
-	 * ── the roles invert, exactly as they did going the other way ──
-	 *
-	 * On white, three of the four brand colours are unusable as ink:
-	 *
-	 *     #662DB4  purple  8.08 on white   ← the only one that reads
-	 *     #0087F8  blue    3.61            large text and marks only
-	 *     #00C7FA  cyan    1.99            decorative
-	 *     #49FCE2  aqua    1.29            decorative
-	 *
-	 * So on light, PURPLE is the accent and does both jobs — 8.08 as ink on a
-	 * card, 8.08 under white as a fill. That is the same double duty cyan performs
-	 * on the dark palette, handed to the only member that can perform it here.
-	 * Reaching for cyan as "the Studio accent" on light makes every link a
-	 * 1.99 smudge, which is the mirror image of the dark palette's trap.
-	 *
-	 * ── the series are darkened, and that is not a betrayal of the brand ──
-	 *
-	 * A series doubles as its own legend label, so it is held to 4.5 against the
-	 * RAISED panel — the hardest ground for dark ink, and the one nobody checks.
-	 * Raw cyan is 1.59 there. The darkened set keeps the hue and earns the
-	 * contrast: the family is recognisable, the text is readable.
-	 */
+	/* Studio shares the neutral canvas and purple accent. Chart series retain
+	   separate semantic colors; navigation does not borrow their palette. */
 	:global(:root[data-studio]) {
-		--studio-purple: #662db4;
+		--studio-purple: #5f24a2;
 		--studio-blue: #0087f8;
 		--studio-cyan: #00c7fa;
 		--studio-aqua: #49fce2;
-		/* On light this is the purple DARKENED rather than lifted — the same
-		   token name, the same job (a fourth series that can be drawn with), the
-		   opposite direction, because the ground moved. */
-		--studio-violet: #5a27a0;
 
-		--bg-page: #f7f6fc;
+		--studio-violet: #5f24a2;
+
+		--bg-page: #f6f5f2;
 		--bg-card: #ffffff;
-		--bg-subtle: #f2f0fa;
-		/* Deliberately close to the others. Elevation on light is the DARKEST of
-		   the four grounds, so it is where every dark ink is weakest; pulling it up
-		   buys headroom for the whole series set at once. */
-		--bg-elev: #eae7f6;
+		--bg-subtle: #eeede9;
 
-		--text-primary: #16141f;
-		--text-muted: #57516e;
-		--text-faint: #655e7e;
+		--bg-elev: #f0efec;
 
-		--border: #e2def0;
-		/* 3.25 on --bg-elev. The obvious #8b83a6 measures 2.93 there — under
-		   WCAG 1.4.11, on the one boundary that has to be visible because it is
-		   the only thing saying "input". Same failure the dark palette had, from
-		   the opposite side. */
-		--border-strong: #837ba0;
+		--text-primary: #252525;
+		--text-muted: #595750;
+		--text-faint: #6b6862;
 
-		--accent: #662db4;
-		--accent-hover: #55249a;
-		--accent-soft: #ece5f9;
+		--border: #dedcd6;
+
+		--border-strong: #8a877f;
+
+		--accent: #5f24a2;
+		--accent-hover: #4e1c87;
+		--accent-soft: #f1ebf7;
 		--on-accent: #ffffff;
 
 		--alliance-red: #b3261e;
@@ -688,14 +573,14 @@
 		--warning: #8a5a00;
 		--warning-bg: #fdf4e3;
 		--warning-border: #e6c489;
-		--banner-info-bg: #ece5f9;
-		--banner-info-border: #cbb8ec;
+		--banner-info-bg: #f1edf5;
+		--banner-info-border: #ded4e9;
 		--banner-red-bg: #fdecea;
 		--banner-red-border: #f0b3ae;
 		--banner-blue-bg: #e8f0fc;
 		--banner-blue-border: #a8c4e8;
 
-		--studio-fill: #662db4;
+		--studio-fill: #5f24a2;
 		--on-studio-fill: #ffffff;
 
 		--studio-series-1: #662db4;
@@ -703,52 +588,37 @@
 		--studio-series-3: #026b88;
 		--studio-series-4: #016b5c;
 
-		--shadow-sm: 0 1px 2px rgba(22, 20, 31, 0.06);
-		--shadow-md: 0 6px 20px rgba(22, 20, 31, 0.12);
+		--shadow-sm: 0 1px 3px rgba(37, 37, 37, 0.04);
+		--shadow-md: 0 12px 36px rgba(37, 37, 37, 0.12);
 	}
 
 	:global(:root[data-studio][data-theme='dark']) {
-		/* The four, verbatim. Named so a page can reach for the colour itself
-		   where a semantic token would be a lie — a legend swatch is not an
-		   "accent", it is series 2. */
+		--on-studio-fill: #ffffff;
+
 		--studio-purple: #662db4;
 		--studio-blue: #0087f8;
 		--studio-cyan: #00c7fa;
 		--studio-aqua: #49fce2;
-		/* #662DB4 lifted until it reads as ink on a dark ground. The raw purple is
-		   2.29 on a Studio card — fine as a fill, invisible as text — and a fourth
-		   series had to be something, so this is the purple that can be drawn with
-		   rather than sat on. Same relationship as the app's dark --accent to its
-		   light one. */
-		--studio-violet: #a277ee;
 
-		/* Grounds. Neutral-with-purple rather than grey, so the sidebar's purple
-		   fill reads as the same family instead of a sticker on slate. */
-		--bg-page: #0a0912;
-		--bg-card: #14121f;
-		--bg-subtle: #1c1930;
-		--bg-elev: #241f3c;
+		--studio-violet: #bba1e1;
 
-		--text-primary: #eceafd;
-		--text-muted: #a9a3c9;
-		--text-faint: #8e88b0;
+		--bg-page: #151517;
+		--bg-card: #1d1d20;
+		--bg-subtle: #27272a;
+		--bg-elev: #29292d;
 
-		--border: #2a2540;
-		/* 3.54 on --bg-elev, the lightest ground it is ever drawn against. The
-		   obvious #5c5480 looked right and measured 2.27 there — an input outline
-		   under WCAG 1.4.11's 3:1 floor, which is the one boundary that has to be
-		   visible because it is the only thing saying "input". */
-		--border-strong: #7a71a4;
+		--text-primary: #f0eeea;
+		--text-muted: #bbb8b2;
+		--text-faint: #a09d98;
 
-		/* Cyan is the accent because it is the one colour that works in both
-		   directions: 9.29 as ink on a card, and 9.95 as a fill under --on-accent.
-		   Purple could carry the fill but not the links, and --accent has to do
-		   both jobs — Button paints it as a background, every page paints it as
-		   text. */
-		--accent: #00c7fa;
-		--accent-hover: #49fce2;
-		--accent-soft: #2a1a4d;
-		--on-accent: #0a0912;
+		--border: #38383c;
+
+		--border-strong: #7f7d84;
+
+		--accent: #bba1e1;
+		--accent-hover: #cdb8eb;
+		--accent-soft: #30283c;
+		--on-accent: #1d1d20;
 
 		--alliance-red: #ff8078;
 		--alliance-blue: #7db2f2;
@@ -762,40 +632,21 @@
 		--warning: #fbc94a;
 		--warning-bg: #2e2413;
 		--warning-border: #5c4a1c;
-		--banner-info-bg: #1c1440;
-		--banner-info-border: #3f2d6e;
+		--banner-info-bg: #30283c;
+		--banner-info-border: #4d415e;
 		--banner-red-bg: #33141a;
 		--banner-red-border: #5e2a2a;
 		--banner-blue-bg: #141d38;
 		--banner-blue-border: #2c4472;
 
-		/* The white-text fill. Deliberately separate from --accent: this is the
-		   one member of the palette that may sit under white, and naming it that
-		   way is what stops someone reaching for cyan the next time a filled
-		   surface is wanted. */
-		--studio-fill: #662db4;
-		--on-studio-fill: #ffffff;
+		--studio-series-1: #bba1e1;
+		--studio-series-2: #8cb7e5;
+		--studio-series-3: #8dc9b6;
+		--studio-series-4: #d0b797;
 
-		/* Chart series. Ordered cyan → blue → aqua → violet, which is not the
-		   order they are listed in: it is the order that keeps ADJACENT series
-		   furthest apart. The natural order puts cyan next to aqua at 1.55, the
-		   closest pair in the set.
-
-		   Two of the four are lifted rather than raw, and the check is what
-		   decided which: a series doubles as its own legend label, so it is held
-		   to the 4.5 text floor, and the raw blue measures 4.36 on --bg-elev. It
-		   passes on every other ground, which is exactly how it would have
-		   shipped — the raised panel is the one surface nobody checks. #1c92fb is
-		   the smallest lift that clears it, at 4.90. */
-		--studio-series-1: #00c7fa;
-		--studio-series-2: #1c92fb;
-		--studio-series-3: #49fce2;
-		--studio-series-4: #a277ee;
-
-		/* A 6%-black shadow is invisible on a #14121f card. Elevation on dark has
-		   to be a darker hole, not a lighter edge. */
-		--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-		--shadow-md: 0 8px 28px rgba(0, 0, 0, 0.55);
+		--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+		--shadow-md: 0 12px 36px rgba(0, 0, 0, 0.35);
+		--studio-fill: #5f24a2;
 	}
 
 	:global(body) {
@@ -808,7 +659,10 @@
 		   sat on a page's own `main`, so the app looked right everywhere anyone
 		   had remembered — and a Studio page that never grew a `main` rule had no
 		   font at all. Inherited from body, a page cannot forget it. */
-		font-family: system-ui, -apple-system, sans-serif;
+		font-family: var(--font-body);
+		font-size: var(--fs-md);
+		line-height: 1.5;
+		-webkit-font-smoothing: antialiased;
 	}
 	:global(input), :global(textarea), :global(select) {
 		color: var(--text-primary);
@@ -820,7 +674,7 @@
 		margin: calc(var(--space-6) + var(--safe-top)) auto var(--space-6);
 		padding: 0 var(--space-4);
 	}
-	.gate h1 { margin: 0 0 var(--space-3); font-size: var(--fs-xl); letter-spacing: -0.02em; }
+	.gate h1 { margin: 0 0 var(--space-3); font-size: var(--fs-page); letter-spacing: -0.02em; }
 	.gate p { color: var(--text-muted); line-height: 1.5; margin: 0 0 var(--space-5); }
 	.gate-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 	.gate-link,
@@ -882,10 +736,7 @@
 		margin-top: calc(2 * var(--space-6) + var(--safe-top));
 		color: var(--text-faint);
 	}
-	/* The app bar is identity, not navigation — who you are and whether your
-	   work is safe. It stays purple in both themes: it's the one surface
-	   carrying the team's colour, and a scout glancing down should recognise
-	   the app before they read a word of it. */
+
 	.app-bar {
 		background: var(--bar-bg);
 		color: var(--bar-ink);
@@ -893,13 +744,7 @@
 		padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
 	}
 	.app-bar-inner {
-		/* Aligned to --w-list, the width of the busiest surface under it.
-		   --w-board left the bar's text starting well left of the content it sits
-		   above, which reads as two pages stacked; a bar WIDER than a narrow form
-		   is just a header and looks right. Align to the common case, not the
-		   widest one. */
-		max-width: var(--w-list);
-		margin: 0 auto;
+		width: 100%;
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
@@ -939,11 +784,6 @@
 	   without this a screen reader gets no warning that the link leaves the app. */
 	/* Below this the bar is carrying an event, a name, sync state and a way into
 	   Studio. The badge is the only one of those that is purely decorative. */
-	@media (max-width: 30rem) {
-		.role-badge {
-			display: none;
-		}
-	}
 
 	/* The one ACTION in the bar, and it has to look like one.
 	   It was a translucent pill in --bar-chip-bg that turned YELLOW on hover —
@@ -985,21 +825,6 @@
 	.studio-btn:focus-visible {
 		outline: 2px solid var(--bar-ink);
 		outline-offset: 2px;
-	}
-
-	.role-badge {
-		flex: none;
-		background: var(--bar-chip-bg);
-		padding: var(--space-1) var(--space-2);
-		border-radius: var(--radius-pill);
-		font-size: var(--fs-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-	}
-	.role-badge.manager {
-		background: var(--bar-badge-bg);
-		color: var(--bar-badge-ink);
-		font-weight: 700;
 	}
 
 
@@ -1085,4 +910,37 @@
 	@media (prefers-reduced-motion: reduce) {
 		.tabs a { transition-duration: 0.01ms; }
 	}
+	:global(html), :global(body) { overflow-x: clip; }
+	:global(h1), :global(h2), :global(h3) {
+		font-style: normal;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	:global(input:not([type='range']):not([type='checkbox']):not([type='radio'])),
+	:global(textarea), :global(select) {
+		font: inherit;
+		font-size: var(--fs-control);
+		max-width: 100%;
+	}
+	:global(button), :global(a) { -webkit-tap-highlight-color: transparent; }
+	:global(code), :global(pre) { font-family: var(--font-mono); }
+	.app-chrome { background: var(--bg-card); border-bottom: 1px solid var(--border); }
+	.app-shell { width: 100%; }
+	.app-bar-inner { gap: var(--space-3); }
+	.who { font-size: var(--fs-sm); }
+	.event { letter-spacing: 0; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+	.studio-btn { margin-left: 0; }
+	.tabs a { white-space: nowrap; }
+	.tabs a.active { background: var(--bg-card); }
+	@media (min-width: 40rem) {
+		.app-shell { display: flex; align-items: center; padding: 0 max(var(--space-6), env(safe-area-inset-right, 0px)) 0 max(var(--space-6), env(safe-area-inset-left, 0px)); }
+		.app-bar { flex: 1; padding-left: 0; padding-right: var(--space-4); min-width: 0; }
+		.tabs { align-self: stretch; border-bottom: none; padding: 0; gap: var(--space-1); }
+		.tabs a { padding: var(--space-2) var(--space-3); }
+	}
+	@media (max-width: 22rem) {
+		.app-bar-inner { gap: var(--space-2); }
+		.who .name, .who .sep { display: none; }
+	}
+
 </style>

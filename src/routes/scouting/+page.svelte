@@ -14,9 +14,13 @@
 	});
 </script>
 
-<p class="wait">Your entries are on Home now. Taking you there…</p>
+<p class="wait">Opening…</p>
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	.wait {
 		margin: var(--space-6) auto;
 		max-width: 32rem;

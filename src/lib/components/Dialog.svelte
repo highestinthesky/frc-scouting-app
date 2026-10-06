@@ -101,7 +101,7 @@
 		justify-content: center;
 	}
 	.dlg::backdrop {
-		background: rgb(0 0 0 / 0.5);
+		background: var(--overlay-scrim);
 	}
 
 	.card {
@@ -120,7 +120,7 @@
 	h2 {
 		margin: 0 0 var(--space-2);
 		font-size: var(--fs-lg);
-		font-weight: 700;
+		font-weight: 600;
 		letter-spacing: -0.01em;
 	}
 

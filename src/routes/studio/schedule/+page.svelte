@@ -251,13 +251,6 @@
 	}
 	function closeMatch() { editingMatch = null; }
 
-	// ESC closes the modal.
-	$effect(() => {
-		if (editingMatch == null || typeof window === 'undefined') return;
-		const onKey = (e) => { if (e.key === 'Escape') closeMatch(); };
-		window.addEventListener('keydown', onKey);
-		return () => window.removeEventListener('keydown', onKey);
-	});
 
 	/** The full match object currently being edited. */
 	const editingMatchObj = $derived(

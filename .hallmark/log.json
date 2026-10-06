@@ -1,12 +1,63 @@
 [
   {
+    "date": "2026-10-06",
+    "scope": "app",
+    "verb": "redesign and adapt",
+    "genre": "modern-minimal",
+    "macrostructure": "Workbench",
+    "theme": "brand-purple neutral",
+    "designSystem": "design.md",
+    "brief": "Full-width app navigation, actionable manager Home, explicit scout event selection, and left-aligned Settings.",
+    "preEmitCritique": {
+      "philosophy": 5,
+      "hierarchy": 5,
+      "execution": 4,
+      "specificity": 5,
+      "restraint": 5,
+      "variety": 4
+    }
+  },
+  {
+    "date": "2026-10-05",
+    "scope": "app",
+    "verb": "review and refine",
+    "genre": "modern-minimal",
+    "macrostructure": "Workbench",
+    "theme": "brand-purple neutral",
+    "enrichment": "none",
+    "designSystem": "design.md",
+    "brief": "Remove visible logos, repeated context and unnecessary text across all routes and shared UI parts.",
+    "preEmitCritique": {
+      "philosophy": 5,
+      "hierarchy": 5,
+      "execution": 4,
+      "specificity": 5,
+      "restraint": 5,
+      "variety": 4
+    }
+  },
+  {
+    "date": "2026-10-05",
+    "scope": "app",
+    "macrostructure": "Workbench",
+    "theme": "brand-purple neutral",
+    "enrichment": "none",
+    "genre": "modern-minimal",
+    "tone": "quiet utilitarian",
+    "brief": "Visual overhaul of every scouting and Studio page; simple layouts and restrained color."
+  },
+  {
     "date": "2026-07-29",
     "scope": "app",
     "genre": "modern-minimal",
     "macrostructure": "Workbench",
     "theme": "custom (brand purple, system fonts)",
     "designSystem": "design.md",
-    "axes": { "paperBand": "light+dark pair", "displayStyle": "system-sans", "accentHue": "violet 299°" },
+    "axes": {
+      "paperBand": "light+dark pair",
+      "displayStyle": "system-sans",
+      "accentHue": "violet 299\u00b0"
+    },
     "nav": "bottom-docked tab bar under 40rem, top strip above (no N1-N13 archetype fits a thumb-reachable app nav)",
     "footer": "none (app, not a marketing page)",
     "enrichment": "none (app pages forbid it)",
@@ -16,7 +67,19 @@
       "brand purple retained over Coral/Cobalt accents"
     ],
     "brief": "FRC Scout - scouting PWA for team 3419, phone-first, nine routes",
-    "pagesDone": ["+layout.svelte"],
-    "pagesPending": ["/new", "/edit", "/manager", "/manager/team/[n]", "/manager/compare", "/manager/picklist", "/schedule", "/settings", "/"]
+    "pagesDone": [
+      "+layout.svelte"
+    ],
+    "pagesPending": [
+      "/new",
+      "/edit",
+      "/manager",
+      "/manager/team/[n]",
+      "/manager/compare",
+      "/manager/picklist",
+      "/schedule",
+      "/settings",
+      "/"
+    ]
   }
 ]

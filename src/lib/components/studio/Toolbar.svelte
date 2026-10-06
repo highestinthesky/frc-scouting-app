@@ -32,15 +32,16 @@
 <style>
 	.toolbar {
 		display: flex;
-		gap: var(--space-2);
+		gap: var(--space-3);
 		align-items: center;
 		flex-wrap: wrap;
 		justify-content: space-between;
 	}
+	.lead { flex: 1 1 auto; }
 	.lead,
 	.end {
 		display: flex;
-		gap: var(--space-2);
+		gap: var(--space-3);
 		align-items: center;
 		flex-wrap: wrap;
 		min-width: 0;

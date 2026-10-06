@@ -83,6 +83,8 @@
 	.btn {
 		font: inherit;
 		font-weight: 600;
+		font-size: var(--fs-sm);
+		white-space: nowrap;
 		/* 44px floor. design.md treats this as non-negotiable: a 32px button
 		   looks better in a screenshot and fails under a thumb in a gym. */
 		min-height: var(--tap-min);
@@ -104,6 +106,7 @@
 		text-decoration: none;
 	}
 	.btn.full {
+		width: 100%;
 		flex: 1 1 0;
 		min-width: 0;
 	}
@@ -139,6 +142,8 @@
 		color: var(--danger);
 		border-color: var(--danger);
 	}
+
+	.btn:active:not(:disabled) { opacity: 0.85; }
 
 	/* Hover only where a pointer can actually hover. On a phone :hover is
 	   applied by the tap and stays until the next one, so a Button kept its

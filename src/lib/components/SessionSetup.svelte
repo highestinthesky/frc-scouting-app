@@ -49,7 +49,7 @@
 		{:else}
 			<label class="field">
 				<span class="label">Event code</span>
-				
+
 				<input bind:value={eventCode} required autocomplete="off" autocapitalize="none" placeholder="2026xxxx" />
 			</label>
 		{/if}
@@ -59,7 +59,7 @@
 		{:else}
 			<label class="field">
 				<span class="label">Your name</span>
-				
+
 				<input bind:value={scoutName} required autocomplete="name" placeholder="Your name" />
 			</label>
 		{/if}
@@ -118,7 +118,7 @@
 		font: inherit;
 		font-weight: 600;
 		background: var(--accent);
-		color: white;
+		color: var(--on-accent);
 		border: none;
 		border-radius: var(--radius-md);
 		cursor: pointer;

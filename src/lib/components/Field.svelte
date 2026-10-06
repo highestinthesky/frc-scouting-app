@@ -354,7 +354,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
-		margin-bottom: var(--space-4);
+		margin-bottom: var(--space-5);
 	}
 	.label {
 		font-weight: 600;
@@ -369,6 +369,8 @@
 	input, textarea {
 		font: inherit;
 		padding: var(--space-3);
+		min-height: var(--tap-min);
+		width: 100%;
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-md);
 		background: var(--bg-card);
@@ -473,6 +475,8 @@
 		flex-direction: column;
 		gap: var(--space-2);
 		padding: var(--space-3);
+		min-height: var(--tap-min);
+		width: 100%;
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-md);
 		background: var(--bg-card);

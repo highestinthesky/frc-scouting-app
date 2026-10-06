@@ -1,4 +1,5 @@
 <script>
+	import { tick } from 'svelte';
 	import Select from '../Select.svelte';
 	// Manager taps "Edit" on a preview row or a coverage conflict to open this.
 	// Shows both alliances, who is effectively watching each team (override if
@@ -28,19 +29,30 @@
 	const matchOverrides = $derived(overrideList.filter((o) => o.match_number === m.match_number));
 	const teamsRed = $derived((m.alliances?.red?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, ''))));
 	const teamsBlue = $derived((m.alliances?.blue?.team_keys ?? []).map((k) => Number(String(k).replace(/^frc/, ''))));
+
+	let modal = $state(/** @type {HTMLDialogElement|null} */ (null));
+	$effect(() => {
+		const el = modal;
+		if (!el) return;
+		const opener = document.activeElement;
+		el.showModal();
+		return () => {
+			el.close();
+			void tick().then(() => {
+				if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true });
+			});
+		};
+	});
 </script>
 
-<div
+<dialog
+	bind:this={modal}
 	class="modal-backdrop"
-	role="presentation"
+	aria-labelledby="match-editor-title"
+	oncancel={(e) => { e.preventDefault(); onClose(); }}
 	onclick={(e) => { if (e.target === e.currentTarget) onClose(); }}
 >
-	<div
-		class="modal-card"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="match-editor-title"
-	>
+	<div class="modal-card">
 		<header class="modal-head">
 			<h2 id="match-editor-title">
 				Q{m.match_number}
@@ -148,15 +160,15 @@
 			<Button onclick={onClose}>Done</Button>
 		</footer>
 	</div>
-</div>
+</dialog>
 
 <style>
 	h2 {
 		margin: var(--space-5) 0 var(--space-2);
 		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--text-primary);
 	}
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.muted.small { font-size: var(--fs-sm); }
@@ -181,23 +193,26 @@
 	.modal-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		width: 100%; height: 100dvh; max-width: none; max-height: none;
+		margin: 0; border: 0;
+		background: var(--overlay-scrim);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: var(--space-4);
+		padding: max(var(--space-4), env(safe-area-inset-top, 0px)) max(var(--space-4), env(safe-area-inset-right, 0px)) max(var(--space-4), env(safe-area-inset-bottom, 0px)) max(var(--space-4), env(safe-area-inset-left, 0px));
 		z-index: 50;
-		animation: fadein 0.12s ease-out;
 	}
+	.modal-backdrop:not([open]) { display: none; }
+	.modal-backdrop::backdrop { background: transparent; }
 	.modal-card {
 		background: var(--bg-card);
 		color: var(--text-primary);
 		border-radius: var(--radius-lg);
 		border: 1px solid var(--border);
-		box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+		box-shadow: var(--shadow-md);
 		width: 100%;
 		max-width: 30rem;
-		max-height: calc(100vh - 2rem);
+		max-height: calc(100dvh - max(var(--space-4), env(safe-area-inset-top, 0px)) - max(var(--space-4), env(safe-area-inset-bottom, 0px)));
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -212,7 +227,7 @@
 	.modal-head h2 {
 		margin: 0;
 		font-size: var(--fs-lg);
-		font-weight: 700;
+		font-weight: 600;
 		text-transform: none;
 		letter-spacing: 0;
 		color: var(--text-primary);
@@ -226,6 +241,7 @@
 		margin-left: var(--space-2);
 	}
 	.modal-x {
+		min-width: var(--tap-min); min-height: var(--tap-min);
 		background: transparent;
 		border: none;
 		color: var(--text-faint);
@@ -243,9 +259,7 @@
 	.mb-section { margin-top: var(--space-4); }
 	.mb-section:first-child { margin-top: var(--space-1); }
 	.mb-h {
-		font-size: var(--fs-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
+		font-size: var(--fs-sm);
 		color: var(--text-muted);
 		margin: 0 0 var(--space-2);
 		display: flex;
@@ -266,13 +280,13 @@
 		gap: var(--space-2);
 		padding: var(--space-2);
 		border: 1px solid var(--border);
-		border-left: 4px solid var(--border-strong);
+
 		border-radius: var(--radius-md);
 		background: var(--bg-card);
 		font-size: var(--fs-sm);
 	}
-	.mb-team[data-color='red'] { border-left-color: var(--alliance-red); }
-	.mb-team[data-color='blue'] { border-left-color: var(--alliance-blue); }
+	.mb-team[data-color='red'] .mb-color-tag { color: var(--alliance-red); }
+	.mb-team[data-color='blue'] .mb-color-tag { color: var(--alliance-blue); }
 	.mb-color-tag {
 		font-size: var(--fs-xs);
 		text-transform: uppercase;
@@ -302,7 +316,7 @@
 		background: var(--accent-soft);
 		border-color: var(--accent-soft);
 	}
-	.mb-watchers { color: var(--text-muted); flex: 1 1 0; min-width: 0; }
+	.mb-watchers { color: var(--text-muted); flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
 	.mb-none { color: var(--text-faint); font-style: italic; }
 	.mb-override-tag {
 		color: var(--accent);
@@ -365,12 +379,11 @@
 		display: flex;
 		justify-content: flex-end;
 	}
-	@media (max-width: 28rem) {
+	@media (max-width: 39.9375rem) {
 		.modal-card { max-width: 100%; }
 		.mb-form { grid-template-columns: minmax(0, 1fr); }
-	}
-	@keyframes fadein {
-		from { opacity: 0; }
-		to { opacity: 1; }
+		.mb-team { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+		.mb-watchers { grid-column: 1 / 3; }
+		.mb-scout { grid-column: 3; }
 	}
 </style>

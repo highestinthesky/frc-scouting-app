@@ -41,10 +41,12 @@
 <style>
 	.head {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: var(--space-3);
 		flex-wrap: wrap;
-		margin-bottom: var(--space-4);
+		margin-bottom: var(--space-6);
+		padding-bottom: var(--space-5);
+		border-bottom: 1px solid var(--border);
 	}
 	.titles {
 		min-width: 0;
@@ -52,17 +54,17 @@
 	}
 	h1 {
 		margin: 0;
-		font-size: var(--fs-xl);
+		font-size: var(--fs-page);
 		font-weight: 700;
 		letter-spacing: -0.02em;
 	}
 	.sub {
-		margin: 2px 0 0;
+		margin: var(--space-2) 0 0;
 		font-size: var(--fs-sm);
 		color: var(--text-muted);
 	}
 	.actions {
-		display: flex;
+		padding-top: var(--space-1);		display: flex;
 		gap: var(--space-2);
 		align-items: center;
 		flex-wrap: wrap;
@@ -84,5 +86,9 @@
 	}
 	.back:hover {
 		background: var(--bg-subtle);
+	}
+	@media (max-width: 40rem) {
+		.head { gap: var(--space-2); }
+		.actions { width: 100%; padding-top: var(--space-2); }
 	}
 </style>

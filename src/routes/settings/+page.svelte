@@ -150,7 +150,7 @@
 		{:else}
 			<p class="muted">
 				Not signed in. <a href="{base}/">Sign in</a> or
-				<a href="{base}/register/">create an account</a> with an invite code.
+				<a href="{base}/register/">create an account</a> .
 			</p>
 		{/if}
 	</section>
@@ -175,10 +175,8 @@
 			     fixed on request, which is the difference between repairing it and
 			     doing it to someone. -->
 			{#if auth.signedIn}
-				<div class="field">
-					<span class="label">Your name</span>
-					<p class="named">{auth.displayName || '(not set on your account)'}</p>
-					{#if nameDiverges}
+				{#if nameDiverges}
+					<div class="field">
 						<small class="help warn">
 							This device still records as <strong>{session.scoutName}</strong>.
 							Assignments addressed to your account name will not reach it.
@@ -186,12 +184,12 @@
 						<Button type="button" disabled={saving} onclick={adoptAccountName}>
 							Use my account name
 						</Button>
-					{/if}
-				</div>
+					</div>
+				{/if}
 			{:else}
 				<label class="field">
 					<span class="label">Your name</span>
-					<small class="help">Match what the manager typed when assigning you teams.</small>
+					<small class="help">Use the name on your assignments.</small>
 					<input bind:value={scoutName} autocomplete="name" />
 				</label>
 
@@ -240,47 +238,33 @@
 	 * delegated to Button.svelte.
 	 */
 
-	/* The PAGE is as wide as its sibling tab; the COLUMN inside it is not.
-	   Settings sat at --w-form (34rem) while /scouting sat at --w-list (60rem),
-	   so switching between two tabs in the same bar jumped the content by 26rem
-	   and read as a mistake. Both widths were individually right and the pairing
-	   was wrong: width is a decision about the content, and the content here is
-	   a narrow column of fields inside a full-width page — not a narrow page.
-	   Same fix Accounts got in v0.74. */
-	/* One centred column, and the width is on MAIN rather than on the sections
-	   inside it.
-	   The previous shape put --w-list (60rem) on main and --w-form (34rem) on
-	   each section, so the page box centred but the content did not: every
-	   heading and field sat in the left 34rem with 26rem of empty page beside it.
-	   Centring a container and then left-aligning a narrower column inside it
-	   reads as a mistake, because it is one.
-	   Settings is a column of fields, so --w-form is the honest width for the
-	   whole page. It is narrower than /scouting's --w-list — width is a decision
-	   about the content, and these two pages hold different content — but both
-	   are centred, so neither leans. */
 	main {
-		max-width: var(--w-form);
-		/* One page rhythm across Home, Scouting and Settings. The top space lives
-		   HERE rather than on the first child, because each page has a different
-		   first child — Scouting can open with a next-match banner — and hanging
-		   it off the child made the three tabs start at three different heights. */
-		margin: var(--space-4) auto;
-		padding: var(--space-6) var(--space-4) calc(var(--nav-bottom-h) + var(--space-5));
+		width: 100%;
+		margin: var(--space-4) 0;
+		padding: var(--space-6) var(--space-6) calc(var(--nav-bottom-h) + var(--space-5));
+	}
+	section { max-width: var(--w-form); }
+	@media (max-width: 39.9375rem) {
+		main { padding-left: var(--space-4); padding-right: var(--space-4); }
 	}
 	.page-head {
 		margin: 0 0 var(--space-4);
+		margin-bottom: var(--space-6);
+		padding-bottom: var(--space-5);
+		border-bottom: 1px solid var(--border);
 	}
 	h1 {
 		margin: 0;
-		font-size: var(--fs-xl);
+		font-size: var(--fs-page);
 		letter-spacing: -0.02em;
 	}
 	h2 {
-		margin: var(--space-5) 0 var(--space-2);
+		margin: 0 0 var(--space-4);
 		font-size: var(--fs-md);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--text-primary);
+		font-weight: 600;
 	}
 	.muted { color: var(--text-faint); font-size: var(--fs-md); margin: 0 0 var(--space-3); }
 	.muted a { color: var(--accent); }
@@ -293,8 +277,12 @@
 	   selector is left. */
 	.theme-row {
 		display: flex;
-		gap: var(--space-2);
+		gap: 0;
 		flex-wrap: wrap;
+		padding: var(--space-1);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--bg-subtle);
 	}
 	.theme-btn:focus-visible {
 		outline: 2px solid var(--accent);
@@ -303,29 +291,28 @@
 	/* Selected is carried by border AND background AND text colour, not colour
 	   alone — the same rule the alliance colours follow. */
 
-
 	.theme-btn {
 		flex: 1 1 0;
-		min-width: 6rem;
-		/* design.md treats 44px as non-negotiable. This lived in a rule shared
-		   with the removed role picker and went out with it. */
+		min-width: 0;
 		min-height: var(--tap-min);
 		padding: var(--space-2) var(--space-3);
 		font: inherit;
 		font-weight: 600;
-		background: var(--bg-card);
+		background: transparent;
 		color: var(--text-primary);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-md);
 		cursor: pointer;
 		transition: border-color var(--dur-short) var(--ease-out);
+		border-color: transparent;
+		font-size: var(--fs-sm);
 	}
 	/* Selected is carried by border AND background AND text colour, not colour
 	   alone — the same rule the alliance colours follow. */
 	.theme-btn.selected {
-		border-color: var(--accent);
-		background: var(--accent-soft);
-		color: var(--accent);
+		border-color: var(--border-strong);
+		background: var(--bg-card);
+		color: var(--text-primary);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -377,6 +364,7 @@
 	.acct-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 
 
-	@media (prefers-reduced-motion: reduce) {
-	}
+	section { padding-bottom: var(--space-6); margin-bottom: var(--space-6); border-bottom: 1px solid var(--border); }
+	section:last-child { border-bottom: 0; }
+
 </style>

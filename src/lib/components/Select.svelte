@@ -25,6 +25,7 @@
 	 *   value: any,
 	 *   options: Array<{value: any, label: string, disabled?: boolean}>,
 	 *   label?: string,
+	 *   ariaLabel?: string,
 	 *   hint?: string,
 	 *   disabled?: boolean,
 	 *   invalid?: string,
@@ -37,6 +38,7 @@
 		value = $bindable(),
 		options = [],
 		label = '',
+		ariaLabel = '',
 		hint = '',
 		disabled = false,
 		invalid = '',
@@ -74,6 +76,7 @@
 			bind:value
 			{onchange}
 			aria-invalid={invalid ? 'true' : undefined}
+			aria-label={ariaLabel || undefined}
 			aria-describedby={hint ? hintId : undefined}
 		>
 			{#each options as opt (opt.value)}
@@ -144,7 +147,7 @@
 		/* Right padding clears the chevron: the icon's own gutter plus room for the
 		   12px glyph. Composed from tokens rather than written as 2.25rem, because a
 		   literal stops tracking the scale the moment the scale moves. */
-		padding: var(--space-2) calc(var(--space-2) * 2 + var(--space-5)) var(--space-2) var(--space-2);
+		padding: var(--space-2) calc(var(--space-2) * 2 + var(--space-5)) var(--space-2) var(--space-3);
 		min-height: var(--tap-min);
 		cursor: pointer;
 		transition:

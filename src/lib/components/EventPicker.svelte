@@ -1,42 +1,6 @@
 <script>
-	// Choosing an event, now that events are rows rather than a typed string.
-	//
-	// The field this replaces was a free-text box: type any code and you shared
-	// data with everyone who typed the same one. That was the whole security
-	// model, and the code is published on The Blue Alliance, so it was never a
-	// secret. Membership replaced it in 0019.
-	//
-	// ─── what this component has to be honest about ───────────────────────────
-	//
-	// Three states, and the reason each exists is that guessing wrong loses a
-	// scout's afternoon:
-	//
-	//   signed out    events is granted to `authenticated` and nobody else, so
-	//                 there is nothing to list. Recording still works — that
-	//                 invariant does not move — so this says so rather than
-	//                 looking broken or, worse, looking fine.
-	//   no events     signed in but on nothing. A scout cannot fix this alone;
-	//                 a manager adds them. Saying "ask a manager" is the whole
-	//                 remedy, so it is the whole message.
-	//   has events    a picker FOR A MANAGER only. The stored setting stays the
-	//                 CODE, because IndexedDB keys entries on eventCode and every
-	//                 local query goes through it.
-	//
-	// ─── a scout does not choose ──────────────────────────────────────────────
-	//
-	// Which event a scout is on is a membership fact a manager sets, not a
-	// preference. Offering the list let a scout point their device at a different
-	// event and record an afternoon into the wrong one — recoverable only by
-	// noticing, and the entries carry the event code they were recorded under.
-	//
-	// So a scout SEES their event and cannot change it. If they belong to exactly
-	// one and nothing is selected yet, it is adopted automatically: the alternative
-	// is a scout staring at a surface with no event and no control to fix it,
-	// which is the dead end this component exists to avoid.
-	//
-	// Owns its styles rather than taking a class prop: the scoping hash belongs
-	// to the parent and a child never sees it, which is how two layouts broke
-	// silently before. See CLAUDE.md.
+	// Select only events available to this account through server-side membership
+	// rules. Scouts explicitly choose; managers may adopt the current dated event.
 
 	import { session } from '$lib/session.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
@@ -65,49 +29,35 @@
 	 */
 	const codeLooksOff = $derived(newCode.trim().length > 0 && !looksLikeTbaKey(newCode));
 	let busy = $state(false);
+	let loadVersion = 0;
 
 	async function load() {
+		const version = ++loadVersion;
 		if (!auth.signedIn) {
 			events = [];
+			loading = false;
 			return;
 		}
 		loading = true;
 		error = '';
 		try {
-			events = await listMyEvents();
+			const rows = await listMyEvents();
+			if (version === loadVersion) events = rows;
 		} catch (e) {
-			error = e?.message ?? String(e);
+			if (version === loadVersion) error = e?.message ?? String(e);
 		} finally {
-			loading = false;
+			if (version === loadVersion) loading = false;
 		}
 	}
 
-	// Reruns when sign-in state changes, which is exactly when the answer moves:
-	// signing in is what makes the list readable at all.
 	$effect(() => {
 		void auth.signedIn;
+		void auth.profile?.id;
 		load();
 	});
 
-	/** A scout may look but not switch; a manager runs events and may. */
-	const canChoose = $derived(auth.isManager);
-
-	/** The event this device is on, as a row, when we can name it. */
-	const currentEvent = $derived(events.find((e) => e.code === session.eventCode) ?? null);
-
-	// Nobody picks an event that the dates already name.
-	//
-	// At a competition there is one event that matters, and `events` carries
-	// starts_on/ends_on, so asking a human to choose it is asking them to restate
-	// what the app knows. currentEvent() picks the one happening today, else the
-	// soonest upcoming, else the most recent — and returns null on a genuine
-	// ambiguity rather than guessing.
-	//
-	// ONLY when nothing is selected. A manager preparing next week's event must
-	// not have the app drag them back to today's, so this never overrides a
-	// choice already made — it only fills a blank.
 	$effect(() => {
-		if (!auth.signedIn || session.eventCode || events.length === 0) return;
+		if (!auth.isManager || session.eventCode || events.length === 0) return;
 		const pick = pickCurrentEvent(events);
 		if (pick) choose(pick.code);
 	});
@@ -158,25 +108,10 @@
 			{/if}
 		</p>
 	{:else if loading}
-		<p class="note">Loading your events…</p>
-	{:else if events.length === 0}
-		Not on any event yet.
-	{:else if !canChoose}
-		<!-- A scout sees the event, and that is all. See the header note. -->
-		{#if currentEvent}
-			<p class="current-event">
-				<span class="name">{eventLabel(currentEvent)}</span>
-				<span class="meta">
-					{currentEvent.code}{#if currentEvent.starts_on} · {currentEvent.starts_on}{/if}
-				</span>
-			</p>
-		{:else if session.eventCode}
-			<p class="current-event">
-				<span class="name">{session.eventCode}</span>
-			</p>
-		{:else}
-			<p class="note">A manager puts you on an event.</p>
-		{/if}
+		<p class="note">Loading…</p>
+	{:else if events.length === 0 && !error}
+		<p class="note">No events available. Ask your manager to add you to an event, then refresh.</p>
+		<div class="start"><Button onclick={load} disabled={loading}>Refresh events</Button></div>
 	{:else}
 		<ul class="events">
 			{#each events as ev (ev.id)}
@@ -200,10 +135,8 @@
 
 		{#if syncState.reason === 'no-such-event'}
 			<p class="warn">
-				This device is set to <strong>{session.eventCode}</strong>, which is not an
-				event you are on.
-				{canChoose ? 'Pick one above.' : 'Ask a manager to add you.'}
-				Recording still works meanwhile.
+				<strong>{session.eventCode}</strong> is not one of your events.
+				Pick one above.
 			</p>
 		{/if}
 	{/if}
@@ -222,8 +155,7 @@
 					/>
 					{#if codeLooksOff}
 						<small class="hint-off">
-							Not a Blue Alliance key. The schedule fetch uses this — an offseason
-							event with no TBA entry is fine, anything else will not pull.
+							Not a TBA key. Schedule fetching may be unavailable.
 						</small>
 					{/if}
 				</label>
@@ -252,7 +184,7 @@
 		{/if}
 	{/if}
 
-	{#if error}<p class="err">{error}</p>{/if}
+	{#if error}<p class="err" role="alert">{error}</p><div class="retry"><Button onclick={load} disabled={loading || busy}>Try again</Button></div>{/if}
 </div>
 
 <style>
@@ -271,22 +203,14 @@
 		color: var(--warning);
 	}
 
-	.current-event {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		margin: 0;
-		padding: var(--space-3);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-		background: var(--bg-card);
-	}
 
 	.start {
 		display: flex;
 		justify-content: flex-start;
-		margin-left: calc(var(--space-4) * -1);
+
 	}
+	.retry { display: flex; }
+	.event .name, .event .meta { overflow-wrap: anywhere; max-width: 100%; }
 	.label {
 		font-size: var(--fs-sm);
 		font-weight: 600;
@@ -343,8 +267,10 @@
 	}
 	.event:disabled {
 		opacity: 0.6;
-		cursor: default;
+		cursor: not-allowed;
 	}
+	.event:active:not(:disabled) { background: var(--bg-elev); }
+	@media (prefers-reduced-motion: reduce) { .event { transition-duration: 0.01ms; } }
 	/* The selected event is marked with a border and a filled dot, not colour
 	   alone — a red/green pair is the one distinction a colourblind scout in a
 	   loud gym cannot make. */

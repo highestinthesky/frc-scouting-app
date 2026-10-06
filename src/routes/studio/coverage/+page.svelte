@@ -214,9 +214,6 @@
 
 <PageHead
 	title="Coverage"
-	sub={session.eventCode
-		? `${session.eventCode} — what has actually been recorded, against what the schedule says should have been.`
-		: 'Choose an event first.'}
 />
 
 {#if loading}
@@ -226,8 +223,7 @@
 {:else if qmList.length === 0}
 	<Panel tone="quiet">
 		<p class="muted">
-			No schedule cached for this event yet. Publish one from Scouting and this
-			fills in.
+			Publish a schedule to see coverage.
 		</p>
 	</Panel>
 {:else}
@@ -247,7 +243,7 @@
 		<Stat
 			label="Matches with gaps"
 			value={partial.length}
-			note="started but incomplete"
+			note="partially recorded"
 			tone={partial.length > 0 ? 'warn' : 'default'}
 		/>
 	</Stats>
@@ -260,13 +256,10 @@
 	<div class="cols">
 		<Panel
 			title="Gaps"
-			hint={partial.length === 0
-				? 'Every match anyone has recorded is complete.'
-				: 'Someone recorded part of these and not the rest — the most likely place a scout drifted off their assignment.'}
 			flush={partial.length > 0}
 		>
 			{#if partial.length === 0}
-				<p class="muted">Nothing started is unfinished.</p>
+				<p class="muted">No partially recorded matches.</p>
 			{:else}
 				<Table dense>
 					{#snippet head()}
@@ -319,8 +312,8 @@
 			hint={rosterLoading || rosterErr
 				? ''
 				: perScout.length === 0
-					? 'Nobody is on this event yet — add scouts on the Event tab.'
-					: 'Fewest first, because the useful end of this list is the top. A zero usually means a phone that has not synced rather than a scout who has not worked.'}
+					? ''
+					: 'Counts include synced entries only.'}
 			flush={!rosterLoading && !rosterErr && perScout.length > 0}
 		>
 			{#if rosterLoading}
@@ -328,7 +321,7 @@
 			{:else if rosterErr}
 				<p class="err">{rosterErr}</p>
 			{:else if perScout.length === 0}
-				<p class="muted">No roster.</p>
+				<p class="muted">Add scouts from Event.</p>
 			{:else}
 				<Table dense>
 					{#snippet head()}
@@ -354,6 +347,10 @@
 {/if}
 
 <style>
+	/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+	 * design-system: design.md · designed-as-app
+	 */
+
 	/* Panel, Stat and Table own the boxes now. What is left is the two marks this
 	   page draws and the state its rows carry. */
 

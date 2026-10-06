@@ -26,8 +26,7 @@
 			</p>
 			<p class="orph-who">{orphans.map((o) => `${o.scout} (${o.count})`).join(' · ')}</p>
 			<p class="orph-why">
-				They do nothing now, and would start overriding a real assignment if
-				anyone with a matching name joins.
+				These overrides become active if matching scouts join.
 			</p>
 			{#if onClearOrphans}
 				<Button variant="danger" disabled={busy} onclick={onClearOrphans}>

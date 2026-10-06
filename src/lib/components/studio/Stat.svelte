@@ -38,24 +38,24 @@
 	.stat {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: var(--space-2);
 		min-width: 0;
-		padding: var(--space-3) var(--space-4);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
+		padding: var(--space-5);
+		border-right: 1px solid var(--border);
+		border-radius: 0;
 		background: var(--bg-card);
 	}
 	small {
 		font-size: var(--fs-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
+		text-transform: none;
+		letter-spacing: 0;
 		color: var(--text-muted);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.value {
-		font-size: var(--fs-xl);
+		font-size: var(--fs-page);
 		font-weight: 700;
 		line-height: 1.1;
 		/* A figure that reflows as it counts up is the one thing anybody watching
@@ -88,5 +88,9 @@
 	}
 	.bad .note {
 		color: var(--danger);
+	}
+	.stat:last-child { border-right: 0; }
+	@media (max-width: 40rem) {
+		.stat { padding: var(--space-4); border-bottom: 1px solid var(--border); }
 	}
 </style>

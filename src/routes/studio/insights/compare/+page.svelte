@@ -130,7 +130,7 @@
 		<p class="muted">Loading…</p>
 	{:else if requestedTeams.length === 0}
 		<div class="empty">
-			<p>Add at least two teams (above) to compare them side by side.</p>
+			<p>Add two teams to compare.</p>
 		</div>
 	{:else}
 		{#if missing.length > 0}
@@ -302,25 +302,27 @@
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
-		gap: var(--space-3);
+		gap: var(--space-4);
 	}
 	.col {
 		background: var(--bg-card);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
-		padding: var(--space-3);
+		padding: var(--space-5);
 	}
 	.col-head {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		gap: var(--space-2);
-		margin-bottom: var(--space-2);
+		margin-bottom: var(--space-4);
+		padding-bottom: var(--space-3);
+		border-bottom: 1px solid var(--border);
 	}
 	.col-head h2 {
 		margin: 0;
-		font-size: var(--fs-lg);
-		color: var(--accent);
+		font-size: var(--fs-xl);
+		color: var(--text-primary);
 		text-transform: none;
 		letter-spacing: 0;
 	}
@@ -343,9 +345,9 @@
 	dl { margin: 0; padding: 0; }
 	dt {
 		margin-top: var(--space-3);
-		font-size: var(--fs-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
+		font-size: var(--fs-sm);
+		text-transform: none;
+		letter-spacing: 0;
 		color: var(--text-faint);
 		font-weight: 600;
 	}
@@ -404,4 +406,5 @@
 		font-size: var(--fs-sm);
 	}
 	a { color: var(--accent); }
+
 </style>

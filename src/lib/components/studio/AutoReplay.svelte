@@ -194,9 +194,7 @@
 		<!-- Said on the screen, not only in a design document. A replay that looks
 		     like footage and is not will be read as footage. -->
 		<p class="caveat">
-			Reconstructed from {aligned.length} independent recordings. Scouts start their
-			timers at different moments, so these are aligned on when each robot first
-			moved — not on a shared clock. Nudge any robot that looks out of step.
+			{aligned.length} recordings aligned to first movement. Adjust offsets if needed.
 		</p>
 
 		<ul class="legend">

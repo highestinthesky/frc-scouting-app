@@ -22,6 +22,10 @@
 	.stats {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
-		gap: var(--space-3);
+		gap: 0;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--bg-card);
+		overflow: clip;
 	}
 </style>

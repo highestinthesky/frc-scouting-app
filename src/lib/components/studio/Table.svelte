@@ -72,17 +72,17 @@
 		z-index: 1;
 		text-align: left;
 		white-space: nowrap;
-		padding: var(--space-2) var(--space-3);
+		padding: var(--space-3) var(--space-4);
 		font-size: var(--fs-xs);
 		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
+		text-transform: none;
+		letter-spacing: 0;
 		color: var(--text-muted);
-		background: var(--bg-card);
-		border-bottom: 1px solid var(--border-strong);
+		background: var(--bg-subtle);
+		border-bottom: 1px solid var(--border);
 	}
 	.wrap :global(td) {
-		padding: var(--space-3);
+		padding: var(--space-3) var(--space-4);
 		border-bottom: 1px solid var(--border);
 		vertical-align: middle;
 	}
