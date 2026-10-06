@@ -18,6 +18,9 @@
 	import SyncPanel from '$lib/components/SyncPanel.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import Button from '$lib/components/Button.svelte';
+	import AppNav from '$lib/components/AppNav.svelte';
+	import EventSwitch from '$lib/components/EventSwitch.svelte';
+	import { navFor, activeKey } from '$lib/nav-items.js';
 
 	let { children } = $props();
 
@@ -84,24 +87,28 @@
 	 * be unreachable for exactly the people it is for. Only that gate is lifted:
 	 * the sign-in guard above still applies, and so does every account state
 	 * below it (password change, orphaned). A signed-out device never gets here.
+	 *
+	 * Accounts is the one manager page that is about the team rather than an
+	 * event, so a manager who has not picked one yet can still hand out invites.
+	 * Its own gate still refuses anyone who is not a manager.
 	 */
-	const NEEDS_NO_EVENT = ['/practice'];
+	const NEEDS_NO_EVENT = ['/practice', '/studio/accounts'];
 	const needsNoEvent = $derived(NEEDS_NO_EVENT.some((r) => isActive(r)));
 
 	/**
-	 * Studio runs without the app shell.
+	 * The manager pages still live under /studio/, and that prefix still decides
+	 * one thing: the Studio palette (data-studio, below and in app.html).
 	 *
-	 * It is a separate application that happens to share a deployment, and the
-	 * global tab bar was a trapdoor out of it: one tap dropped you into Home with
-	 * nothing offering a way back. A surface with its own navigation does not want
-	 * a second navigation arguing with it.
-	 *
-	 * The shell is hidden rather than the route being moved out, because a second
-	 * deployment would need its own auth — "signed into the scouting app but not
-	 * the studio" is not a problem to have at a competition. Studio's own sidebar
-	 * carries the way out.
+	 * It no longer decides the chrome. Studio ran without the app shell from
+	 * v0.73 as "a separate application", and scouts never saw it — the button
+	 * rendered only for managers — so the split protected nobody while costing
+	 * managers an event picker outside their tools and a trip out to record a
+	 * match. One shell now, with the navigation chosen by role (nav-items.js).
 	 */
 	const inStudio = $derived(isActive('/studio'));
+
+	const nav = $derived(navFor({ manager: auth.showsManagerTools }));
+	const navKey = $derived(activeKey(page.url.pathname, base));
 
 	$effect(() => {
 		if (auth.loading || !session.loaded) return;
@@ -258,70 +265,76 @@
 	</main>
 {:else if !session.isConfigured && !(needsNoEvent && auth.signedIn)}
 	<SessionSetup />
-{:else if inStudio}
-	<!-- No app bar, no tab bar, no reminder banner. Studio owns its whole
-	     viewport and supplies its own chrome and its own exit. -->
-	{@render children()}
 {:else}
-	<header class="app-bar">
-		<div class="app-bar-inner">
-			<!-- Context, not controls: this group is allowed to shrink and truncate.
-			     The controls after it are not, because a tap target that shrinks is a
-			     tap target that gets missed. -->
-			<div class="who">
-				{#if session.eventCode}
-					<strong class="event">{session.eventCode}</strong>
-					<span class="sep">·</span>
+	<!-- The app bar is the same for both roles, apart from the event: a manager
+	     chooses it here (EventSwitch), a scout sees it as text, exactly as the
+	     bar has always shown it. -->
+	{#snippet appBar()}
+		<header class="app-bar">
+			<div class="app-bar-inner">
+				{#if shellIdentity.isManager}
+					<EventSwitch />
 				{/if}
-				<span class="name">{shellIdentity.name}</span>
+				<!-- Context, not controls: this group is allowed to shrink and truncate.
+				     The controls around it are not, because a tap target that shrinks is
+				     a tap target that gets missed. -->
+				<div class="who">
+					{#if session.eventCode && !shellIdentity.isManager}
+						<strong class="event">{session.eventCode}</strong>
+						<span class="sep">·</span>
+					{/if}
+					<span class="name">{shellIdentity.name}</span>
+				</div>
+				<SyncPanel />
+				<!-- Hidden on narrow screens, where it is the one purely decorative
+				     thing in a bar that is otherwise identity and state. -->
+				<span class="role-badge" class:manager={shellIdentity.isManager}>
+					{shellIdentity.role}
+				</span>
 			</div>
-			<SyncPanel />
-			<!-- Hidden on narrow screens. On a phone the Studio button already says
-			     "manager" more usefully than a badge does, and at 375px the bar was
-			     overflowing the viewport by 37px with this in it. -->
-			<span class="role-badge" class:manager={shellIdentity.isManager}>
-				{shellIdentity.role}
-			</span>
-			{#if shellIdentity.isManager}
-				<!-- Same window, not target=_blank. From an iOS home-screen install a
-				     new tab opens in an in-app Safari sheet whose storage is not the
-				     app's, so the manager arrived in Studio signed out; a native
-				     webview has no tabs at all and hands the link to Safari, with the
-				     same result. The new tab used to be the way back, and "Leave
-				     Studio" in Studio's own rail is that way now. -->
-				<a class="studio-btn" href="{base}/studio/">Studio</a>
-			{/if}
-		</div>
-	</header>
+		</header>
+	{/snippet}
 
-	<!-- Bottom-docked on phones, top strip from 40rem up. See design.md
-	     § Three deviations — a scout holds this one-handed. -->
-	<!-- Two tabs. Studio is not a peer of these — it is a different application,
-	     so it is a button in the bar above rather than a tab here.
-	     Scouting was the third and is gone: it answered "what have I recorded",
-	     which turned out to be one section of Home rather than a place. Three of
-	     the five things it showed were already on Home, and a tab whose page is
-	     mostly another tab's page is a tab that makes a scout check both. -->
-	<nav class="tabs" aria-label="Main">
-		<a href="{base}/home/" class:active={isActive('/home')} aria-current={isActive('/home') ? 'page' : undefined}>
-			Home
-		</a>
-		<a href="{base}/settings/" class:active={isActive('/settings')} aria-current={isActive('/settings') ? 'page' : undefined}>
-			Settings
-		</a>
-	</nav>
+	{#snippet accountWarning()}
+		{#if !AUTH_ENFORCED && auth.orphaned}
+			<div class="account-warning" role="status">
+				<strong>Account setup is incomplete.</strong>
+				Legacy event-code access still works on this release, but this account will not work after
+				cutover until you <a href="{base}/register/">redeem an invite</a>.
+			</div>
+		{/if}
+	{/snippet}
 
-	{#if !AUTH_ENFORCED && auth.orphaned}
-		<div class="account-warning" role="status">
-			<strong>Account setup is incomplete.</strong>
-			Legacy event-code access still works on this release, but this account will not work after
-			cutover until you <a href="{base}/register/">redeem an invite</a>.
+	{#if shellIdentity.isManager}
+		<!-- A manager's shell: bar on top, then the nav and the page. From 48rem the
+		     nav is a sidebar beside the page; below that it is a strip (tablet) or a
+		     docked bar (phone), and this grid is a plain stack. -->
+		<div class="shell">
+			{@render appBar()}
+			<div class="nav-cell">
+				<AppNav items={nav} current={navKey} manager />
+			</div>
+			<div class="content">
+				{@render accountWarning()}
+				<!-- Not over the manager pages, as it never was over Studio: a reminder
+				     is addressed to someone scouting, and on Run it lands on top of the
+				     list the manager is working through. Home still shows them. -->
+				{#if !inStudio}
+					<ReminderFlyby />
+				{/if}
+				{@render children()}
+			</div>
 		</div>
+	{:else}
+		{@render appBar()}
+		<!-- Bottom-docked on phones, top strip from 40rem up. See design.md
+		     § Three deviations — a scout holds this one-handed. Two tabs: Scouting
+		     was the third and folded into Home in v0.82. -->
+		<AppNav items={nav} current={navKey} manager={false} />
+		{@render accountWarning()}
+		<ReminderFlyby />
+		{@render children()}
 	{/if}
-
-	<ReminderFlyby />
-
-	{@render children()}
 {/if}
 
 <!-- One instance for the whole app; pages drive it via $lib/dialog.svelte.js.
@@ -937,54 +950,12 @@
 	.name { opacity: 0.95; }
 	/* Visually hidden, still announced. The pop-out glyph is aria-hidden, so
 	   without this a screen reader gets no warning that the link leaves the app. */
-	/* Below this the bar is carrying an event, a name, sync state and a way into
-	   Studio. The badge is the only one of those that is purely decorative. */
+	/* Below this the bar is carrying an event, a name and sync state. The badge
+	   is the only one of those that is purely decorative. */
 	@media (max-width: 30rem) {
 		.role-badge {
 			display: none;
 		}
-	}
-
-	/* The one ACTION in the bar, and it has to look like one.
-	   It was a translucent pill in --bar-chip-bg that turned YELLOW on hover —
-	   the exact colour of the MANAGER badge sitting beside it. So the bar carried
-	   two lozenges of similar weight, one a label and one a link, and hovering
-	   the link made it look like the label. Outlined instead: a button reads as a
-	   button, the badge stays the only filled thing, and hover fills with the
-	   bar's own ink rather than borrowing another element's colour. */
-	.studio-btn {
-		flex: none;
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		min-height: var(--tap-min);
-		padding: var(--space-1) var(--space-3);
-		margin-left: var(--space-3);
-		border-radius: var(--radius-md);
-		border: 1px solid var(--bar-edge);
-		background: transparent;
-		color: var(--bar-ink);
-		font-size: var(--fs-sm);
-		font-weight: 600;
-		text-decoration: none;
-		white-space: nowrap;
-		transition:
-			background-color var(--dur-short) var(--ease-out),
-			color var(--dur-short) var(--ease-out);
-	}
-	.studio-btn:hover {
-		background: var(--bar-ink);
-		color: var(--bar-bg);
-		border-color: var(--bar-ink);
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.studio-btn {
-			transition-duration: 0.01ms;
-		}
-	}
-	.studio-btn:focus-visible {
-		outline: 2px solid var(--bar-ink);
-		outline-offset: 2px;
 	}
 
 	.role-badge {
@@ -1003,86 +974,36 @@
 	}
 
 
-	/* ── Primary navigation ────────────────────────────────────────────
-	   Phone-first: docked to the bottom of the viewport, where a thumb
-	   reaches without the phone changing hands. A top tab strip is the
-	   furthest point from a resting thumb on a 6" screen, and this app is
-	   used standing up, one-handed, while a match is running.
+	/* ── A manager's shell ──────────────────────────────────────────────
+	   The navigation itself is AppNav's (both roles' bars live there). What is
+	   left here is where it sits: a plain stack under 48rem, and from 48rem a
+	   sidebar beside the page with the bar across both.
 
-	   From 40rem the same markup becomes a top strip — on a laptop the
-	   bottom edge is the wrong place and there's no reach problem to solve.
-
-	   Nav stays before <main> in the DOM either way, so tab order and
-	   screen-reader order are unchanged by the visual move. */
-	.tabs {
-		position: fixed;
-		inset: auto 0 0 0;
-		z-index: 20;
-		display: flex;
-		justify-content: stretch;
-		background: var(--bg-card);
-		border-top: 1px solid var(--border);
-		padding-bottom: env(safe-area-inset-bottom, 0px);
-	}
-	.tabs a {
-		flex: 1 1 0;
+	   The nav cell is stretched to the full row, never `align-self: start`:
+	   a sticky element cannot escape its containing block, which for a grid
+	   item is its grid area, and a shrunken area pins the rail for exactly one
+	   viewport before it scrolls away with the page. */
+	.content {
 		min-width: 0;
-		min-height: var(--tap-min);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: var(--space-2) var(--space-1);
-		text-decoration: none;
-		color: var(--text-muted);
-		font-weight: 600;
-		font-size: var(--fs-sm);
-		/* The active marker rides the top edge here — it points back at the
-		   content, not off the bottom of the screen. */
-		border-top: 3px solid transparent;
-		margin-top: -1px;
-		transition: color var(--dur-short) var(--ease-out);
 	}
-	.tabs a.active {
-		color: var(--accent);
-		border-top-color: var(--accent);
-		background: var(--accent-soft);
-	}
-	.tabs a:hover { color: var(--accent); }
-	.tabs a:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: -2px;
-	}
-
-	/* Pages reserve the bar's height themselves, via --nav-bottom-h in their
-	   own `main` rule. A :global(main) rule here would look like it handled
-	   it and quietly lose: Svelte scoping makes a page's `main` selector
-	   (0,1,1) which outranks :global(main) at (0,0,1). Better that each page
-	   states the reservation than that the layout pretends to. */
-
-	@media (min-width: 40rem) {
-		.tabs {
-			position: static;
-			justify-content: center;
-			border-top: none;
-			border-bottom: 1px solid var(--border);
-			padding: 0 var(--space-4);
-			padding-bottom: 0;
+	@media (min-width: 48rem) {
+		.shell {
+			display: grid;
+			grid-template-columns: 15rem minmax(0, 1fr);
+			grid-template-rows: auto minmax(0, 1fr);
+			grid-template-areas:
+				'bar bar'
+				'nav content';
+			min-height: 100dvh;
 		}
-		.tabs a {
-			flex: 0 0 auto;
-			padding: var(--space-3) var(--space-4);
-			border-top: none;
-			border-bottom: 3px solid transparent;
-			margin-top: 0;
-			margin-bottom: -1px;
+		.shell .app-bar {
+			grid-area: bar;
 		}
-		.tabs a.active {
-			border-bottom-color: var(--accent);
-			background: none;
+		.nav-cell {
+			grid-area: nav;
 		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.tabs a { transition-duration: 0.01ms; }
+		.content {
+			grid-area: content;
+		}
 	}
 </style>

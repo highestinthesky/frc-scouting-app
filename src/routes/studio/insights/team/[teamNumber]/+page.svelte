@@ -17,11 +17,11 @@
 		const team = page.params.teamNumber;
 		const code = (session.eventCode ?? '').trim().toLowerCase();
 		// With no event set there is nothing to scope to, and guessing one would
-		// silently answer about the wrong weekend. Insights is where an event gets
-		// picked, so that is where this goes.
+		// silently answer about the wrong weekend. Pick's team table is the
+		// nearest real page, and the event is chosen in the app bar above it.
 		const to = code
 			? `${base}/studio/${code}/team/${team}/`
-			: `${base}/studio/insights/`;
+			: `${base}/studio/pick/`;
 		goto(to, { replaceState: true });
 	});
 </script>

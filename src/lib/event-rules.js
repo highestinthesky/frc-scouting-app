@@ -343,12 +343,24 @@ export function sameSeason(a, b) {
 // alternative is a prefix segment like `/studio/e/<code>/`, which never
 // collides but costs every URL a meaningless letter forever.
 
-/** Static segments directly under `/studio/`. An event code may not be one. */
+/**
+ * Static segments directly under `/studio/`. An event code may not be one.
+ *
+ * The pre-merge names stay reserved after their pages became redirects —
+ * `coverage`, `event`, `insights`, `schedule` still answer at those paths.
+ * `review` is reserved ahead of its page, so no event can take the code
+ * between now and the release that builds it. check_components.mjs asserts
+ * every static folder under src/routes/studio/ is listed here.
+ */
 export const RESERVED_EVENT_CODES = Object.freeze([
 	'accounts',
 	'coverage',
 	'event',
 	'insights',
+	'pick',
+	'plan',
+	'review',
+	'run',
 	'schedule'
 ]);
 

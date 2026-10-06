@@ -1,6 +1,7 @@
 <script>
 	// Roster of everyone the manager has assigned or who has recorded an entry.
-	// Read-only: derived entirely in the route from assignments + local entries.
+	// Read-only: derived by scoutRoster() in plan-state.js from the saved
+	// assignments and this event's entries.
 	import { relativeTime } from '$lib/format.js';
 	import Panel from './Panel.svelte';
 

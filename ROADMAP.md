@@ -754,19 +754,54 @@ the replay findable by arriving.
 - `CLAUDE.md` (*Two applications share one deployment*, the routes table, the
   Studio component set) and `APP_OVERVIEW.md` describe one shell.
 
+#### Built so far — steps 1–4, on `ui-optimization` (2026-10-06)
+
+Done, with these departures from the plan below, each deliberate:
+
+- **Review is not in the nav yet.** It is step 6, and an entry that opens
+  nothing is worse than a missing one. Until then the match page lights Run and
+  the team page lights Pick, and a manager's phone bar is Home · Run · Pick ·
+  More. `review` is already a reserved event code.
+- **Coverage is a third Run sub-page** (Matches · Scouts · Coverage), moved
+  unchanged, until step 5 folds it into the other two.
+- **`CoverageCheck` renders twice**: on Plan › Assignments over the unsaved
+  draft (a clash shows as it is typed, which the schedule page did), and on Run ›
+  Matches over what is saved. A conflict on Assignments opens that match on Run
+  (`?match=<n>`). Step 5 still inlines the Run copy on its rows.
+- **The store arrived with the split (step 4), not step 2**, because nothing
+  read it until the pages were pulled apart.
+- **Plan › Event holds name, dates, archive and reset**; the TBA key and the
+  cache stay on Plan › Schedule beside the fetch they belong to.
+- **`ReminderFlyby` is not rendered on manager pages**, as it never was in
+  Studio: on Run it landed on top of the list being worked.
+- **Two latent bugs fixed on the way**: the scout roster counted entries from
+  every event on the device, and `resetScheduling()` existed with no control.
+
+Checked against a local Supabase stack (seed_demo plus a 12-qual schedule with
+two semifinals): every route at 375, 768 and 1280 with no sideways scroll and
+no page errors; the More sheet, the event switch, conflict → match modal, dates
+saved to the database, every redirect, the match page and back, and a scout's
+gate — 33 checks, by clicking. A scout's Home and Settings are pixel-identical
+to `main` at 1280 and 375 — the only difference is four pixels of a card
+corner's antialiasing, one grey level apart. `npm run test:rls` 180/180.
+
+Found and not fixed, because they predate this branch: Run › Matches' `Q<n>`
+links and conflict buttons, and Accounts' *Rename*, are under the 44px floor
+(16–17px tall). The checker's sweep misses them because none sets a height.
+
 #### Order of work
 
 Each step is one reviewable commit or a short run of them, and the app works
 after every one.
 
-1. **Merge the shell.** `nav-items.js`, the nav component, and the layout
+1. ✅ **Merge the shell.** `nav-items.js`, the nav component, and the layout
    rendering it everywhere. Studio's chrome goes. To keep this a pure shell
    change, the manager items are temporarily today's five pages.
-2. **The event in the app bar, and the store.** `selectedId` dies. Pages
+2. ✅ **The event in the app bar, and the store.** `selectedId` dies. Pages
    still render their own content.
-3. **The new routes.** Pages move under their new names unchanged, with the
+3. ✅ **The new routes.** Pages move under their new names unchanged, with the
    segmented control, redirects, reserved codes and the nav pairs.
-4. **Split Schedule and Event** into Plan's four sub-pages and Run's two.
+4. ✅ **Split Schedule and Event** into Plan's four sub-pages and Run's two.
    Write the control inventory first.
 5. **Fold Coverage in**: the Gaps filter on Matches, By scout on Scouts.
    Delete `CoverageCheck`.

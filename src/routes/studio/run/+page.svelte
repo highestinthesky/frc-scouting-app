@@ -1,6 +1,5 @@
 <script>
-	// Event became Plan › People when Studio folded into the app; the event itself
-	// is chosen in the app bar, and archiving moved to Plan › Event.
+	// Run has no page of its own; its first sub-page is Matches.
 	//
 	// A redirect rather than a deletion, because this app is an installed PWA: a
 	// phone that has not reloaded still holds a bundle whose links point here,
@@ -9,7 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	$effect(() => {
-		goto(`${base}/studio/plan/people/`, { replaceState: true });
+		goto(`${base}/studio/run/matches/`, { replaceState: true });
 	});
 </script>
 

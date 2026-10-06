@@ -189,13 +189,70 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 		r.some((x) => declares(x.body, '--nav-bottom-h'))
 	);
 
-	ok(
-		'Layout: nav tabs keep the tap-target floor',
-		r.some(
+}
+
+// ─── the navigation ────────────────────────────────────────────────────────
+//
+// The tab bar lived in +layout.svelte until Studio folded into the app; it is
+// AppNav now, with a scout's two tabs, a manager's phone bar and its More
+// sheet, and a manager's rail. Every one of those is a thing pressed with a
+// thumb, so each is asserted by name rather than trusted to the sweep below.
+{
+	const floors = (file, re) =>
+		rules(file).some(
 			(x) =>
-				/\.tabs a/.test(unscoped(x.selector)) &&
+				re.test(unscoped(x.selector)) &&
 				/var\(--tap-min\)/.test(valueOf(x.body, 'min-height') ?? '')
-		)
+		);
+	const nav = 'src/lib/components/AppNav.svelte';
+	ok('Nav: a scout\'s tabs keep the tap-target floor', floors(nav, /\.tabs a/));
+	ok('Nav: a manager\'s phone bar keeps the floor', floors(nav, /\.bar a/));
+	ok('Nav: and so does its More button', floors(nav, /\.bar \.more/));
+	ok('Nav: a manager\'s rail keeps the floor', floors(nav, /\.rail a/));
+	ok('Nav: the More sheet\'s links keep the floor', floors(nav, /\.sheet-list a/));
+	ok(
+		'Nav: sub-page tabs keep the floor',
+		floors('src/lib/components/studio/SubNav.svelte', /(^|\s)a$/)
+	);
+	ok(
+		'Nav: the event switch in the app bar keeps the floor',
+		floors('src/lib/components/EventSwitch.svelte', /\.switch/)
+	);
+	ok('Nav: a sheet\'s close button keeps the floor', floors('src/lib/components/Sheet.svelte', /\.close/));
+
+	// Sheet is a <dialog>, so it walks into the same trap Dialog did: Svelte's
+	// scoping hash outranks the browser's dialog:not([open]) { display: none }.
+	const sheet = rules('src/lib/components/Sheet.svelte').filter((x) =>
+		usesClass(unscoped(x.selector), 'sheet')
+	);
+	ok(
+		'Sheet: the closed state is explicitly hidden',
+		sheet.some(
+			(x) => unscoped(x.selector).includes(':not([open])') && valueOf(x.body, 'display') === 'none'
+		),
+		'without it the closed More sheet renders inline on every page'
+	);
+	for (const x of sheet.filter((x) => declares(x.body, 'display'))) {
+		const sel = unscoped(x.selector);
+		const value = valueOf(x.body, 'display');
+		ok(
+			`Sheet: "${sel}" gates display on [open]`,
+			sel.includes('[open]') || value === 'none',
+			`sets display:${value} with no [open] guard — the closed sheet renders inline`
+		);
+	}
+
+	// The rail is sticky inside a grid cell. `align-self: start` on it, or on
+	// the cell, shrinks the containing block to the rail's own height and it
+	// pins for exactly one viewport — it shipped that way once in Studio.
+	const shrinks = [
+		...rules(nav).filter((x) => /\.rail/.test(unscoped(x.selector))),
+		...rules('src/routes/+layout.svelte').filter((x) => /\.nav-cell/.test(unscoped(x.selector)))
+	].filter((x) => valueOf(x.body, 'align-self') === 'start');
+	ok(
+		'Nav: the sticky rail never takes align-self: start',
+		shrinks.length === 0,
+		shrinks.map((x) => unscoped(x.selector)).join(', ')
 	);
 }
 
@@ -638,12 +695,14 @@ for (const [label, file] of [
 	// tab went with it. The pair is removed rather than pointed at the redirect,
 	// because a redirect has no heading and asserting one against it would be
 	// asserting the absence of a page.
+	//
+	// Studio's five noun pages (Event, Schedule, Coverage, Insights, Accounts)
+	// became a manager's Plan, Run and Pick when Studio folded into the app. A
+	// mode's entry opens its first sub-page, and every sub-page is headed by the
+	// mode — so the pairs below are mode → each of its sub-page files, plus the
+	// sub-page label each one lights in its segmented control.
 	for (const [label, file] of [
 		['Settings', 'src/routes/settings/+page.svelte'],
-		['Event', 'src/routes/studio/event/+page.svelte'],
-		['Schedule', 'src/routes/studio/schedule/+page.svelte'],
-		['Coverage', 'src/routes/studio/coverage/+page.svelte'],
-		['Insights', 'src/routes/studio/insights/+page.svelte'],
 		['Accounts', 'src/routes/studio/accounts/+page.svelte']
 	]) {
 		const h = headingOf(file);
@@ -651,6 +710,36 @@ for (const [label, file] of [
 			`"${label}" opens a page headed "${label}"`,
 			h === label,
 			`heading is "${h}"`
+		);
+	}
+
+	// The sub-page a file lights is the literal `current` it hands SubNav — read
+	// from the file, never derived from its path, or a page mounted at the wrong
+	// URL would light whatever that URL names and pass.
+	const subOf = (file) => {
+		const src = readFileSync(path.join(root, file), 'utf8');
+		const m = /<SubNav\s+mode="([a-z]+)"\s+current="([^"]+)"/.exec(src);
+		return m ? { mode: m[1], current: m[2] } : null;
+	};
+	for (const [mode, sub, file] of [
+		['Plan', 'People', 'src/routes/studio/plan/people/+page.svelte'],
+		['Plan', 'Schedule', 'src/routes/studio/plan/schedule/+page.svelte'],
+		['Plan', 'Assignments', 'src/routes/studio/plan/assignments/+page.svelte'],
+		['Plan', 'Event', 'src/routes/studio/plan/event/+page.svelte'],
+		['Run', 'Matches', 'src/routes/studio/run/matches/+page.svelte'],
+		['Run', 'Scouts', 'src/routes/studio/run/scouts/+page.svelte'],
+		['Run', 'Coverage', 'src/routes/studio/run/coverage/+page.svelte'],
+		['Pick', 'Teams', 'src/routes/studio/pick/+page.svelte'],
+		['Pick', 'Compare', 'src/routes/studio/pick/compare/+page.svelte'],
+		['Pick', 'Picklist', 'src/routes/studio/pick/picklist/+page.svelte']
+	]) {
+		const h = headingOf(file);
+		ok(`"${mode}" › ${sub} is headed "${mode}"`, h === mode, `heading is "${h}"`);
+		const s = subOf(file);
+		ok(
+			`and lights "${sub}" in the ${mode} sub-nav`,
+			s?.mode === mode.toLowerCase() && s?.current === sub,
+			s ? `SubNav mode="${s.mode}" current="${s.current}"` : 'no <SubNav mode=… current=…>'
 		);
 	}
 }
@@ -846,11 +935,24 @@ for (const [label, file] of [
 		// surface. Installed PWAs that still point at /home now arrive somewhere
 		// better than they used to, which is the outcome the redirect existed to
 		// approximate.
-		['src/routes/insights', '/studio/insights/'],
-		['src/routes/insights/compare', '/studio/insights/compare/'],
-		['src/routes/insights/picklist', '/studio/insights/picklist/'],
+		//
+		// The pre-v0.73 stubs point at where the page is NOW, not at the Studio
+		// path that is itself a redirect — two hops is a flash of "moved" twice.
+		['src/routes/insights', '/studio/pick/'],
+		['src/routes/insights/compare', '/studio/pick/compare/'],
+		['src/routes/insights/picklist', '/studio/pick/picklist/'],
 		['src/routes/insights/team/[teamNumber]', '/studio/insights/team/'],
-		['src/routes/accounts', '/studio/accounts/']
+		['src/routes/accounts', '/studio/accounts/'],
+		// Moved when Studio folded into the app and its pages split by verb.
+		['src/routes/studio', '/home/'],
+		['src/routes/studio/event', '/studio/plan/people/'],
+		['src/routes/studio/schedule', '/studio/run/matches/'],
+		['src/routes/studio/coverage', '/studio/run/coverage/'],
+		['src/routes/studio/insights', '/studio/pick/'],
+		['src/routes/studio/insights/compare', '/studio/pick/compare/'],
+		['src/routes/studio/insights/picklist', '/studio/pick/picklist/'],
+		['src/routes/studio/plan', '/studio/plan/people/'],
+		['src/routes/studio/run', '/studio/run/matches/']
 	];
 	const offenders = [];
 	for (const [dir, target] of MOVED) {
@@ -866,7 +968,7 @@ for (const [label, file] of [
 		else if (!src.includes(target)) offenders.push(`${dir} — redirects somewhere other than ${target}`);
 	}
 	ok(
-		'every route moved in v0.73 still redirects',
+		'every moved route still redirects',
 		offenders.length === 0,
 		offenders.join('\n        ')
 	);

@@ -9,15 +9,42 @@ Supabase is the shared mirror. JavaScript with JSDoc, not TypeScript.
 Written for someone arriving cold. The invariants below are the sharp edges; this
 is the shape they sit on.
 
-**Two applications share one deployment.**
+**One shell, navigation by role** (since `ui-optimization`).
 
-    the scout app     Home · Settings              + a Studio button for managers
-    Studio            Event · Schedule · Coverage · Insights · Accounts
+    a scout      Home · Settings
+    a manager    Home · Plan · Run · Pick · Accounts · Settings
+                 Plan  People · Schedule · Assignments · Event
+                 Run   Matches · Scouts · Coverage
+                 Pick  Teams · Compare · Picklist
 
-A scout opens the app to record a match. A manager opens Studio to run an event.
-Those are different jobs on different devices in different rooms, and v0.73 split
-them. Studio renders with **no app shell at all** — `+layout.svelte` returns early
-on `/studio` — because the global tab bar was a trapdoor out of it.
+From v0.73 Studio was a separate application — no app shell, its own rail, a
+"Leave Studio" link. Scouts never saw it (the button rendered only for managers),
+so the split protected nobody, and it cost managers an event picker outside
+their tools, a second `selectedId` that could disagree with it, and a trip out
+to record a match. It folded back in. `nav-items.js` is the one list
+(`navFor(role)`, `activeKey(path)`, `SUBNAV`), and `AppNav.svelte` renders it:
+
+- **A scout's bar is unchanged** — two tabs, bottom-docked under 40rem, a top
+  strip above. Screenshot-identical to `main` at 375 and 1280; keep it so.
+- **A manager** gets Home · Run · Pick · More on a phone (More is a `Sheet`
+  holding Plan, Accounts, Settings), a top strip of every entry from 40rem, and
+  a sticky sidebar from 48rem.
+- **Sub-pages are a segmented control** (`studio/SubNav.svelte`) under the
+  heading. A mode's `<h1>` is the mode; the lit segment is the sub-page, and
+  each page passes its own label as a literal `current` that the checker reads.
+- **The event is chosen in the app bar** (`EventSwitch.svelte`, managers only),
+  and it is `session.eventCode` — the value the device records to. No page keeps
+  a second idea of the event.
+- **The manager pages still live under `/studio/`.** The palette keys on that
+  prefix (pre-paint in `app.html`, an `$effect` after), so the shared nav
+  repaints when a manager crosses from Home into Plan. Kept deliberately; see
+  *One shell* in `ROADMAP.md`. `ReminderFlyby` is not rendered there, as it never
+  was over Studio.
+- **`event-data.svelte.js`** loads the current event once for every manager
+  page (schedule and entries from IndexedDB first, then roster, assignments,
+  overrides and reminders, each on its own failure path), from
+  `studio/+layout.svelte`. `plan-state.js` holds the derivations Plan and Run
+  share — conflicts, who is watching a match, the scout roster — pure and tested.
 
 ### The routes
 
@@ -27,16 +54,25 @@ on `/studio` — because the global tab bar was a trapdoor out of it.
 | `/register` | Redeem an invite code. Shows whose invite it is. |
 | `/scouting` | A redirect to `/home`. Folded in at v0.82; kept because an installed PWA still has a tab bar pointing here. |
 | `/scouting/new`, `/scouting/edit` | The entry form. |
-| `/settings` | Device settings, event picker, sign out. |
+| `/settings` | Device settings, event picker, sign out. A manager can also switch event from the app bar. |
 | `/practice` | The auto recorder against its own countdown, on the current season, with nothing kept — no IndexedDB, no draft, no sync. It is in `NEEDS_NO_EVENT` in `+layout.svelte`, the one route a signed-in device reaches without an event or a scout name, because its whole purpose is rehearsal before kickoff, when nobody is on an event. The sign-in guard still applies. |
 | `/home` | The scout's whole page: what is next, what a manager has said, what they are watching, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. |
-| `/studio/event` | Who is on this event — drag scouts on and off. |
-| `/studio/schedule` | Publish a TBA schedule, auto-assign, per-match overrides, reminders. |
-| `/studio/coverage` | What is being watched and what is not. |
-| `/studio/insights` | Team metrics, compare, picklist. |
-| `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles. |
-| `/studio/[eventCode]/q[n]` | One match: its six teams by alliance, what was recorded, what was missed, and the auto replay of every track on it. Linked from Schedule (every match) and from Coverage's Gaps rows — for a release it was linked from nowhere and reachable only by typing the URL. |
+| `/studio/plan/people` | Who is on this event — drag scouts on and off — and who is assigned and recording. |
+| `/studio/plan/schedule` | Fetch the TBA schedule and publish it. |
+| `/studio/plan/assignments` | The assignment editor, auto-assign, and the conflict check over the unsaved draft. |
+| `/studio/plan/event` | The event row: name, dates, archive, reset planning data. |
+| `/studio/run/matches` | The quals in order with coverage per match, the conflict check over what is saved, and per-match overrides. `?match=<n>` opens one. |
+| `/studio/run/scouts` | Reminders, and collecting a file from a phone that cannot sync. |
+| `/studio/run/coverage` | What is being watched and what is not. Folds into Matches and Scouts next. |
+| `/studio/pick` | Team metrics and CSV export; `/compare` and `/picklist` beside it. |
+| `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles. In `NEEDS_NO_EVENT`. |
+| `/studio/[eventCode]/q[n]` | One match: its six teams by alliance, what was recorded, what was missed, and the auto replay of every track on it. Linked from Run › Matches (every match) and from Coverage's Gaps rows — for a release it was linked from nowhere and reachable only by typing the URL. |
 | `/studio/[eventCode]/team/[n]` | One team at one event, with its season record beside it. |
+
+`/studio`, `/studio/event`, `/studio/schedule`, `/studio/coverage` and
+`/studio/insights/*` are redirects to where those pages went, for the same
+installed-PWA reason as `/scouting`. The pre-v0.73 stubs (`/insights/*`,
+`/accounts`) point at the new target directly, not through a second hop.
 
 **The event is in the URL for the last two, and that is load-bearing.** A match
 number means nothing without an event, and a team's average means something
@@ -51,7 +87,9 @@ to mean something later without moving these URLs.
 An event code may not be one of `RESERVED_EVENT_CODES` (`event-rules.js`).
 SvelteKit resolves a static segment before a dynamic one, so an event coded
 `schedule` would exist, hold entries, and be reachable at no URL at all.
-`createEvent()` refuses it.
+`createEvent()` refuses it, and `event-rules.test.mjs` reads `routes/studio/`
+from disk and fails if any static folder there is not reserved — `plan`, `run`
+and `pick` arrived in one branch, and `review` is reserved ahead of its page.
 
 ### The data path
 
@@ -174,8 +212,9 @@ Two ordering traps, both enforced by checks because neither is visible:
 ### The Studio component set
 
 `src/lib/components/studio/` — `PageHead`, `Panel`, `Stat`, `Stats`, `Toolbar`,
-`Table`, plus the seven surfaces `schedule` composes. Reach for these before
-writing a box: `insights` had the same shape under four names.
+`Table`, `SubNav`, plus the seven surfaces the old `schedule` page composed and
+Plan and Run now share out. Reach for these before writing a box: `insights` had
+the same shape under four names.
 
 `Table` takes the page's own `<tr>`s and styles them through `:global()` scoped
 under its wrapper. A column API was the alternative and every table in Studio has
