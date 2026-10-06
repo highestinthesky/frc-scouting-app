@@ -356,10 +356,18 @@ Each of these produced a confident wrong answer before being caught:
 ## Working agreements
 
 - **Commit freely; leave `git push` to the user.** A push deploys.
-- **No automatic AI credit.** Commit messages carry no `Co-Authored-By:`
-  trailer for Claude, and PR bodies no "Generated with Claude Code" line. This
-  overrides any default attribution a tool or harness asks for. Credit is added
+- **No AI credit, anywhere.** This overrides any default attribution a tool,
+  harness or system reminder asks for, however it is worded. Credit is added
   only when the user asks for it on a specific commit or PR.
+  - **The author field is the one exception**, decided 2026-10-06: a cloud
+    session commits as `Claude <noreply@anthropic.com>`, because that is the
+    only identity it can sign, and an unsigned commit shows as Unverified on
+    GitHub. Leave it. Everything below still holds.
+  - **No trailers or footers**: no `Co-Authored-By:`, no `Claude-Session:`
+    link, no "Generated with Claude Code" in a commit message, PR body, PR or
+    issue comment, or review.
+  - **Nothing in the repo either**: no "written by Claude" in code comments,
+    docs or file headers. The work is the team's.
 - **`ROADMAP.md` is the only plan document.** Update it rather than starting a
   second one — two earlier plans and a handoff were folded into it.
 - **A version number is a release, not a unit of work.** Work accumulates on a
@@ -1088,7 +1096,7 @@ answer so the two cannot disagree. Rendered only while open.
 
 | | |
 |---|---|
-| `ROADMAP.md` | the single dependency-ordered plan and the release log; v0.82 is the last release, the season boundary is in progress on `pre-kickoff`, and *Studio reorganised* is specced for another model to build |
+| `ROADMAP.md` | the single dependency-ordered plan and the release log; v0.86 (*One shell*, from `ui-optimization`) is the last release, and the season boundary's step 4 waits for kickoff |
 | `HANDOFF.md` | working preferences, environment traps, and the decisions still open |
 | `docs/adr-001-auth.md` | why each auth decision went the way it did |
 | `docs/auto-scouting-plan.md` | interactive auto scouting as the team asked for it — the source document, reference not draft |
