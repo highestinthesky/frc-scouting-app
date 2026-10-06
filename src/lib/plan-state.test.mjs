@@ -7,7 +7,8 @@ import {
 	scoutNames,
 	findConflicts,
 	matchWatchers,
-	scoutRoster
+	scoutRoster,
+	scoutCounts
 } from './plan-state.js';
 
 let pass = 0;
@@ -95,6 +96,34 @@ ok(
 	ok('assigned and recording both show', ning?.assigned === true && ning?.recording === true);
 	ok('the latest entry wins', ning?.lastEntry === '2026-03-01T11:00:00Z');
 	ok('a recorder who was never assigned is listed', r.some((x) => x.name === 'Ada' && !x.assigned));
+}
+
+// ── by scout ───────────────────────────────────────────────────────────────
+{
+	const roster = [
+		{ profileId: 'p-ada', first_name: 'Ada', last_name: 'Lovelace' },
+		{ profileId: 'p-rey', first_name: 'Rey', last_name: '' },
+		{ profileId: 'p-kim', username: 'kim' }
+	];
+	const entries = [
+		{ scoutName: 'Ada Lovelace', submittedBy: 'p-ada' },
+		{ scoutName: 'someone else', submittedBy: 'p-ada' },
+		{ scoutName: 'rey' },
+		{ scoutName: 'Rey' },
+		{ scoutName: 'Rey', submittedBy: 'p-other' }
+	];
+	const c = scoutCounts(roster, entries);
+	const by = new Map(c.map((x) => [x.name, x.count]));
+	ok('an account matches its own entries whatever name they carry', by.get('Ada Lovelace') === 2);
+	ok('a typed name matches case-insensitively', by.get('Rey') === 2, `got ${by.get('Rey')}`);
+	ok('an entry from another account is not credited by name', by.get('Rey') !== 3);
+	ok('a scout with nothing is listed at zero, not dropped', by.get('kim') === 0);
+	ok('fewest first', c[0].name === 'kim' && c[0].count === 0);
+	ok(
+		'every scout is NOT credited with every entry (the coverage bug)',
+		!c.every((x) => x.count === entries.length)
+	);
+	ok('no roster, no rows', scoutCounts([], entries).length === 0);
 }
 
 console.log(fail === 0 ? `plan state: ${pass} passed` : `plan state: ${pass} passed, ${fail} FAILED`);

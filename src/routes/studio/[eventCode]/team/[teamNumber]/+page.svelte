@@ -81,8 +81,8 @@
 	<PageHead
 		title="Team {teamNumber}"
 		sub={eventCode}
-		back="{base}/studio/pick/"
-		backLabel="Back to Pick"
+		back="{base}/studio/review/"
+		backLabel="Back to Review"
 	/>
 
 	{#if loading}

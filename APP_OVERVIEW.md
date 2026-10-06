@@ -56,7 +56,7 @@ never receives an email merely for knowing a username.
 |---|---|
 | `/` | Sign in. Every other route redirects here when signed out |
 | `/register` | Redeem an invite code; shows whose invite it is |
-| `/home` | Where a scout lands: greeting, up next, manager notes, upcoming |
+| `/home` | Where a scout lands: greeting, up next, manager notes, upcoming, the whole schedule behind a disclosure. A manager also gets one tile per manager page |
 | `/scouting` | A redirect to `/home`; folded into Home at v0.82 |
 | `/scouting/new` | Record a match observation |
 | `/scouting/edit` | Correct a saved observation |
@@ -66,16 +66,17 @@ never receives an email merely for knowing a username.
 | `/studio/plan/schedule` | Fetch and publish the TBA schedule |
 | `/studio/plan/assignments` | Assign scouts, auto-assign, conflicts in the draft |
 | `/studio/plan/event` | Name, dates, archive, reset planning data |
-| `/studio/run/matches` | Quals with coverage, saved-plan conflicts, per-match overrides |
-| `/studio/run/scouts` | Reminders; collect a file from a phone that cannot sync |
-| `/studio/run/coverage` | What is being watched and what is not |
+| `/studio/run/matches` | Coverage numbers, quals with coverage and conflicts on their rows, a Gaps/Conflicts filter, per-match overrides |
+| `/studio/run/scouts` | Entries by scout; reminders; collect a file from a phone that cannot sync |
+| `/studio/review` | Next match and its six teams, matches played, find a team |
+| `/studio/[code]/q[n]`, `/studio/[code]/team/[n]` | One match with its replay; one team. Under Review |
 | `/studio/pick` | Team metrics and CSV, with `/compare` and `/picklist` |
 | `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles |
 
 `/accounts`, `/insights/*`, `/studio`, `/studio/event`, `/studio/schedule`,
-`/studio/coverage` and `/studio/insights/*` exist as **redirect stubs**, not
+`/studio/coverage`, `/studio/run/coverage` and `/studio/insights/*` exist as **redirect stubs**, not
 duplicates. Those surfaces moved (into Studio at v0.73, then into Plan, Run and
-Pick), and deleting the old paths would 404 an
+Pick; Coverage then into Run › Matches), and deleting the old paths would 404 an
 installed PWA that still holds a bundle whose links point at them. Same reasoning
 as the username-lookup rollout gate: a service worker can serve an old bundle
 long after a deploy. Retire them when that window is judged closed, not for
@@ -107,7 +108,11 @@ tidiness.
 - **`metrics.js` / `aggregate.js`** — numeric summaries. Blank means *not
   recorded*; `0` means a recorded zero.
 - **`auto-assign.js` / `assignments.js` / `coverage.js`** — DSATUR assignment,
-  per-match overrides, coverage maths.
+  per-match overrides, coverage maths (`gapMatches()` is Run's Gaps filter).
+- **`event-data.svelte.js` / `plan-state.js` / `review.js`** — the manager
+  pages' one copy of the current event, the derivations Plan and Run share
+  (conflicts, watchers, `scoutCounts()`), and Review's split of the quals into
+  next and played.
 - **`tba.js` / `alliances.js`** — schedule and alliance data. `myMatches()` is
   the single resolver for which robot a scout watches in a match; `auto-assign`
   depends on its answer.

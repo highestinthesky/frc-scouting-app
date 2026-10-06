@@ -5,7 +5,8 @@
 // could not be pulled apart: every panel read state the page owned. Split into
 // Plan and Run, six pages need overlapping halves of it, and six pages each
 // loading their own copy is six ideas of the event. So it loads here, once per
-// event, from studio/+layout.svelte, and the pages derive what they show.
+// event, from the root +layout.svelte (Home's manager tiles read it too), and
+// the pages derive what they show.
 //
 // ─── which event ───────────────────────────────────────────────────────────
 //
@@ -29,6 +30,7 @@ import { listAssignments, listOverrides } from './assignments.js';
 import { listReminders } from './reminders.js';
 import { buildEntryIndex, scheduleRollup } from './coverage.js';
 import { editorRows } from './plan-state.js';
+import { listMyEvents, eventRoster } from './events.js';
 
 class EventData {
 	/** The event this data belongs to. '' before the first load. */
@@ -44,6 +46,14 @@ class EventData {
 	reminders = $state(/** @type {any[]} */ ([]));
 	/** The team's accounts, for resolving a typed scout name to its account. */
 	profiles = $state(/** @type {any[]} */ ([]));
+	/** The `events` row for this code, or null if none is in reach. */
+	event = $state(/** @type {any} */ (null));
+	/** Who is on this event (event_scouts), from eventRoster(). */
+	roster = $state(/** @type {any[]} */ ([]));
+	/** The roster read has answered, either way. */
+	rosterReady = $state(false);
+	/** Why the roster could not be read; '' when it could. */
+	rosterError = $state('');
 
 	/** IndexedDB has answered for this event. */
 	localReady = $state(false);
@@ -77,6 +87,10 @@ class EventData {
 		this.assignments = [];
 		this.overrides = [];
 		this.reminders = [];
+		this.event = null;
+		this.roster = [];
+		this.rosterReady = false;
+		this.rosterError = '';
 		this.localReady = false;
 		this.remoteReady = false;
 		this.remoteError = '';
@@ -91,7 +105,37 @@ class EventData {
 		this.cached = cached;
 		this.localReady = true;
 
+		// The roster is on a path of its own, not in refreshRemote's Promise.all:
+		// it is two requests in a row, and a gym's network that hangs the second
+		// must not hold the assignments back with it.
+		void this.refreshRoster(gen);
 		await this.refreshRemote(gen);
+	}
+
+	/**
+	 * Who is on the event. Resolves the code to its row first, which is also
+	 * where `event` comes from.
+	 *
+	 * @param {number} [gen]  internal: the load this belongs to
+	 */
+	async refreshRoster(gen = this.#gen) {
+		const code = this.code;
+		if (!code) return;
+		try {
+			const events = auth.signedIn ? await listMyEvents() : [];
+			const here = events.find((e) => e.code === code) ?? null;
+			const rows = here ? await eventRoster(here.id) : [];
+			if (gen !== this.#gen) return;
+			this.event = here;
+			this.roster = rows;
+			this.rosterError = '';
+		} catch (e) {
+			if (gen !== this.#gen) return;
+			this.roster = [];
+			this.rosterError = e?.message ?? String(e);
+		} finally {
+			if (gen === this.#gen) this.rosterReady = true;
+		}
 	}
 
 	/**

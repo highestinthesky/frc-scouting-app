@@ -20,7 +20,7 @@
 	import SubNav from '$lib/components/studio/SubNav.svelte';
 	import Panel from '$lib/components/studio/Panel.svelte';
 	import AssignScouts from '$lib/components/studio/AssignScouts.svelte';
-	import CoverageCheck from '$lib/components/studio/CoverageCheck.svelte';
+	import DraftConflicts from '$lib/components/studio/DraftConflicts.svelte';
 
 	let busy = $state(false);
 	let msg = $state('');
@@ -296,7 +296,7 @@
 			onSave={saveAssignments}
 			onDiscardDraft={discardDraft}
 		/>
-		<CoverageCheck coverageConflicts={conflicts} onOpenMatch={openMatch} {busy} />
+		<DraftConflicts {conflicts} onOpenMatch={openMatch} />
 	</div>
 {/if}
 

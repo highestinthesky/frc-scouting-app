@@ -12,7 +12,8 @@
 // nobody, and it cost managers an event picker outside their tools and a trip
 // out of Studio to record a match. A scout's list here is exactly what the
 // two-tab bar always held. A manager's adds the event pages, named for what the
-// manager is doing (plan, run, pick) rather than the noun the data happens to be.
+// manager is doing (plan, run, review, pick) rather than the noun the data
+// happens to be.
 //
 // Paths are written without the deploy base; the shell prefixes `base`.
 
@@ -23,6 +24,7 @@ const ITEMS = {
 	home: { key: 'home', label: 'Home', href: '/home/' },
 	plan: { key: 'plan', label: 'Plan', href: '/studio/plan/people/' },
 	run: { key: 'run', label: 'Run', href: '/studio/run/matches/' },
+	review: { key: 'review', label: 'Review', href: '/studio/review/' },
 	pick: { key: 'pick', label: 'Pick', href: '/studio/pick/' },
 	accounts: { key: 'accounts', label: 'Accounts', href: '/studio/accounts/' },
 	settings: { key: 'settings', label: 'Settings', href: '/settings/' }
@@ -34,6 +36,7 @@ export const MANAGER_NAV = Object.freeze([
 	ITEMS.home,
 	ITEMS.plan,
 	ITEMS.run,
+	ITEMS.review,
 	ITEMS.pick,
 	ITEMS.accounts,
 	ITEMS.settings
@@ -46,18 +49,18 @@ export const MANAGER_NAV = Object.freeze([
  */
 export const MANAGER_GROUPS = Object.freeze([
 	['home'],
-	['plan', 'run', 'pick'],
+	['plan', 'run', 'review', 'pick'],
 	['accounts'],
 	['settings']
 ]);
 
 /**
- * What earns a slot on a manager's phone bar. Run and Pick are what a manager
- * does in the stands during an event, and Home is where they record. Plan and
- * Accounts are laptop jobs done before it, so they wait behind More with
- * Settings. Review joins this list when it exists.
+ * What earns a slot on a manager's phone bar. Run, Review and Pick are what a
+ * manager does in the stands during an event, and Home is where they record.
+ * Plan and Accounts are laptop jobs done before it, so they wait behind More
+ * with Settings.
  */
-export const PHONE_PRIMARY = Object.freeze(['home', 'run', 'pick']);
+export const PHONE_PRIMARY = Object.freeze(['home', 'run', 'review', 'pick']);
 
 /**
  * Each mode's sub-pages, rendered as a segmented control under the page
@@ -74,8 +77,7 @@ export const SUBNAV = Object.freeze({
 	]),
 	run: Object.freeze([
 		{ key: 'matches', label: 'Matches', href: '/studio/run/matches/' },
-		{ key: 'scouts', label: 'Scouts', href: '/studio/run/scouts/' },
-		{ key: 'coverage', label: 'Coverage', href: '/studio/run/coverage/' }
+		{ key: 'scouts', label: 'Scouts', href: '/studio/run/scouts/' }
 	]),
 	pick: Object.freeze([
 		{ key: 'teams', label: 'Teams', href: '/studio/pick/' },
@@ -124,7 +126,13 @@ export function activeKey(pathname, base = '') {
 	if (first === 'home') return 'home';
 	if (first === 'settings') return 'settings';
 	if (first !== 'studio') return '';
-	if (second === 'plan' || second === 'run' || second === 'pick' || second === 'accounts') {
+	if (
+		second === 'plan' ||
+		second === 'run' ||
+		second === 'review' ||
+		second === 'pick' ||
+		second === 'accounts'
+	) {
 		return second;
 	}
 	// The pre-merge names still answer, as redirects, and should not flash an
@@ -133,10 +141,10 @@ export function activeKey(pathname, base = '') {
 	if (second === 'schedule' || second === 'coverage') return 'run';
 	if (second === 'insights') return 'pick';
 	// /studio/<eventCode>/q<n> and /studio/<eventCode>/team/<n> put an event
-	// code in the second slot. A match belongs to Run until Review exists; a team
-	// belongs to Pick.
-	if (second && third && /^q\d+$/.test(third)) return 'run';
-	if (second && third === 'team') return 'pick';
+	// code in the second slot. Both are Review's detail pages — Review is the
+	// index they never had.
+	if (second && third && /^q\d+$/.test(third)) return 'review';
+	if (second && third === 'team') return 'review';
 	return '';
 }
 

@@ -21,6 +21,7 @@
 	import AppNav from '$lib/components/AppNav.svelte';
 	import EventSwitch from '$lib/components/EventSwitch.svelte';
 	import { navFor, activeKey } from '$lib/nav-items.js';
+	import { eventData } from '$lib/event-data.svelte.js';
 
 	let { children } = $props();
 
@@ -150,6 +151,28 @@
 		role: auth.role ?? 'scout',
 		isManager: auth.isManager
 	}));
+
+	// A manager's view of the current event, loaded once (event-data.svelte.js).
+	// Here rather than in studio/+layout.svelte because Home reads it too: its
+	// tiles are a snapshot of the manager pages, so they need the same data the
+	// pages show, not a second copy computed differently. Tracked state is read
+	// before anything async, or the effect would never re-run.
+	$effect(() => {
+		const code = session.loaded ? session.eventCode : '';
+		const manager = auth.isManager;
+		void auth.signedIn;
+		if (!manager) return;
+		void eventData.load(code);
+	});
+
+	// Fresh entries whenever sync brings some in, so coverage is live rather than
+	// frozen at page load. Only entries — one local read, where the Supabase half
+	// is a handful of network calls.
+	$effect(() => {
+		syncState.inboundChanges;
+		if (!auth.isManager || !session.eventCode) return;
+		void eventData.refreshEntries();
+	});
 
 	// Re-scope the sync layer whenever the user changes their event code in
 	// Identity. Empty/missing event code pauses sync; otherwise the layer

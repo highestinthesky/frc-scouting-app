@@ -12,7 +12,7 @@
 // Assignments editor compute conflicts with one function — the editor over its
 // unsaved draft, Run over what is saved.
 
-import { scoutRef, rowScout } from './scout-identity.js';
+import { scoutRef, rowScout, sameScout } from './scout-identity.js';
 
 /** @typedef {{ scout_name: string, teamsText: string }} EditorRow */
 
@@ -220,4 +220,32 @@ export function scoutRoster(rows, entries) {
 		if (!info.lastEntry || e.createdAt > info.lastEntry) info.lastEntry = e.createdAt;
 	}
 	return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * How many entries each person on the event has recorded here, fewest first —
+ * the useful end of the list is the top, and a zero there usually means a phone
+ * that has not synced rather than a scout who has not worked.
+ *
+ * Both sides go through scoutRef/rowScout. Coverage once passed a raw roster row
+ * and a raw entry to sameScout(), which read `undefined` off both and matched
+ * every scout to every entry — "everyone has 20", and the scout at zero, the one
+ * number this exists to surface, could never appear.
+ *
+ * @param {Array<{profileId?: string, first_name?: string, last_name?: string, username?: string}>} roster
+ *        event_scouts members, from eventRoster()
+ * @param {Array<object>} entries  this event's entries only
+ * @returns {Array<{ person: object, name: string, count: number }>}
+ */
+export function scoutCounts(roster, entries) {
+	const out = (roster ?? []).map((person) => {
+		// Not a display fallback like 'Unnamed': this string is a join key, and a
+		// placeholder would match an entry recorded by someone who typed it.
+		const typed = `${person.first_name ?? ''} ${person.last_name ?? ''}`.trim() || person.username || '';
+		const ref = scoutRef(typed, person.profileId);
+		let count = 0;
+		for (const e of entries ?? []) if (sameScout(rowScout(e), ref)) count += 1;
+		return { person, name: typed || 'Unnamed', count };
+	});
+	return out.sort((a, b) => a.count - b.count || a.name.localeCompare(b.name));
 }

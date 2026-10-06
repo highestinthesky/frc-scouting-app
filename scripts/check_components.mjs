@@ -220,6 +220,30 @@ const valueOf = (body, prop) => new RegExp(`${prop}\\s*:\\s*([^;]+)`).exec(body)
 	);
 	ok('Nav: a sheet\'s close button keeps the floor', floors('src/lib/components/Sheet.svelte', /\.close/));
 
+	// The ways into a match and a team. Each was a bare word in a dense row — the
+	// Q number at 16px, the conflict button at 17px — and the sweep below cannot
+	// see them because none set a height at all. Named, so they cannot go back.
+	ok(
+		'Run: a match number in the list keeps the floor',
+		floors('src/lib/components/studio/MatchList.svelte', /\.sp-match/)
+	);
+	ok(
+		'Run: the match filter keeps the floor',
+		floors('src/routes/studio/run/matches/+page.svelte', /\.filter a/)
+	);
+	ok(
+		'Plan: a draft conflict\'s match button keeps the floor',
+		floors('src/lib/components/studio/DraftConflicts.svelte', /\.cf-match/)
+	);
+	ok(
+		'Review: the next match\'s team links keep the floor',
+		floors('src/routes/studio/review/+page.svelte', /\.team-chip/)
+	);
+	ok(
+		'Review: a played match row keeps the floor',
+		floors('src/routes/studio/review/+page.svelte', /\.played-row/)
+	);
+
 	// Sheet is a <dialog>, so it walks into the same trap Dialog did: Svelte's
 	// scoping hash outranks the browser's dialog:not([open]) { display: none }.
 	const sheet = rules('src/lib/components/Sheet.svelte').filter((x) =>
@@ -697,12 +721,14 @@ for (const [label, file] of [
 	// asserting the absence of a page.
 	//
 	// Studio's five noun pages (Event, Schedule, Coverage, Insights, Accounts)
-	// became a manager's Plan, Run and Pick when Studio folded into the app. A
+	// became a manager's Plan, Run, Review and Pick when Studio folded into the
+	// app. Review has no sub-pages, so it is a plain pair. A
 	// mode's entry opens its first sub-page, and every sub-page is headed by the
 	// mode — so the pairs below are mode → each of its sub-page files, plus the
 	// sub-page label each one lights in its segmented control.
 	for (const [label, file] of [
 		['Settings', 'src/routes/settings/+page.svelte'],
+		['Review', 'src/routes/studio/review/+page.svelte'],
 		['Accounts', 'src/routes/studio/accounts/+page.svelte']
 	]) {
 		const h = headingOf(file);
@@ -728,7 +754,6 @@ for (const [label, file] of [
 		['Plan', 'Event', 'src/routes/studio/plan/event/+page.svelte'],
 		['Run', 'Matches', 'src/routes/studio/run/matches/+page.svelte'],
 		['Run', 'Scouts', 'src/routes/studio/run/scouts/+page.svelte'],
-		['Run', 'Coverage', 'src/routes/studio/run/coverage/+page.svelte'],
 		['Pick', 'Teams', 'src/routes/studio/pick/+page.svelte'],
 		['Pick', 'Compare', 'src/routes/studio/pick/compare/+page.svelte'],
 		['Pick', 'Picklist', 'src/routes/studio/pick/picklist/+page.svelte']
@@ -947,7 +972,9 @@ for (const [label, file] of [
 		['src/routes/studio', '/home/'],
 		['src/routes/studio/event', '/studio/plan/people/'],
 		['src/routes/studio/schedule', '/studio/run/matches/'],
-		['src/routes/studio/coverage', '/studio/run/coverage/'],
+		// Coverage folded into Run › Matches as its Gaps filter.
+		['src/routes/studio/coverage', '/studio/run/matches/?show=gaps'],
+		['src/routes/studio/run/coverage', '/studio/run/matches/?show=gaps'],
 		['src/routes/studio/insights', '/studio/pick/'],
 		['src/routes/studio/insights/compare', '/studio/pick/compare/'],
 		['src/routes/studio/insights/picklist', '/studio/pick/picklist/'],
@@ -1033,8 +1060,8 @@ for (const [label, file] of [
 // ─── no control is shorter than a thumb, anywhere ──────────────────────────
 //
 // The tap-floor assertions above name their components one at a time, which is
-// only as good as the list. `.sp-edit` in SchedulePreview was never on it and
-// shipped at `min-height: 1.85rem` — 32px measured on a 375px phone, on a button
+// only as good as the list. `.sp-edit` in SchedulePreview (now MatchList) was
+// never on it and shipped at `min-height: 1.85rem` — 32px measured on a 375px phone, on a button
 // a manager presses at a competition, 12px under the floor design.md calls
 // non-negotiable. Nothing in `npm test` had an opinion about it.
 //

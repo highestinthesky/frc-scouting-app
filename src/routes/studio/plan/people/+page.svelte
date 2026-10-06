@@ -100,6 +100,8 @@
 	async function refreshRoster() {
 		try {
 			await loadRoster();
+			// The shared copy too, so Run › Scouts and Home count the new roster.
+			void eventData.refreshRoster();
 		} catch (e) {
 			err = e?.message ?? String(e);
 		}

@@ -33,9 +33,9 @@ ok(
 );
 ok('the scout list is the frozen constant', navFor({ manager: false }) === SCOUT_NAV);
 ok(
-	'a manager gets Home, Plan, Run, Pick, Accounts, Settings',
+	'a manager gets Home, Plan, Run, Review, Pick, Accounts, Settings',
 	navFor({ manager: true }).map((i) => i.label).join(',') ===
-		'Home,Plan,Run,Pick,Accounts,Settings'
+		'Home,Plan,Run,Review,Pick,Accounts,Settings'
 );
 ok('no entry links to Studio', !MANAGER_NAV.some((i) => /^\/studio\/?$/.test(i.href)));
 
@@ -68,8 +68,13 @@ const cases = [
 	['/studio/pick/', 'pick'],
 	['/studio/pick/picklist/', 'pick'],
 	['/studio/accounts/', 'accounts'],
-	['/studio/2026nyny/q12/', 'run'],
-	['/studio/2026nyny/team/254/', 'pick'],
+	['/studio/review/', 'review'],
+	// Review's two detail pages, under an event code.
+	['/studio/2026nyny/q12/', 'review'],
+	['/studio/2026nyny/team/254/', 'review'],
+	// Coverage folded into Run › Matches; its old paths redirect there.
+	['/studio/coverage/', 'run'],
+	['/studio/run/coverage/', 'run'],
 	['/studio/event/', 'plan'],
 	['/studio/schedule/', 'run'],
 	['/studio/insights/compare/', 'pick'],
@@ -84,15 +89,18 @@ ok(
 	activeKey('/frc-scouting-app/studio/run/matches/', '/frc-scouting-app') === 'run'
 );
 ok(
-	'a team number is not a match',
-	activeKey('/studio/2026nyny/team/12/') === 'pick'
+	'an event coded like a mode is still read as the mode (codes are reserved)',
+	activeKey('/studio/run/q12/') === 'run'
 );
+ok('Review is on the phone bar', PHONE_PRIMARY.includes('review'));
+ok('Review has no sub-pages', !('review' in SUBNAV));
 
 // ── sub-pages ──────────────────────────────────────────────────────────────
 const subs = [
 	['/studio/plan/people/', 'people'],
 	['/studio/plan/assignments', 'assignments'],
-	['/studio/run/coverage/', 'coverage'],
+	['/studio/run/scouts/', 'scouts'],
+	['/studio/run/coverage/', ''],
 	['/studio/pick/', 'teams'],
 	['/studio/pick/compare/', 'compare'],
 	['/studio/pick/picklist/', 'picklist'],

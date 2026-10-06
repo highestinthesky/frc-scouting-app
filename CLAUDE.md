@@ -12,10 +12,11 @@ is the shape they sit on.
 **One shell, navigation by role** (since `ui-optimization`).
 
     a scout      Home · Settings
-    a manager    Home · Plan · Run · Pick · Accounts · Settings
-                 Plan  People · Schedule · Assignments · Event
-                 Run   Matches · Scouts · Coverage
-                 Pick  Teams · Compare · Picklist
+    a manager    Home · Plan · Run · Review · Pick · Accounts · Settings
+                 Plan    People · Schedule · Assignments · Event
+                 Run     Matches · Scouts
+                 Review  (the index; the match and team pages sit under it)
+                 Pick    Teams · Compare · Picklist
 
 From v0.73 Studio was a separate application — no app shell, its own rail, a
 "Leave Studio" link. Scouts never saw it (the button rendered only for managers),
@@ -25,8 +26,10 @@ to record a match. It folded back in. `nav-items.js` is the one list
 (`navFor(role)`, `activeKey(path)`, `SUBNAV`), and `AppNav.svelte` renders it:
 
 - **A scout's bar is unchanged** — two tabs, bottom-docked under 40rem, a top
-  strip above. Screenshot-identical to `main` at 375 and 1280; keep it so.
-- **A manager** gets Home · Run · Pick · More on a phone (More is a `Sheet`
+  strip above. Screenshot-identical to `main` at 375 and 1280; keep it so. Home
+  itself gained one thing for a scout: *The schedule*, a closed disclosure
+  listing every qual with their own marked (through `myMatches()`).
+- **A manager** gets Home · Run · Review · Pick · More on a phone (More is a `Sheet`
   holding Plan, Accounts, Settings), a top strip of every entry from 40rem, and
   a sticky sidebar from 48rem.
 - **Sub-pages are a segmented control** (`studio/SubNav.svelte`) under the
@@ -42,8 +45,9 @@ to record a match. It folded back in. `nav-items.js` is the one list
   was over Studio.
 - **`event-data.svelte.js`** loads the current event once for every manager
   page (schedule and entries from IndexedDB first, then roster, assignments,
-  overrides and reminders, each on its own failure path), from
-  `studio/+layout.svelte`. `plan-state.js` holds the derivations Plan and Run
+  overrides and reminders, each on its own failure path), from the root
+  `+layout.svelte` — Home's manager tiles read it too, so a tile and the page it
+  links to cannot disagree. `plan-state.js` holds the derivations Plan and Run
   share — conflicts, who is watching a match, the scout roster — pure and tested.
 
 ### The routes
@@ -56,21 +60,21 @@ to record a match. It folded back in. `nav-items.js` is the one list
 | `/scouting/new`, `/scouting/edit` | The entry form. |
 | `/settings` | Device settings, event picker, sign out. A manager can also switch event from the app bar. |
 | `/practice` | The auto recorder against its own countdown, on the current season, with nothing kept — no IndexedDB, no draft, no sync. It is in `NEEDS_NO_EVENT` in `+layout.svelte`, the one route a signed-in device reaches without an event or a scout name, because its whole purpose is rehearsal before kickoff, when nobody is on an event. The sign-in guard still applies. |
-| `/home` | The scout's whole page: what is next, what a manager has said, what they are watching, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. |
+| `/home` | The scout's whole page: what is next, what a manager has said, what they are watching, the event's whole schedule behind a disclosure, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. A manager also gets one tile per manager page under the greeting (`HomeTiles`), every number a link into the page that owns it. |
 | `/studio/plan/people` | Who is on this event — drag scouts on and off — and who is assigned and recording. |
 | `/studio/plan/schedule` | Fetch the TBA schedule and publish it. |
 | `/studio/plan/assignments` | The assignment editor, auto-assign, and the conflict check over the unsaved draft. |
 | `/studio/plan/event` | The event row: name, dates, archive, reset planning data. |
-| `/studio/run/matches` | The quals in order with coverage per match, the conflict check over what is saved, and per-match overrides. `?match=<n>` opens one. |
-| `/studio/run/scouts` | Reminders, and collecting a file from a phone that cannot sync. |
-| `/studio/run/coverage` | What is being watched and what is not. Folds into Matches and Scouts next. |
+| `/studio/run/matches` | Coverage's numbers, then the quals in order with coverage per match and each conflict (over what is saved) written on its row; per-match overrides from Edit. `?show=gaps\|conflicts` filters, `?match=<n>` opens one. |
+| `/studio/run/scouts` | By scout (entries per person on the event, fewest first), reminders, and collecting a file from a phone that cannot sync. |
+| `/studio/review` | The next match with its six teams, the matches played (most recent first, recorded and tracked counts), and find a team. The index the two pages below never had. |
 | `/studio/pick` | Team metrics and CSV export; `/compare` and `/picklist` beside it. |
 | `/studio/accounts` | Create accounts, mint invites, paste a roster, set roles. In `NEEDS_NO_EVENT`. |
-| `/studio/[eventCode]/q[n]` | One match: its six teams by alliance, what was recorded, what was missed, and the auto replay of every track on it. Linked from Run › Matches (every match) and from Coverage's Gaps rows — for a release it was linked from nowhere and reachable only by typing the URL. |
-| `/studio/[eventCode]/team/[n]` | One team at one event, with its season record beside it. |
+| `/studio/[eventCode]/q[n]` | One match: its six teams by alliance, what was recorded, what was missed, and the auto replay of every track on it. Linked from Review, Home's Review tile and Run › Matches — for a release it was linked from nowhere and reachable only by typing the URL. Back goes to Review. |
+| `/studio/[eventCode]/team/[n]` | One team at one event, with its season record beside it. Back goes to Review. |
 
-`/studio`, `/studio/event`, `/studio/schedule`, `/studio/coverage` and
-`/studio/insights/*` are redirects to where those pages went, for the same
+`/studio`, `/studio/event`, `/studio/schedule`, `/studio/coverage`,
+`/studio/run/coverage` (both to `?show=gaps`) and `/studio/insights/*` are redirects to where those pages went, for the same
 installed-PWA reason as `/scouting`. The pre-v0.73 stubs (`/insights/*`,
 `/accounts`) point at the new target directly, not through a second hop.
 
@@ -89,7 +93,7 @@ SvelteKit resolves a static segment before a dynamic one, so an event coded
 `schedule` would exist, hold entries, and be reachable at no URL at all.
 `createEvent()` refuses it, and `event-rules.test.mjs` reads `routes/studio/`
 from disk and fails if any static folder there is not reserved — `plan`, `run`
-and `pick` arrived in one branch, and `review` is reserved ahead of its page.
+`review` and `pick` arrived in one branch.
 
 ### The data path
 
@@ -212,8 +216,10 @@ Two ordering traps, both enforced by checks because neither is visible:
 ### The Studio component set
 
 `src/lib/components/studio/` — `PageHead`, `Panel`, `Stat`, `Stats`, `Toolbar`,
-`Table`, `SubNav`, plus the seven surfaces the old `schedule` page composed and
-Plan and Run now share out. Reach for these before writing a box: `insights` had
+`Table`, `SubNav`, plus the surfaces the old `schedule` page composed and Plan
+and Run now share out — `SchedulePreview` became Run's `MatchList`,
+`CoverageCheck` shrank to `DraftConflicts` (Assignments only) — and
+`HomeTiles`, a manager's Home. Reach for these before writing a box: `insights` had
 the same shape under four names.
 
 `Table` takes the page's own `<tr>`s and styles them through `:global()` scoped
@@ -252,7 +258,7 @@ has already finished and simply cannot paint.
 Key a match on TBA's own `match.key` (`2026nyny_sf10m1`), never on
 `match_number`: the SET number is the part that makes it unique.
 
-`npm test` runs 28 unit suites plus 2 checkers. `sync.test.mjs` is the one
+`npm test` runs 32 unit suites plus 2 checkers. `sync.test.mjs` is the one
 that runs `sync.svelte.js` itself — compiled, on fake-indexeddb, against an
 in-memory PostgREST. The checkers are the important
 ones, and neither is a unit test:
@@ -1072,11 +1078,11 @@ satisfied the manifest. `npm ci` is the FIRST step in `deploy.yml`, so the red
 run had nothing to do with tests or the build. If that environment still exists,
 its next `npm install` re-breaks the lock the same way.
 
-**A scout sees their own matches, but not the event's.** v0.76 put the full
-upcoming list on Home — five ahead, the rest behind a disclosure — resolved
-through `myMatches()`. What still does not exist is a view of the whole schedule:
-Home only ever lists matches one of the scout's own teams is in. v0.73 step 2's
-read-only `/schedule` was never built.
+**A scout sees the event's schedule, as of `ui-optimization`.** v0.76 put
+their own upcoming matches on Home through `myMatches()`; the whole schedule —
+v0.73 step 2's read-only `/schedule`, never built — is now a closed disclosure
+on Home, every qual, the scout's own rows marked from the same `myMatches()`
+answer so the two cannot disagree. Rendered only while open.
 
 ## Where the reasoning lives
 

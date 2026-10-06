@@ -13,33 +13,11 @@
 
 	import { base } from '$app/paths';
 	import { auth } from '$lib/auth.svelte.js';
-	import { session } from '$lib/session.svelte.js';
-	import { syncState } from '$lib/sync.svelte.js';
-	import { eventData } from '$lib/event-data.svelte.js';
+
+	// The event data every manager page reads (event-data.svelte.js) is loaded in
+	// the root layout, not here: Home's manager tiles read it too.
 
 	let { children } = $props();
-
-	// One load per event, shared by every manager page (event-data.svelte.js).
-	// Tracked state is read before anything async, or the effect would have no
-	// dependencies and never re-run: the event, and whether there is a session
-	// to read the Supabase half with.
-	$effect(() => {
-		const code = session.eventCode;
-		const signedIn = auth.signedIn;
-		const manager = auth.isManager;
-		if (!manager) return;
-		void signedIn;
-		void eventData.load(code);
-	});
-
-	// Pull fresh entries whenever sync brings some in, so coverage is live rather
-	// than frozen at page load. Only entries — they are one local read, while the
-	// Supabase half is a handful of network calls.
-	$effect(() => {
-		syncState.inboundChanges;
-		if (!auth.isManager || !session.eventCode) return;
-		void eventData.refreshEntries();
-	});
 </script>
 
 {#if !auth.signedIn}

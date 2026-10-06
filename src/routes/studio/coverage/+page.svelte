@@ -1,5 +1,6 @@
 <script>
-	// Coverage moved under Run when Studio folded into the app.
+	// Coverage moved under Run when Studio folded into the app, and then into
+	// Run › Matches as its Gaps filter (and Run › Scouts as By scout).
 	//
 	// A redirect rather than a deletion, because this app is an installed PWA: a
 	// phone that has not reloaded still holds a bundle whose links point here,
@@ -8,7 +9,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	$effect(() => {
-		goto(`${base}/studio/run/coverage/`, { replaceState: true });
+		goto(`${base}/studio/run/matches/?show=gaps`, { replaceState: true });
 	});
 </script>
 
