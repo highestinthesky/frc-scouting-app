@@ -50,7 +50,7 @@ had to be renumbered twice.
 | Metrics and manager analysis | Shipped across Insights, team detail, compare, CSV and picklist scoring |
 | Picklist and alliance selection | Shipped; cloud-synced picklist and live taken-team state |
 | Accounts and roles | Shipped; manager-created accounts and invite codes, three roles enforced in RLS |
-| Studio | Shipped v0.73–v0.74 and **to be reorganised** (*Studio reorganised*, below) — five noun-named pages holding nine jobs, four of them split across two pages |
+| Studio | Shipped v0.73–v0.74; **folding into the app** (*One shell*, below) — role-based nav, the event in the app bar, Plan/Run/Review/Pick with sub-pages |
 | What a scout sees at an event | One page since v0.82; the event's full schedule is still missing (*The scout's schedule*) |
 | Interactive auto scouting | Shipped in v0.81 — record, correct, replay, route clustering, action chips. v0.83 moves the field, actions, questions, cycle, endgame and auto length into season data in `seasons/2026.js` |
 | What happened in one match | Shipped in v0.81; reachable from Schedule and Coverage since v0.81.2 |
@@ -400,8 +400,8 @@ names, and the commits are pushed.
 
 ### Studio reorganised
 
-> **A revision is proposed** under *UI organisation* below (2026-10-06):
-> keep Studio, put the event picker in it, and give Plan and Run sub-pages.
+> **Superseded by *One shell* below** (accepted 2026-10-06): Studio folds into
+> the app with role-based navigation. The *Traps* here still apply.
 
 **The next release, and the one to build before anything else.** It is fully
 specifiable today, it has no dependency on the 2027 game, and the season
@@ -595,188 +595,195 @@ Reviewable in five steps rather than one diff:
 4. **Review** — new index; the two detail pages get a parent.
 5. **Home** — last, because every tile links to something that must exist first.
 
-### UI organisation — a proposed revision to *Studio reorganised*
+### One shell — Studio folds into the app
 
-**Proposed 2026-10-06 on `ui-optimization`. Not accepted.** Where this
-disagrees with *Studio reorganised* above, the spec above stands until the user
-decides. Everything here was read off the code on that date, not remembered.
+**Accepted 2026-10-06, on `ui-optimization`. Supersedes *Studio reorganised*
+above** wherever they disagree; that section's *Traps* still apply in full.
+Read off the code on 2026-10-06, baseline `npm test` green.
 
-#### Is Studio necessary?
+#### The decision, and why it is safe
 
-**Yes as a separate shell; no as it is organised inside.** The split is not the
-navigation problem. Four things at its boundary and inside it are.
+Studio was made a separate application in v0.73 so a manager's tools could not
+crowd a scout's phone. **Scouts never saw Studio** — the button rendered only
+for managers and `/studio` showed anyone else a gate — so the split protected
+nobody from anything. What it cost managers was real: the event is chosen in
+Settings, outside Studio (and again by a second `selectedId` on
+`/studio/event`); recording a match means leaving Studio; opening Studio lands
+on membership drag lists; and on a phone the rail is a sideways-scrolling
+strip.
 
-Why the split earns its place:
+So: **one shell, navigation by role.** A scout's app does not change at all.
+A manager's nav grows to hold the manager pages, organised by verb.
 
-- **Two jobs, two devices.** A scout holds a phone one-handed and has two tabs.
-  A manager sits at a laptop with wide tables (`/studio/insights` is 1069 lines,
-  picklist 877). Folding Studio into the scout shell means either a bottom bar
-  of eight-plus tabs on every scout's phone or tabs that differ by role, and the
-  scout shell's simplicity is what protects a first real use that is a
-  competition, with scouts who have never seen the app.
-- **The trapdoor is already solved** — no shell in Studio, one explicit exit —
-  and it shares a deployment and a session, so there is no second sign-in.
-- **One role gate** at `studio/+layout.svelte` mirrors the RLS boundary cleanly.
+#### Navigation
 
-What is actually wrong:
-
-1. **The event is chosen outside Studio, twice.** Studio's brand shows
-   `session.eventCode`, but the only control that sets it is `EventPicker` on
-   `/settings` — in the scout shell. Schedule's empty state links to
-   `/settings/`, out of Studio, with the Studio button as the only way back.
-   Meanwhile `/studio/event` keeps its own `selectedId` ("Editing"), so the rail
-   can say one event while the page staffs another. This is HANDOFF open
-   decision 5 — *"choose an event, and then there is a custom studio for each"*.
-   The complaint is about this, not about Studio existing.
-2. **Opening Studio lands on `/studio/event`**, the drag-and-drop membership
-   lists: the task done least often at an event.
-3. **Nouns, not verbs** — the table under *Why* above. `/studio/schedule` is
-   seven panels in two columns with no order a manager can follow mid-match.
-4. **On a phone the rail becomes a horizontally scrolling strip.** Five entries
-   fit at 375px; the six or more of any reorganisation will not, and the ones
-   off-screen are found by accident.
-
-#### Where *Studio reorganised* is right, and where it is not enough
-
-Keep: the event picker in the rail, Home as a snapshot whose numbers are links,
-verbs instead of nouns, Review as the index the detail pages never had,
-Accounts as the one surface with no event, the deletions, the traps, and *Done
-means*.
-
-Four gaps:
-
-1. **Plan and Run would each be a new mega-page.** Run as specced holds the
-   match list, the override modal, the coverage stats, Gaps, By scout,
-   conflicts, reminders and import — eight surfaces, one more than Schedule has
-   today. Regrouping nouns into verbs fixes the split and not the size. **Each
-   mode gets sub-pages, one job each.**
-2. **Surfaces the table does not place:** creating and archiving an event,
-   resetting event data, the TBA API key, clearing the cached schedule, CSV
-   export, and the per-match "record this" link. `resetScheduling()` in the
-   schedule page is already reachable from nowhere — defined and never wired to
-   a control. The match page shipped exactly this way.
-3. **Gaps and the match list are the same rows.** Coverage's Gaps table and
-   `SchedulePreview`'s per-match coverage both answer "which matches are short
-   of robots". One list with a *Gaps only* filter, not two tables.
-4. **No phone navigation is specified** for six entries.
-
-#### The proposed map
-
-The scout app keeps its shape — two tabs and the Studio button — because v0.82
-already did that work.
-
-| Scout app | holds |
-|---|---|
-| **Home** | Up next · From your manager · After that · Your teams · Your entries · Practice · **+ Whole schedule**, a disclosure (*The scout's schedule* — a section, not a tab, on the v0.82 reasoning) |
-| **Settings** | Account · Identity (event) · Appearance · Danger zone |
-
-Studio, two levels. The rail shows the modes; the active mode opens to show its
-sub-pages.
+The items come from one pure function, so the shell and the checks read the
+same list:
 
 ```
-[ 2026NYNY ▾ ]      switch event · + New event      ← the one picker
-Home                the snapshot (tiles, as specced)
-Plan
-  People            who is on the event (drag lists) + roster status
-  Schedule          fetch from TBA, check the list, publish
-  Assignments       assign, auto-assign, the draft
-  Event             code, name, DATES, TBA key, archive, reset, clear cache
-Run
-  Matches           ascending; coverage per row; Gaps-only filter;
-                    conflicts on the row they belong to; overrides modal;
-                    "record this" link
-  Scouts            by-scout counts · send/recent reminders · collect a file
-Review              next match · recent matches · find a team · CSV export
-  └ [event]/q[n], [event]/team/[n]          unchanged, now with a parent
-Pick
-  Teams             the team table (today's Insights)
-  Compare
-  Picklist
-─────
-Accounts
-─────
-◐ Theme    ← Leave Studio
+scout     Home · Settings                                          (today's, unchanged)
+manager   Home · Plan · Run · Review · Pick · Accounts · Settings
 ```
 
-| surface today | goes to |
-|---|---|
-| `/studio/event` membership lists | Plan · People |
-| `ScoutRoster` | Plan · People, beside membership |
-| `/studio/event` "This event" + archive | Plan · Event |
-| `EventPicker`, `selectedId` | the rail; `selectedId` deleted |
-| `PublishSchedule`, clear cache, TBA key | Plan · Schedule (key and cache also on Plan · Event) |
-| `resetScheduling()` (unwired) | Plan · Event, behind a confirm |
-| `AssignScouts` | Plan · Assignments |
-| `SchedulePreview` + Coverage *Gaps* | Run · Matches, one list |
-| `CoverageCheck` | Run · Matches, inline on the affected rows; component deleted |
-| `MatchDetailModal` | Run · Matches, from the row |
-| Coverage stats | Run · Matches header (`Stats`) |
-| Coverage *By scout* | Run · Scouts |
-| `ReminderPanel` | Run · Scouts |
-| `ImportEntries` | Run · Scouts — it is collecting one scout's phone |
-| Insights table · compare · picklist | Pick · Teams / Compare / Picklist |
-| Export CSV | Review |
-| `/studio` | redirect to Home, not `/studio/event` |
+| | scout | manager |
+|---|---|---|
+| **< 40rem** | bottom bar, 2 tabs — unchanged | bottom bar: **Home · Run · Review · Pick · More**. More opens a sheet holding Plan, Accounts, Settings, and is lit while on any of them |
+| **40–48rem** | top strip — unchanged | the bottom bar as above |
+| **≥ 48rem** | top strip — unchanged | left sidebar, all seven, grouped Home / Plan Run Review Pick / Accounts / Settings. Today's Studio rail styling, moved |
 
-Plan · Event collecting **dates** also resolves HANDOFF open decision 1: a
-scout on two undated events is stranded because nothing ever sets `starts_on`.
+Why those four on the phone bar: Run, Review and Pick are what a manager does
+in the stands during an event, and Home is where they record. Plan and Accounts
+are laptop jobs done before it.
 
-**Phone.** At under 48rem the rail collapses to one header row — the event
-picker and a menu button — and the menu opens the whole tree as a sheet. A
-mode's sub-pages render as a segmented control at the top of the page. No
-horizontal strip.
+**Sub-pages are a segmented control under the page heading**, the same at every
+width, not more rail entries. A mode's `<h1>` is the mode (*Plan*); the lit
+segment says which sub-page; the document title says both (*People · Plan*).
+
+```
+Plan     People · Schedule · Assignments · Event
+Run      Matches · Scouts
+Pick     Teams · Compare · Picklist
+Review   (none: the index, with match and team pages under it)
+```
+
+The match and team pages light **Review** and their back link goes to Review.
+
+**The event is chosen in the app bar.** For a manager the event code at the
+left of the app bar becomes a button that opens `EventPicker` in the app's
+`Dialog`, including *+ New event*. A scout keeps the plain text, because a
+scout does not choose (`EventPicker`'s header). Settings keeps rendering the
+same component. It writes `session.eventCode`, the value the device records
+to: one event per device, never a second one for the manager pages.
+
+**What goes away:** the Studio button, *Leave Studio*, the Studio rail, the
+`inStudio` no-chrome branch in `+layout.svelte`, the `/studio` landing redirect
+to `/studio/event` (it now goes to `/home/`), and the `selectedId` select.
+`studio/+layout.svelte` keeps only the role gate and the event-data store.
+
+**What stays:** URLs under `/studio/`. The pre-paint script in `app.html`, the
+palette, the reserved codes and every existing link key on that prefix, and
+nothing gains from renaming it. The word *Studio* leaves the UI.
+
+#### Every surface, placed
+
+| today | goes to | route |
+|---|---|---|
+| `/studio/event` membership lists + `ScoutRoster` | Plan · People | `/studio/plan/people` |
+| `PublishSchedule` | Plan · Schedule | `/studio/plan/schedule` |
+| `AssignScouts` | Plan · Assignments | `/studio/plan/assignments` |
+| "This event", archive, TBA key, clear cache, **dates**, `resetScheduling()` (unwired today) | Plan · Event | `/studio/plan/event` |
+| `SchedulePreview` + Coverage *Gaps*, as one list with a *Gaps only* filter; coverage `Stats` above it; `CoverageCheck` inline on its rows; `MatchDetailModal` from a row; the "record this" link | Run · Matches | `/studio/run/matches` |
+| Coverage *By scout*, `ReminderPanel`, `ImportEntries` | Run · Scouts | `/studio/run/scouts` |
+| next match, recent matches, find a team, **CSV export** | Review | `/studio/review` |
+| `[event]/q[n]`, `[event]/team/[n]` | under Review | unchanged |
+| the Insights team table · compare · picklist | Pick · Teams / Compare / Picklist | `/studio/pick`, `/pick/compare`, `/pick/picklist` |
+| accounts, invites, roles | Accounts | `/studio/accounts`, unchanged |
+| the Studio Home tiles | **Home**, for managers, under the greeting | `/home` |
+| event picker | app bar (+ Settings) | — |
+
+Plan · Event collecting dates also resolves HANDOFF open decision 1 (a scout
+on two undated events is stranded because nothing sets `starts_on`).
+
+**Home is one page.** The *Studio reorganised* tiles render for managers
+directly under the greeting, each number a link into the page that owns it.
+Everything a scout sees follows unchanged, so a manager who scouts loses
+nothing. The Review tile, *next match and its six teams*, is still what makes
+the replay findable by arriving.
 
 #### What has to exist first
 
-**One Studio event store**, loaded once in `studio/+layout.svelte` per
-`session.eventCode`: cached schedule and entries from IndexedDB, then roster,
-assignments and overrides from Supabase, the roster on its own failure path
-(trap 12). Today the schedule page loads all of it itself, which is why its
-seven panels could not be pulled apart; with a store, each sub-page derives
-what it shows and none keeps its own idea of the event. This is the real cost
-of the split and the thing that deletes `selectedId` for good.
+1. **`src/lib/event-data.svelte.js`**, one store per `session.eventCode`,
+   loaded in `studio/+layout.svelte`: the cached schedule and entries from
+   IndexedDB first, then roster, assignments, overrides and reminders from
+   Supabase, the roster on its own failure path (trap 12), reads of tracked
+   state before the first `await` (trap 11). The schedule page loads all of
+   this itself today, which is why its seven panels cannot be pulled apart.
+   With the store, each sub-page derives what it shows.
+2. **`src/lib/nav-items.js`**: `navFor(role)` → the item list above, plus
+   which item a pathname lights (the event-coded routes included, which the
+   rail maps by hand today). Pure, so it gets a unit test.
+3. **`RESERVED_EVENT_CODES` gains `plan`, `run`, `review` and `pick`.** Each
+   is a new static segment under `/studio/`, and an event coded `plan` would
+   exist, hold entries and be reachable at no URL. The old words stay
+   reserved, because their routes stay as redirects.
+4. **`/studio/accounts` joins `NEEDS_NO_EVENT`.** It is the one manager page
+   with no event, and the session-setup gate currently hides it from a manager
+   who has not picked one.
 
-**One event value.** The rail picker writes `session.eventCode` — the same value
-the device records to. Two values (Studio's event and the device's) is the
-`selectedId` bug made permanent. Settings and the rail render the same
-`EventPicker`.
+#### Checker and test changes — updated, never removed
 
-#### Changes to *Done means*
+- **Nav label == heading:** the pairs become `Settings`, `Plan`, `Run`,
+  `Review`, `Pick`, `Accounts`, listed and not derived. Each sub-page file is
+  asserted to be headed by its mode, and to render the segmented control with
+  its own label current.
+- **Tap floor on nav:** the `.tabs a` assertion follows the nav into its
+  component, and it covers the bottom bar, the sidebar, the More sheet and the
+  segmented control.
+- **Moved routes:** `/studio/event` → Plan · People, `/studio/schedule` → Run ·
+  Matches, `/studio/coverage` → Run · Matches with Gaps on, `/studio/insights`,
+  `/compare`, `/picklist` → Pick. The pre-v0.73 stubs (`/insights/*`) point at
+  the new target directly, not through a second hop.
+- **Reserved codes:** a new assertion that every static segment directly
+  under `src/routes/studio/` is in `RESERVED_EVENT_CODES`. Deriving is right
+  here, unlike the moved-route list: the property is that nothing on disk
+  shadows an event, so the disk is the thing to read.
+- `auth.test.mjs` reads `studio/schedule/+page.svelte` for "the page that
+  renders manager components". It follows the job to the new file.
+- `check_contrast.mjs` is untouched unless a token is added.
 
-- The nav-label pairs become the sub-page labels — `Home`, `People`,
-  `Schedule`, `Assignments`, `Event`, `Matches`, `Scouts`, `Review`, `Teams`,
-  `Compare`, `Picklist`, `Accounts` — each matching its `PageHead title`.
-- Every old Studio route redirects, and the legacy stubs (`/accounts`,
-  `/insights/*`) point at the new target directly rather than through a second
-  hop: `/studio/event` → Plan · People, `/studio/schedule` → Run · Matches,
-  `/studio/coverage` → Run · Matches with Gaps on, `/studio/insights[/…]` →
-  Pick.
-- Every control on today's pages is reachable on the new ones, checked by
-  clicking. `resetScheduling()` is the proof that this is not automatic.
-- At 375px the Studio menu reaches every sub-page without horizontal scrolling.
+#### Done means
+
+- `npm test` green, with every assertion above updated rather than removed.
+- **A scout's app is pixel-identical** at 375px and 1280px: same two tabs,
+  same app bar. That is the promise that made the merge safe; check it with
+  screenshots, not by reading the diff.
+- A manager reaches every page and sub-page from the nav: at most two taps on
+  a phone (More counts as one), one on a laptop. Checked by clicking.
+- At 375, 768 and 1280, for both roles: no sideways scroll (set `scrollLeft`
+  and see whether it moves), no control under 44px, Tab reaches the nav with a
+  visible focus ring (press Tab, never call `.focus()`). Assert
+  `clientWidth !== 0` before reading anything.
+- **Every control on today's Studio pages is reachable on the new ones**,
+  ticked off against an inventory written before step 4.
+  `resetScheduling()` is the proof that this does not happen by itself.
+- Changing the event in the app bar changes every page at once, and no page
+  holds a second idea of the event.
+- The replay is reachable from Home and from Review without typing a URL.
+- Every old URL redirects; none 404s on the built site.
+- Contrast is measured in all four palettes.
+- `CLAUDE.md` (*Two applications share one deployment*, the routes table, the
+  Studio component set) and `APP_OVERVIEW.md` describe one shell.
 
 #### Order of work
 
-1. **The store and the rail picker.** `selectedId` dies; nothing moves yet.
-2. **The two-level rail and the redirects**, with today's pages mounted under
-   their new names unchanged — a pure move, reviewable as one.
-3. **Split Schedule and Event** into Plan · People / Schedule / Assignments /
-   Event and Run · Matches / Scouts.
-4. **Fold Coverage in** — Gaps filter on Matches, By scout on Scouts — and
-   delete `CoverageCheck`.
-5. **Review**, then **Home**, as specced, last because every tile links
-   somewhere that must exist first.
-6. **The scout's whole schedule** on Home.
+Each step is one reviewable commit or a short run of them, and the app works
+after every one.
 
-#### Decisions this needs
+1. **Merge the shell.** `nav-items.js`, the nav component, and the layout
+   rendering it everywhere. Studio's chrome goes. To keep this a pure shell
+   change, the manager items are temporarily today's five pages.
+2. **The event in the app bar, and the store.** `selectedId` dies. Pages
+   still render their own content.
+3. **The new routes.** Pages move under their new names unchanged, with the
+   segmented control, redirects, reserved codes and the nav pairs.
+4. **Split Schedule and Event** into Plan's four sub-pages and Run's two.
+   Write the control inventory first.
+5. **Fold Coverage in**: the Gaps filter on Matches, By scout on Scouts.
+   Delete `CoverageCheck`.
+6. **Review**, the index.
+7. **Home tiles**, last, because every tile links somewhere that must exist.
+8. **The scout's whole schedule**, a disclosure on Home (*The scout's
+   schedule*).
 
-1. **Sub-pages (recommended) or the spec's single Plan and Run pages.**
-2. **One event value for the device and Studio (recommended)** or two.
-3. **Read-only Review for scouts.** RLS already lets a scout read their event,
-   but the team and match pages sit behind the Studio role gate, so a drive
-   coach or strategy scout who is not a manager cannot look up the next
-   opponent. Recommended later and separately: it is a gating change, not
-   organisation.
+#### Open, and not blocking
+
+- **The Studio palette.** `data-studio` keys on the `/studio/` prefix, so it
+  still applies to the manager pages and the shared nav repaints on crossing
+  from Home into Plan. Kept for now because it is measured (170 assertions)
+  and works as a cue that you are on a manager page. Dropping it, or keying it
+  to role instead, is a separate change.
+- **Read-only Review for scouts.** RLS already lets a scout read their event.
+  Adding Review to the scout nav is a gating change, not organisation.
 
 ### Pit scouting and the team profile
 
