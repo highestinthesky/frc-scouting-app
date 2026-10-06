@@ -692,8 +692,8 @@ for (const [label, file] of [
 	// mode's entry opens its first sub-page, and every sub-page is headed by the
 	// mode — so the pairs below are mode → each of its sub-page files, plus the
 	// sub-page label each one lights in its segmented control.
+	// Home is the user's requested exception: its heading is a personal greeting.
 	for (const [label, file] of [
-		['Home', 'src/routes/home/+page.svelte'],
 		['Settings', 'src/routes/settings/+page.svelte'],
 		['Review', 'src/routes/studio/review/+page.svelte'],
 		['Accounts', 'src/routes/studio/accounts/+page.svelte']

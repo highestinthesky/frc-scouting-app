@@ -137,7 +137,7 @@
 		z-index: 20;
 		display: flex;
 		justify-content: stretch;
-		background: var(--bg-card);
+		background: var(--nav-bg);
 		border-top: 1px solid var(--border);
 		padding-bottom: env(safe-area-inset-bottom, 0px);
 	}
@@ -176,20 +176,33 @@
 	.tabs a.active,
 	.bar a.active,
 	.bar .more.active {
-		color: var(--accent);
+		color: var(--on-accent);
 		border-top-color: var(--accent);
-		background: var(--accent-soft);
+		background: var(--accent);
 	}
 	.tabs a:hover,
 	.bar a:hover,
 	.bar .more:hover {
 		color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.tabs a.active:hover,
+	.bar a.active:hover,
+	.bar .more.active:hover {
+		color: var(--on-accent);
+		background: var(--accent-hover);
 	}
 	.tabs a:focus-visible,
 	.bar a:focus-visible,
 	.bar .more:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: -2px;
+	}
+
+	.tabs a.active:focus-visible,
+	.bar a.active:focus-visible,
+	.bar .more.active:focus-visible {
+		outline-color: var(--on-accent);
 	}
 
 	/* Pages reserve the bar's height themselves, via --nav-bottom-h in their
@@ -279,9 +292,12 @@
 			margin-bottom: -1px;
 		}
 		.tabs a.active {
+			color: var(--accent);
 			border-bottom-color: var(--accent);
 			background: none;
 		}
+		.tabs a.active:hover { color: var(--accent); background: var(--accent-soft); }
+		.tabs a.active:focus-visible { outline-color: var(--accent); }
 
 		.bar {
 			display: none;
@@ -292,7 +308,7 @@
 			justify-content: center;
 			flex-wrap: wrap;
 			border-bottom: 1px solid var(--border);
-			background: var(--bg-card);
+			background: var(--nav-bg);
 			padding: 0 var(--space-4);
 		}
 		.rail a {
@@ -338,7 +354,8 @@
 			margin-bottom: 0;
 		}
 		.rail a.on {
-			background: var(--accent-soft);
+			color: var(--on-accent);
+			background: var(--accent);
 			border-left-color: var(--accent);
 		}
 	}

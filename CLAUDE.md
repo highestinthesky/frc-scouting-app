@@ -60,7 +60,7 @@ to record a match. It folded back in. `nav-items.js` is the one list
 | `/scouting/new`, `/scouting/edit` | The entry form. |
 | `/settings` | Device settings, event picker, sign out. A manager can also switch event from the app bar. |
 | `/practice` | The auto recorder against its own countdown, on the current season, with nothing kept — no IndexedDB, no draft, no sync. It is in `NEEDS_NO_EVENT` in `+layout.svelte`, the one route a signed-in device reaches without an event or a scout name, because its whole purpose is rehearsal before kickoff, when nobody is on an event. The sign-in guard still applies. |
-| `/home` | The scout's whole page: what is next, what a manager has said, what they are watching, the event's whole schedule behind a disclosure, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. Managers see event coverage, missing robot entries and scout activity, with personal recording tools behind a Your scouting disclosure (`ManagerHome`). |
+| `/home` | The scout's whole page: what is next, what a manager has said, what they are watching, the event's whole schedule behind a disclosure, and what they have recorded. `/scouting` folded in here at v0.82 — of the five things it showed, three were already on this one. Home greets every user by name. Managers see the next match and its teams first, then missing entries and scout activity; coverage is a compact summary. Personal recording tools remain behind a Your scouting disclosure (`ManagerHome`). |
 | `/studio/plan/people` | Who is on this event — drag scouts on and off — and who is assigned and recording. |
 | `/studio/plan/schedule` | Fetch the TBA schedule and publish it. |
 | `/studio/plan/assignments` | The assignment editor, auto-assign, and the conflict check over the unsaved draft. |
@@ -149,8 +149,10 @@ could not fire it before cached clients had moved over.
 
 ### Home and event selection
 
-Manager and super Home uses `ManagerHome.svelte` over shared `eventData`.
-Its coverage denominator includes played or started quals and excludes future
+Every Home greets its user with `greetingFor`, stable across minute updates.
+Manager and super Home uses `ManagerHome.svelte` over shared `eventData`, leading
+with the next match and team links. Coverage appears in the lower summary and
+includes quals through the last played or recorded match, excluding future
 matches; played matches with no entries remain visible. The header spans the
 viewport. Settings aligns to the content gutter. Scouts explicitly choose from
 their membership-limited event list in a native popup when no event is selected
@@ -170,47 +172,22 @@ Content width is a decision about the content, not the device:
     --w-list   60rem   cards and entry lists
     --w-board  78rem   tables and dense grids
 
-**Studio has its own palette as of v0.74**, in `:global(:root[data-studio])` in
-the root layout, and one fact governs it:
+**Team purple is the app's identity.** The header stays `#5f24a2` with white
+ink in both themes. Navigation uses `--nav-bg`, filled purple selected links
+on phones and in the manager sidebar, and visible focus rings. The page and
+navigation surfaces are lavender in light mode and deep purple in dark mode.
 
-    #662DB4  purple   8.08x on white   ← the only one that can carry white text
-    #0087F8  blue     3.61x on white   dark text only
-    #00C7FA  cyan     1.99x on white   dark text only
-    #49FCE2  aqua     1.29x on white   dark text only
+Studio shares this palette rather than adopting a separate navigation color.
+Its `--studio-series-*` tokens remain distinct for charts and its alliance
+colors retain their semantic meaning. The four token scopes (main light/dark,
+Studio light/dark) pass 218 contrast assertions, including navigation text and
+focus rings. Controls consume `--accent` and `--on-accent`: dark mode uses a
+lighter purple fill with dark ink, while the header keeps the team color.
 
-Three of the four cannot have white text on them. On a **dark** ground every
-number inverts, and that is the whole design: the light three become ink — links,
-active states, series — and purple, the one that can carry white text, is the
-fill. Cyan is 1.99 on white and 9.29 as ink on a Studio card.
-
-**Studio follows the app theme as of v0.75.** It was dark in both before that,
-on the reasoning above — and the reasoning was about the palette rather than
-about the person reading it, who could not read it. Legibility settles that.
-
-There are now **two** Studio palettes and `check_contrast.mjs` measures both, at
-170 assertions. The roles invert between them and that inversion is the design:
-on light, purple is the only one of the four that reads, so it is the accent and
-does both jobs; cyan and aqua are 1.64 and 1.06 on a raised panel and are
-decorative only. The `--studio-series-*` are darkened on light and lifted on
-dark — same names, opposite directions, because the ground moved.
-
-`:root[data-studio]` is the light palette and must still come after the dark
-theme block (both `(0,2,0)`).
-`:root[data-studio][data-theme='dark']` is `(0,3,0)` and outranks both.
-
-**The block remaps the base tokens, it does not merely add `--studio-*` ones.**
-That is what dresses `Button`, `Select`, `Dialog` and `Field` — they read
-`--bg-card` and `--accent`, so a component that consumes tokens correctly is
-already a Studio component. It is also why `check_contrast.mjs` runs the same
-PAIRS table over a third palette. `--studio-*` names only the things with no
-scout-app equivalent: the raw four, `--studio-fill` (purple, the white-text
-surface), `--studio-violet` (purple lifted until it reads as ink) and
-`--studio-series-1..4`.
-
-**`--accent` is cyan, not the purple.** It has to be ink *and* fill — `Button`
-paints it as a background, pages paint it as text — and purple is 2.29 as ink on
-a card. Reaching for `#662DB4` as "the Studio accent" makes every link
-unreadable.
+`:root[data-studio]` remains after the dark theme block so scoped semantic
+colors apply consistently. `:root[data-studio][data-theme='dark']` overrides
+both. Runtime tokens live in the root layout; `tokens.css` is the matching
+portable snapshot, not a second stylesheet imported into the app.
 
 Two ordering traps, both enforced by checks because neither is visible:
 

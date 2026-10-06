@@ -119,6 +119,8 @@ const ratio = (a, b) => {
 // 4.5 = body text. 3.0 = large text (>=24px or >=19px bold) and UI boundaries.
 
 const PAIRS = [
+	['--text-muted', '--nav-bg', 4.5, 'navigation text'],
+	['--accent', '--nav-bg', 3.0, 'navigation focus rings'],
 	['--text-primary', '--bg-page', 4.5, 'body text on the page'],
 	['--text-primary', '--bg-card', 4.5, 'body text on a card'],
 	['--text-primary', '--bg-subtle', 4.5, 'body text on a subtle fill'],
@@ -154,15 +156,16 @@ const PAIRS = [
 	['--warning', '--bg-card', 4.5, 'warning text'],
 	['--warning', '--warning-bg', 4.5, 'warning text in a warning banner'],
 
-	// The app bar follows the neutral light/dark surfaces.
+	// The app bar stays team purple in light and dark mode.
 	['--bar-ink', '--bar-bg', 4.5, 'app bar text'],
 	['--bar-badge-ink', '--bar-badge-bg', 4.5, 'manager badge'],
 	// The Studio button: outlined at rest, filled with the bar's ink on hover.
 	['--bar-edge', '--bar-bg', 3.0, 'the Studio button outline'],
 	['--bar-bg', '--bar-ink', 4.5, 'the Studio button label when hovered'],
 	['--pending-ink', '--dot-pending', 4.5, 'unsynced count bubble'],
-	...['ok', 'pending', 'offline', 'err', 'idle'].map((status) => [
-		`--dot-${status}`, '--bar-bg', 3.0, `${status} sync status indicator`
+	...['ok', 'pending', 'offline', 'err', 'idle'].flatMap((status) => [
+		[`--dot-${status}`, '--bar-bg', 3.0, `${status} sync status indicator`],
+		[`--dot-${status}`, '--bar-chip-bg', 3.0, `${status} sync status indicator on hover`]
 	]),
 
 	// Non-text: a boundary only has to be distinguishable, not readable.

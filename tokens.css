@@ -1,21 +1,20 @@
-/* Hallmark · portable snapshot of src/routes/+layout.svelte.
- * The app consumes its layout tokens; this file is for reuse in other projects.
- */
+/* Portable snapshot of the runtime theme tokens in src/routes/+layout.svelte. */
 :root {
 		color-scheme: light;
-		--bg-page: #f6f5f2;
+		--bg-page: #f7f2fc;
+		--nav-bg: #efe4f8;
 		--bg-card: #ffffff;
-		--bg-subtle: #eeede9;
-		--bg-elev: #f0efec;
-		--text-primary: #252525;
-		--text-muted: #595750;
-		--text-faint: #6b6862;
-		--border: #dedcd6;
+		--bg-subtle: #f0e7f8;
+		--bg-elev: #f5eefb;
+		--text-primary: #2b1f36;
+		--text-muted: #62526f;
+		--text-faint: #74637e;
+		--border: #e0d3eb;
 
-		--border-strong: #8a877f;
+		--border-strong: #95809f;
 		--accent: #5f24a2;
 		--accent-hover: #4e1c87;
-		--accent-soft: #f1ebf7;
+		--accent-soft: #eadbf6;
 		--on-accent: #ffffff;
 		--alliance-red: #c0392b;
 		--alliance-blue: #2c5cb0;
@@ -74,19 +73,19 @@
 		--w-list: 60rem;
 		--w-board: 78rem;
 
-		--bar-bg: #ffffff;
-		--bar-ink: #252525;
-		--bar-chip-bg: #eeede9;
+		--bar-bg: #5f24a2;
+		--bar-ink: #ffffff;
+		--bar-chip-bg: #6b32ab;
 
-		--bar-edge: #8a877f;
-		--bar-badge-bg: #f1ebf7;
+		--bar-edge: #c5a8e5;
+		--bar-badge-bg: #eadbf6;
 		--bar-badge-ink: #5f24a2;
-		--dot-ok: #047857;
-		--dot-pending: #a16207;
-		--dot-offline: #6b6862;
-		--dot-err: #c0392b;
-		--dot-idle: #8a877f;
-		--pending-ink: #ffffff;
+		--dot-ok: #4ade80;
+		--dot-pending: #facc15;
+		--dot-offline: #a9a9ae;
+		--dot-err: #ff9188;
+		--dot-idle: #c5a8e5;
+		--pending-ink: #442222;
 		--font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 		--font-display: var(--font-body);
 		--font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -97,20 +96,21 @@
 
 :root[data-theme='dark'] {
 		color-scheme: dark;
-		--bg-page: #151517;
-		--bg-card: #1d1d20;
-		--bg-subtle: #27272a;
-		--bg-elev: #29292d;
-		--text-primary: #f0eeea;
-		--text-muted: #bbb8b2;
-		--text-faint: #a09d98;
-		--border: #38383c;
-		--border-strong: #7f7d84;
-		--accent: #bba1e1;
-		--accent-hover: #cdb8eb;
-		--accent-soft: #30283c;
+		--bg-page: #1b1424;
+		--nav-bg: #281d36;
+		--bg-card: #241b2f;
+		--bg-subtle: #30253e;
+		--bg-elev: #382b47;
+		--text-primary: #f4edf9;
+		--text-muted: #c5b7d2;
+		--text-faint: #b2a0c1;
+		--border: #4c395e;
+		--border-strong: #947ea5;
+		--accent: #c6a1ed;
+		--accent-hover: #d8b9f6;
+		--accent-soft: #3d2955;
 
-		--on-accent: #1d1d20;
+		--on-accent: #241b2f;
 		--alliance-red: #f1746a;
 		--alliance-blue: #6fa8ec;
 		--on-alliance: #101014;
@@ -122,23 +122,23 @@
 		--warning: #fcd34d;
 		--warning-bg: #2a200a;
 		--warning-border: #5a4318;
-		--banner-info-bg: #30283c;
+		--banner-info-bg: #3d2955;
 		--banner-info-border: #4d415e;
 		--banner-red-bg: #3a1a18;
 		--banner-red-border: #5a2a22;
 		--banner-blue-bg: #16233a;
 		--banner-blue-border: #2c4a7a;
-		--bar-bg: #1d1d20;
-		--bar-ink: #f0eeea;
-		--bar-chip-bg: #27272a;
-		--bar-edge: #7f7d84;
-		--bar-badge-bg: #30283c;
-		--bar-badge-ink: #bba1e1;
-		--dot-ok: #6ee7b7;
+		--bar-bg: #5f24a2;
+		--bar-ink: #ffffff;
+		--bar-chip-bg: #6b32ab;
+		--bar-edge: #c5a8e5;
+		--bar-badge-bg: #3d2955;
+		--bar-badge-ink: #c6a1ed;
+		--dot-ok: #4ade80;
 		--dot-pending: #facc15;
-		--dot-offline: #999999;
-		--dot-err: #f87171;
-		--dot-idle: #a09d98;
+		--dot-offline: #a9a9ae;
+		--dot-err: #ff9188;
+		--dot-idle: #c5a8e5;
 		--pending-ink: #442222;
 		--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
 		--shadow-md: 0 12px 36px rgba(0, 0, 0, 0.35);
@@ -152,23 +152,23 @@
 
 		--studio-violet: #5f24a2;
 
-		--bg-page: #f6f5f2;
+		--bg-page: #f7f2fc;
 		--bg-card: #ffffff;
-		--bg-subtle: #eeede9;
+		--bg-subtle: #f0e7f8;
 
-		--bg-elev: #f0efec;
+		--bg-elev: #f5eefb;
 
-		--text-primary: #252525;
-		--text-muted: #595750;
-		--text-faint: #6b6862;
+		--text-primary: #2b1f36;
+		--text-muted: #62526f;
+		--text-faint: #74637e;
 
-		--border: #dedcd6;
+		--border: #e0d3eb;
 
-		--border-strong: #8a877f;
+		--border-strong: #95809f;
 
 		--accent: #5f24a2;
 		--accent-hover: #4e1c87;
-		--accent-soft: #f1ebf7;
+		--accent-soft: #eadbf6;
 		--on-accent: #ffffff;
 
 		--alliance-red: #b3261e;
@@ -210,25 +210,25 @@
 		--studio-cyan: #00c7fa;
 		--studio-aqua: #49fce2;
 
-		--studio-violet: #bba1e1;
+		--studio-violet: #c6a1ed;
 
-		--bg-page: #151517;
-		--bg-card: #1d1d20;
-		--bg-subtle: #27272a;
-		--bg-elev: #29292d;
+		--bg-page: #1b1424;
+		--bg-card: #241b2f;
+		--bg-subtle: #30253e;
+		--bg-elev: #382b47;
 
-		--text-primary: #f0eeea;
-		--text-muted: #bbb8b2;
-		--text-faint: #a09d98;
+		--text-primary: #f4edf9;
+		--text-muted: #c5b7d2;
+		--text-faint: #b2a0c1;
 
-		--border: #38383c;
+		--border: #4c395e;
 
-		--border-strong: #7f7d84;
+		--border-strong: #947ea5;
 
-		--accent: #bba1e1;
-		--accent-hover: #cdb8eb;
-		--accent-soft: #30283c;
-		--on-accent: #1d1d20;
+		--accent: #c6a1ed;
+		--accent-hover: #d8b9f6;
+		--accent-soft: #3d2955;
+		--on-accent: #241b2f;
 
 		--alliance-red: #ff8078;
 		--alliance-blue: #7db2f2;
@@ -242,14 +242,14 @@
 		--warning: #fbc94a;
 		--warning-bg: #2e2413;
 		--warning-border: #5c4a1c;
-		--banner-info-bg: #30283c;
+		--banner-info-bg: #3d2955;
 		--banner-info-border: #4d415e;
 		--banner-red-bg: #33141a;
 		--banner-red-border: #5e2a2a;
 		--banner-blue-bg: #141d38;
 		--banner-blue-border: #2c4472;
 
-		--studio-series-1: #bba1e1;
+		--studio-series-1: #c6a1ed;
 		--studio-series-2: #8cb7e5;
 		--studio-series-3: #8dc9b6;
 		--studio-series-4: #d0b797;

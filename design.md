@@ -12,8 +12,10 @@ The design should make the next task easy to find and the data easy to scan.
 
 ## Genre and tone
 
-Modern-minimal, quiet and utilitarian. Warm neutral surfaces in light mode,
-charcoal in dark mode, restrained team purple for actions and selected states.
+Modern-minimal, quiet and utilitarian. Team purple anchors the full-width
+header, navigation and actions. Light mode
+uses lavender page and navigation surfaces; dark mode uses deep purple surfaces.
+Data panels keep clear text contrast in both themes.
 No gradients, glow, glass, ornamental art, or marketing sections.
 
 ## Macrostructure family
@@ -24,16 +26,18 @@ are no marketing pages. Auth pages use a functional heading and lead directly in
 
 ## Copy
 
-No logos, wordmarks, greeting copy, decorative section labels, or repeated
-explanations. Use functional page headings, concise labels and short empty
-states. Keep instructions only when they explain an unfamiliar control, prevent
+No logos, wordmarks, decorative section labels, or repeated explanations.
+Home welcomes each user by name with the existing stable greeting. Other pages
+use functional headings. Keep labels concise and empty states short. Keep instructions only when they explain an unfamiliar control, prevent
 a destructive mistake, or change how a number should be interpreted. Show event
 context once in the navigation; detail pages retain their own event when their
 route can differ from the selected event.
 
 ## Theme
 
-Runtime tokens are defined in `src/routes/+layout.svelte`, the existing single
+The header stays team purple (`#5f24a2`) in both themes. Navigation uses
+`--nav-bg`, with filled purple selected links on phones and in the manager
+sidebar. Runtime tokens are defined in `src/routes/+layout.svelte`, the existing single
 source of truth. `tokens.css` is a portable snapshot, not a second runtime
 stylesheet. Components always use named tokens.
 
@@ -41,39 +45,41 @@ stylesheet. Components always use named tokens.
 
 | Token | Value |
 |---|---|
-| `--bg-page` | `#f6f5f2` |
+| `--bg-page` | `#f7f2fc` |
+| `--nav-bg` | `#efe4f8` |
 | `--bg-card` | `#ffffff` |
-| `--bg-subtle` | `#eeede9` |
-| `--bg-elev` | `#f0efec` |
-| `--text-primary` | `#252525` |
-| `--text-muted` | `#595750` |
-| `--text-faint` | `#6b6862` |
-| `--border` | `#dedcd6` |
-| `--border-strong` | `#8a877f` |
+| `--bg-subtle` | `#f0e7f8` |
+| `--bg-elev` | `#f5eefb` |
+| `--text-primary` | `#2b1f36` |
+| `--text-muted` | `#62526f` |
+| `--text-faint` | `#74637e` |
+| `--border` | `#e0d3eb` |
+| `--border-strong` | `#95809f` |
 | `--accent` | `#5f24a2` |
-| `--accent-soft` | `#f1ebf7` |
+| `--accent-soft` | `#eadbf6` |
 | `--on-accent` | `#ffffff` |
 
 ### Dark
 
 | Token | Value |
 |---|---|
-| `--bg-page` | `#151517` |
-| `--bg-card` | `#1d1d20` |
-| `--bg-subtle` | `#27272a` |
-| `--bg-elev` | `#29292d` |
-| `--text-primary` | `#f0eeea` |
-| `--text-muted` | `#bbb8b2` |
-| `--text-faint` | `#a09d98` |
-| `--border` | `#38383c` |
-| `--border-strong` | `#7f7d84` |
-| `--accent` | `#bba1e1` |
-| `--accent-soft` | `#30283c` |
-| `--on-accent` | `#1d1d20` |
+| `--bg-page` | `#1b1424` |
+| `--nav-bg` | `#281d36` |
+| `--bg-card` | `#241b2f` |
+| `--bg-subtle` | `#30253e` |
+| `--bg-elev` | `#382b47` |
+| `--text-primary` | `#f4edf9` |
+| `--text-muted` | `#c5b7d2` |
+| `--text-faint` | `#b2a0c1` |
+| `--border` | `#4c395e` |
+| `--border-strong` | `#947ea5` |
+| `--accent` | `#c6a1ed` |
+| `--accent-soft` | `#3d2955` |
+| `--on-accent` | `#241b2f` |
 
 ### Contrast and semantic color
 
-`npm test` measures 190 color pairings across the main and Studio palettes in
+`npm test` measures 218 color pairings across the main and Studio palettes in
 light and dark. Body text needs 4.5:1; focus rings and required input boundaries
 need 3:1. Dark primary buttons use dark ink on a light purple fill.
 
@@ -110,8 +116,10 @@ Settings aligns to the left page gutter, with each control group limited to
 form width. Its page heading spans the page rather than a centered form.
 
 Use whitespace and rules before adding a card. Upcoming entries form open rows;
-recorded entries share one list surface. Manager Home leads with event coverage and match status in one surface, then
-lists missing entries and scout activity as open rows. Coverage percentages use
+recorded entries share one list surface. Manager Home leads with the next match and its six teams, with direct links to
+match review and team details. After quals finish, the latest match takes its
+place. Missing entries and scout activity follow as open rows. Coverage and
+fully recorded matches sit in a compact summary below those working sections. Coverage percentages use
 qualification matches through the last played or recorded qual, excluding
 future matches; earlier missing submissions stay visible even without a cached
 result. Personal manager recording tools remain in a collapsed Your scouting
@@ -171,12 +179,12 @@ layout's tokens change; do not import it back into the running app.
 
 ```css
 @theme {
-  --color-paper: #f6f5f2;
+  --color-paper: #f7f2fc;
   --color-surface: #ffffff;
-  --color-ink: #252525;
-  --color-muted: #595750;
+  --color-ink: #2b1f36;
+  --color-muted: #62526f;
   --color-accent: #5f24a2;
-  --color-rule: #dedcd6;
+  --color-rule: #e0d3eb;
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --spacing-panel: 1.5rem;
@@ -190,9 +198,9 @@ layout's tokens change; do not import it back into the running app.
 ```json
 {
   "color": {
-    "paper": { "$value": "#f6f5f2", "$type": "color" },
+    "paper": { "$value": "#f7f2fc", "$type": "color" },
     "surface": { "$value": "#ffffff", "$type": "color" },
-    "ink": { "$value": "#252525", "$type": "color" },
+    "ink": { "$value": "#2b1f36", "$type": "color" },
     "accent": { "$value": "#5f24a2", "$type": "color" }
   },
   "space": { "panel": { "$value": "1.5rem", "$type": "dimension" } },
@@ -204,16 +212,16 @@ layout's tokens change; do not import it back into the running app.
 
 ```css
 :root {
-  --background: #f6f5f2;
-  --foreground: #252525;
+  --background: #f7f2fc;
+  --foreground: #2b1f36;
   --card: #ffffff;
-  --card-foreground: #252525;
+  --card-foreground: #2b1f36;
   --primary: #5f24a2;
   --primary-foreground: #ffffff;
-  --muted: #eeede9;
-  --muted-foreground: #595750;
-  --border: #dedcd6;
-  --input: #8a877f;
+  --muted: #f0e7f8;
+  --muted-foreground: #62526f;
+  --border: #e0d3eb;
+  --input: #95809f;
   --ring: #5f24a2;
   --radius: 0.5rem;
 }
@@ -323,7 +331,8 @@ to — a rule it doesn't own.
 
 ## Variants
 
-Studio shares the main canvas, type, purple accent, controls and motion. Its
+Studio shares the team-purple header, lavender or deep-purple canvas, type,
+controls and motion. Its
 sidebar, wider content area and denser tables serve the manager's work. Its
 chart-series tokens remain distinct and are contrast-tested on both panel
 surfaces. Studio follows the user's light/dark preference.

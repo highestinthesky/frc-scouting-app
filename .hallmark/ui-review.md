@@ -124,3 +124,36 @@ change. All passed. The independent integration review's findings were fixed
 and rechecked; no actionable findings remain. The full suite passes, including
 83 component and 190 contrast checks, and the production build succeeds with
 only the existing Select, SVG tabindex and Browserslist notices.
+
+## Home priorities and team-purple follow-up — 2026-10-06
+
+Home restores the existing per-person greeting for scouts, managers and supers.
+The greeting remains stable as the minute updates. Manager Home leads with the
+next qualification match, its teams and a review action; once quals finish it
+shows the latest match. Missing entries and scout activity follow, while
+coverage and fully recorded counts occupy a compact lower summary. Personal
+scouting remains available through its disclosure.
+
+The header returns to team purple in both themes. Light page and navigation
+surfaces are lavender, dark surfaces are deep purple, and selected navigation
+links have a purple fill. Alliance and status colors retain their meanings.
+Active navigation hover and keyboard focus retain readable contrast; token
+checks now include navigation surfaces and pass 218 assertions.
+
+Fresh Chromium checks covered Home and Settings for every role at 320, 375,
+414, 768, 1280 and 1920px, plus finished quals, no schedule, long names, dark
+mode and scout event selection. Match review links, six team links, personal
+scouting and the smaller coverage summary were checked. Light, dark and mobile
+screenshots were inspected. All checks used the isolated synthetic preview,
+with external requests blocked. The full test suite and production build pass;
+the existing Select, SVG tabindex and Browserslist notices remain.
+
+The final review caught the sync chip's offline/error dots losing contrast on
+hover. The hover fill was darkened, and assertions now cover every dot against
+both resting and hovered header surfaces. The regression first failed for those
+colors in all four palettes; the corrected palette passes all 218 assertions.
+
+The targeted browser verification also passed 24 selected-navigation keyboard
+focus/hover states and 12 hovered offline sync indicators, covering scout and
+manager navigation at 375, 768 and 1280px in both themes. The final independent
+review has no remaining actionable findings.

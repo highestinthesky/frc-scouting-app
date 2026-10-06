@@ -1,6 +1,24 @@
 [
   {
     "date": "2026-10-06",
+    "scope": "home and shared theme",
+    "verb": "redesign and adapt",
+    "genre": "modern-minimal",
+    "macrostructure": "Workbench",
+    "theme": "team-purple",
+    "designSystem": "design.md",
+    "brief": "Restore personal greetings and team-purple identity. Lead manager Home with the next match and teams; keep coverage in a compact summary.",
+    "preEmitCritique": {
+      "philosophy": 5,
+      "hierarchy": 5,
+      "execution": 4,
+      "specificity": 5,
+      "restraint": 4,
+      "variety": 4
+    }
+  },
+  {
+    "date": "2026-10-06",
     "scope": "app",
     "verb": "redesign and adapt",
     "genre": "modern-minimal",

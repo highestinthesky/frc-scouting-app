@@ -41,6 +41,7 @@
 	import { reminders } from '$lib/reminders.svelte.js';
 	import { relativeTime, timeOfDay } from '$lib/format.js';
 	import { eventData } from '$lib/event-data.svelte.js';
+	import { greetingFor } from '$lib/greeting.js';
 	import Button from '$lib/components/Button.svelte';
 	import ManagerHome from '$lib/components/ManagerHome.svelte';
 
@@ -49,6 +50,8 @@
 	let loading = $state(true);
 	/** Refreshed once a minute to keep relative times current. */
 	let now = $state(new Date());
+	const who = $derived(auth.displayName || session.scoutName || '');
+	const welcome = $derived(`${greetingFor(now, who)}${who ? `, ${who}` : ''}`);
 
 	async function refresh() {
 		if (auth.isManager) {
@@ -472,10 +475,10 @@
 {/snippet}
 
 {#if auth.isManager}
-	<ManagerHome scouting={scoutContent} />
+	<ManagerHome scouting={scoutContent} greeting={welcome} />
 {:else}
 	<main>
-		<header class="page-head"><h1>Home</h1></header>
+		<header class="page-head"><h1>{welcome}</h1></header>
 		{@render scoutContent()}
 	</main>
 {/if}

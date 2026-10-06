@@ -56,7 +56,7 @@ never receives an email merely for knowing a username.
 |---|---|
 | `/` | Sign in. Every other route redirects here when signed out |
 | `/register` | Redeem an invite code; shows whose invite it is |
-| `/home` | Where a scout lands: up next, manager notes, upcoming, the whole schedule behind a disclosure. Managers see coverage, missing entries and scout activity, with personal scouting tools in a disclosure |
+| `/home` | Greets each user; scouts see up next, manager notes, upcoming and the whole schedule behind a disclosure. Managers see the next match and teams, then missing entries and scout activity; coverage is a compact summary. Personal scouting tools remain in a disclosure |
 | `/scouting` | A redirect to `/home`; folded into Home at v0.82 |
 | `/scouting/new` | Record a match observation |
 | `/scouting/edit` | Correct a saved observation |
@@ -118,7 +118,7 @@ tidiness.
   depends on its answer.
 - **`picklist.js` / `picklist-store.js`** — per-team ranked list and merge.
 - **`draft.js`** — a half-filled entry form survives leaving the page.
-- **`greeting.js`** — Legacy greeting helper, retained for compatibility.
+- **`greeting.js`** — Home's per-user greeting, stable across minute updates.
 - **`transfer.js`** — offline handoff as a file, for gyms with no usable wifi.
 - **`event-rules.js` / `events.js`** — event codes, per-event settings, and which
   event a device is on.

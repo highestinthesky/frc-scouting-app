@@ -5,10 +5,11 @@
 	import { eventData } from '$lib/event-data.svelte.js';
 	import { eventOverview } from '$lib/coverage.js';
 	import { rowScout, sameScout, scoutRef } from '$lib/scout-identity.js';
+	import { teamsInMatch } from '$lib/tba.js';
 	import { timeOfDay } from '$lib/format.js';
 	import Button from './Button.svelte';
 
-	let { scouting } = $props();
+	let { scouting, greeting } = $props();
 	let personalOpen = $state(false);
 	let peopleSlow = $state(false);
 	const loading = $derived(!eventData.localReady);
@@ -16,8 +17,11 @@
 	const peopleError = $derived(eventData.rosterError || eventData.remoteError || (peopleSlow ? 'Scout activity is taking longer to load. Coverage is available from this device.' : ''));
 	const overview = $derived(eventOverview({ eventCode: session.eventCode, matches: eventData.cached?.matches ?? [], entries: eventData.entries, roster: eventData.roster }));
 	const assignedScouts = $derived(overview.activity.filter(r => eventData.assignments.some(a => sameScout(rowScout(a), scoutRef(r.name, r.person.profileId)))).length);
-	const nextTime = $derived(timeOfDay(overview.nextMatch?.predicted_time ?? overview.nextMatch?.time));
+	const focusMatch = $derived(overview.nextMatch ?? overview.latestMatch);
+	const focusTime = $derived(timeOfDay(focusMatch?.actual_time ?? focusMatch?.predicted_time ?? focusMatch?.time));
+	const focusTeams = $derived(teamsInMatch(focusMatch));
 	const matchHref = (number) => `${base}/studio/${encodeURIComponent(session.eventCode)}/q${number}/`;
+	const teamHref = (number) => `${base}/studio/${encodeURIComponent(session.eventCode)}/team/${number}/`;
 	const reload = () => eventData.load(session.eventCode);
 	$effect(() => {
 		peopleSlow = false;
@@ -29,31 +33,44 @@
 
 <main>
 	<header class="page-head">
-		<h1>Home</h1>
+		<h1>{greeting}</h1>
 		<div class="head-actions"><Button variant="primary" href="{base}/scouting/new/">New entry</Button><Button href="{base}/studio/plan/schedule/">Open schedule</Button></div>
 	</header>
 
 	{#if loading}
-		<p class="muted" role="status">Loading event coverage…</p>
+		<p class="muted" role="status">Loading event…</p>
 	{:else}
-		<section class="coverage" aria-labelledby="coverage-title">
-			<div class="coverage-main">
-				<h2 id="coverage-title">Event coverage</h2>
-				{#if overview.percent !== null}
-					<p class="coverage-number">{overview.percent}<span>%</span></p>
-					<p class="coverage-detail"><strong>{overview.recorded} of {overview.expected}</strong> robot entries received</p>
-					<progress max={overview.expected} value={overview.recorded} aria-label="Recorded robot entries"></progress>
-					<p class="muted">Across {overview.trackedCount} played or started {overview.trackedCount === 1 ? 'match' : 'matches'}. Future matches are excluded.</p>
-				{:else}
-					<p class="coverage-empty">{overview.matchCount ? 'Waiting for the first match' : 'No schedule published'}</p>
-					<p class="muted">{overview.matchCount ? 'Coverage appears as results or scout entries arrive.' : 'Publish the event schedule to track missing entries.'}</p>
+		<section class="match-focus" aria-labelledby="match-title">
+			{#if focusMatch}
+				<div class="match-heading">
+					<div>
+						<h2 id="match-title">{overview.nextMatch ? 'Next match' : 'Latest match'}</h2>
+						<p class="match-number">Q{focusMatch.match_number}{#if focusTime}<span>{focusTime}</span>{/if}</p>
+					</div>
+					<Button variant="primary" href={matchHref(focusMatch.match_number)}>Review match</Button>
+				</div>
+				<div class="alliances">
+					{#each /** @type {const} */ (['red', 'blue']) as color (color)}
+						<div class="alliance-row" data-color={color}>
+							<h3>{color === 'red' ? 'Red alliance' : 'Blue alliance'}</h3>
+							<ul>
+								{#each focusTeams[color].filter(Number.isFinite) as team (team)}
+									<li><a href={teamHref(team)} aria-label="Team {team}">{team}</a></li>
+								{/each}
+							</ul>
+						</div>
+					{/each}
+				</div>
+				{#if !overview.nextMatch}
+					<p class="match-note">Qualification matches finished. <a href="{base}/studio/pick/compare/">Compare teams</a></p>
+				{:else if overview.latestMatch}
+					<p class="match-note">Last played <a href={matchHref(overview.latestMatch.match_number)}>Q{overview.latestMatch.match_number}</a></p>
 				{/if}
-			</div>
-			<dl class="event-status">
-				<div><dt>Latest match</dt><dd>{overview.latestMatch ? `Q${overview.latestMatch.match_number}` : 'Not started'}</dd></div>
-				<div><dt>Next on the schedule</dt><dd>{overview.nextMatch ? `Q${overview.nextMatch.match_number}` : overview.matchCount ? 'Quals finished' : 'No schedule'}{#if overview.nextMatch && nextTime}<span>{nextTime}</span>{/if}</dd></div>
-				<div><dt>Fully recorded</dt><dd>{overview.completeCount}<span>of {overview.trackedCount} {overview.trackedCount === 1 ? 'match' : 'matches'}</span></dd></div>
-			</dl>
+			{:else}
+				<h2 id="match-title">Set up this event</h2>
+				<p class="setup-note">Publish the schedule to see the next match and its teams.</p>
+				<Button href="{base}/studio/plan/schedule/">Open schedule</Button>
+			{/if}
 		</section>
 
 		<div class="details">
@@ -97,6 +114,21 @@
 			</section>
 		</div>
 
+		<section class="event-summary" aria-labelledby="summary-title">
+			<h2 id="summary-title">Event summary</h2>
+			<dl>
+				<div>
+					<dt>Coverage</dt>
+					<dd>{overview.percent === null ? '—' : `${overview.percent}%`}<span>{overview.percent === null ? 'Waiting for matches' : `${overview.recorded} of ${overview.expected} robot entries`}</span></dd>
+				</div>
+				<div>
+					<dt>Fully recorded</dt>
+					<dd>{overview.completeCount}<span>of {overview.trackedCount} {overview.trackedCount === 1 ? 'match' : 'matches'}</span></dd>
+				</div>
+			</dl>
+			{#if overview.trackedCount}<p class="muted">Through Q{overview.latestMatch.match_number}. Future matches are excluded.</p>{/if}
+		</section>
+
 		<nav class="tools" aria-label="Event tools">
 			<a href="{base}/studio/pick/"><span>Team insights</span><span class="muted">{overview.teamsSeen} teams recorded</span><span aria-hidden="true">→</span></a>
 			<a href="{base}/studio/pick/picklist/"><span>Picklist</span><span aria-hidden="true">→</span></a>
@@ -118,17 +150,25 @@
 	h2 { margin: 0; font-size: var(--fs-lg); font-weight: 600; }
 	p { margin: 0; }
 	.muted, .section-note { color: var(--text-muted); font-size: var(--fs-sm); line-height: 1.5; }
-	.coverage { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-	.coverage-main { padding: var(--space-5) var(--space-6); min-width: 0; }
-	.coverage-number { font-size: calc(var(--fs-xl) * 2); line-height: 1.2; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: var(--space-4); }
-	.coverage-number span { font-size: var(--fs-xl); color: var(--text-muted); margin-left: var(--space-1); }
-	.coverage-detail { margin-top: var(--space-2); font-size: var(--fs-md); }
-	progress { display: block; width: 100%; height: var(--space-2); margin: var(--space-4) 0 var(--space-3); border: 0; border-radius: var(--radius-pill); overflow: clip; appearance: none; background: var(--bg-subtle); color: var(--accent); }
-	progress::-webkit-progress-bar { background: var(--bg-subtle); }
-	progress::-webkit-progress-value { background: var(--accent); }
-	progress::-moz-progress-bar { background: var(--accent); }
-	.coverage-empty { font-size: var(--fs-xl); font-weight: 600; margin: var(--space-5) 0 var(--space-3); }
-	.event-status { margin: 0; padding: var(--space-5) var(--space-6); border-left: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; gap: var(--space-4); }
+	.match-focus { padding: var(--space-5); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+	.match-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+	.match-number { margin-top: var(--space-2); font-size: var(--fs-display); font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+	.match-number span { font-size: var(--fs-lg); font-weight: 400; color: var(--text-muted); margin-left: var(--space-3); white-space: nowrap; }
+	.alliances { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); margin-top: var(--space-5); }
+	.alliance-row { min-width: 0; }
+	.alliance-row h3 { margin: 0 0 var(--space-2); font-size: var(--fs-sm); font-weight: 600; }
+	.alliance-row[data-color='red'] h3 { color: var(--alliance-red); }
+	.alliance-row[data-color='blue'] h3 { color: var(--alliance-blue); }
+	.alliance-row ul { display: flex; gap: var(--space-2); padding: 0; margin: 0; list-style: none; }
+	.alliance-row li { flex: 1 1 0; min-width: 0; }
+	.alliance-row a { display: flex; align-items: center; justify-content: center; min-height: var(--tap-min); padding: var(--space-2) var(--space-1); color: var(--text-primary); background: var(--bg-subtle); border-radius: var(--radius-sm); font-size: var(--fs-lg); font-weight: 600; font-variant-numeric: tabular-nums; text-decoration: none; white-space: nowrap; }
+	.alliance-row a:hover { color: var(--accent); background: var(--accent-soft); }
+	.match-note, .setup-note { color: var(--text-muted); font-size: var(--fs-sm); margin-top: var(--space-4); }
+	.match-note a { color: var(--accent); }
+	.setup-note { margin-bottom: var(--space-4); }
+	.event-summary { border-top: 1px solid var(--border); margin-top: var(--space-6); padding-top: var(--space-5); }
+	.event-summary dl { display: flex; gap: var(--space-6); flex-wrap: wrap; margin: var(--space-3) 0; }
+	.event-summary dl > div { min-width: 0; }
 	dt { color: var(--text-muted); font-size: var(--fs-sm); }
 	dd { margin: var(--space-1) 0 0; font-size: var(--fs-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
 	dd span { font-weight: 400; font-size: var(--fs-sm); color: var(--text-muted); margin-left: var(--space-2); }
@@ -162,12 +202,10 @@
 	.head-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 	@media (max-width: 47.9375rem) {
 		main { padding-left: var(--space-4); padding-right: var(--space-4); }
-		.coverage, .details { grid-template-columns: minmax(0, 1fr); }
-		.coverage-main { padding: var(--space-5); }
-		.event-status { border-left: 0; border-top: 1px solid var(--border); padding: var(--space-4) var(--space-5); }
-		.event-status > div { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
-		dd { text-align: right; }
-		dd span { display: block; margin-left: 0; }
+		.details, .alliances { grid-template-columns: minmax(0, 1fr); }
+		.alliances { gap: var(--space-4); }
+		.match-number span { display: block; margin: var(--space-2) 0 0; }
+		.event-summary dl { gap: var(--space-3) var(--space-6); }
 		.details { gap: var(--space-6); }
 		.tools { gap: var(--space-2) var(--space-5); }
 	}
