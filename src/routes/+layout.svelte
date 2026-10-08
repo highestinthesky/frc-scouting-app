@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
+	import { dev } from '$app/environment';
 	import { session } from '$lib/session.svelte.js';
 	import { theme } from '$lib/theme.svelte.js';
 	import {
@@ -57,7 +58,23 @@
 		}
 	}
 
+	/**
+	 * The service worker is what opens the app with no signal. Registered here
+	 * rather than by vite-plugin-pwa, whose helper reloads the page when an
+	 * update activates — mid-recording, that loses the match. Without the reload
+	 * a new version takes over on the next launch, and a page still running the
+	 * old one is covered by SvelteKit: a chunk that has gone becomes a full
+	 * navigation. Builds only; in dev it would cache the code being edited.
+	 */
+	function registerServiceWorker() {
+		if (dev || !('serviceWorker' in navigator)) return;
+		navigator.serviceWorker
+			.register(`${base}/sw.js`, { scope: `${base}/` })
+			.catch((error) => console.warn('Service worker not registered:', error));
+	}
+
 	onMount(async () => {
+		registerServiceWorker();
 		await Promise.all([session.load(), theme.load(), auth.init()]);
 		await syncInit();
 		await reminders.init();
@@ -303,6 +320,7 @@
 	{#snippet appBar()}
 		<header class="app-bar">
 			<div class="app-bar-inner">
+				<img class="team-logo" src="{base}/icons/team-logo.png" alt="RoHawks" />
 				{#if shellIdentity.isManager}
 					<EventSwitch />
 				{/if}
@@ -795,6 +813,16 @@
 		   what pushed the bar 37px past a 412px viewport and scrolled the whole
 		   page sideways. Same failure as the bare `1fr` grid tracks. */
 		min-width: 0;
+	}
+
+	/* The white disc is in the image, not here: the hawk is purple and the gear
+	   black, and the bar is team purple in both themes, so the logo cannot sit on
+	   it bare. scripts/make_icons.py builds it. */
+	.team-logo {
+		flex: none;
+		display: block;
+		width: var(--space-6);
+		height: var(--space-6);
 	}
 
 	/* The identity group absorbs the squeeze. It truncates; the controls do not. */

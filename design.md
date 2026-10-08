@@ -26,7 +26,9 @@ are no marketing pages. Auth pages use a functional heading and lead directly in
 
 ## Copy
 
-No logos, wordmarks, decorative section labels, or repeated explanations.
+One logo: the team's, on a white disc at the start of the header (`--space-6`
+square) and as the app icon, both built by `scripts/make_icons.py`. No other
+logos, wordmarks, decorative section labels, or repeated explanations.
 Home welcomes each user by name with the existing stable greeting. Other pages
 use functional headings. Keep labels concise and empty states short. Keep instructions only when they explain an unfamiliar control, prevent
 a destructive mistake, or change how a number should be interpreted. Show event

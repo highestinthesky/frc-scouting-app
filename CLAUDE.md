@@ -26,7 +26,8 @@ to record a match. It folded back in. `nav-items.js` is the one list
 (`navFor(role)`, `activeKey(path)`, `SUBNAV`), and `AppNav.svelte` renders it:
 
 - **A scout's bar is unchanged** — two tabs, bottom-docked under 40rem, a top
-  strip above. Screenshot-identical to `main` at 375 and 1280; keep it so. Home
+  strip above. Screenshot-identical to `main` at 375 and 1280 apart from the
+  team logo at the start of the app bar (2026-10-07, every role); keep it so. Home
   itself gained one thing for a scout: *The schedule*, a closed disclosure
   listing every qual with their own marked (through `myMatches()`).
 - **A manager** gets Home · Run · Review · Pick · More on a phone (More is a `Sheet`
@@ -301,6 +302,19 @@ npm run dev
 
 **Delete `.env.local` when finished.** It is gitignored, but leaving it means the
 next `npm run build` produces a bundle pointed at a laptop.
+
+**The service worker only exists in a build.** `npm run build && npm run
+serve:build` serves `build/` the way GitHub Pages does (folders, the trailing
+slash 301, `404.html` with a 404) on port 4174; stop it to test offline. No
+release before the move to `scout.rohawks.org` ever registered the worker or
+linked the manifest: `injectRegister: 'auto'` writes into an index.html that
+SvelteKit does not have, and nothing failed to say so. The root layout
+registers it now, never through the plugin's helper, which reloads the page
+when an update activates. Two plugin options carry the rest, and each one
+missing breaks every nested page offline: `trailingSlash: 'always'` (or the
+precache keys `studio/review` and nothing matches) and `adapterFallback:
+'404.html'` with `spa: true` (prerendered pages link `./_app` relative to their
+own folder, so `/` served as the fallback loads its scripts from nowhere).
 
 `supabase db reset` wipes `auth.users`, so re-run the seed after every reset.
 Signing in through the UI needs a password field; from a browser tool it is
@@ -767,6 +781,14 @@ announcing itself as "Haolun Ning" would stop matching everything addressed to
 "Ning". Display is a separate question: use `auth.displayName` for that.
 
 ## Svelte traps that already shipped
+
+**An `$effect` tracks what the functions it calls read before their first
+`await`.** The picklist's tick effect called `syncNow()`, which reads `syncing`
+to guard against overlap, so the effect depended on `syncing`, and every sync
+that finished started the next one: 4,000 requests in ten seconds with the page
+open, all of them succeeding, so no error ever said so. An effect that starts
+work wraps the call in `untrack()`. A count of requests per page is what finds
+this; a sweep for failed ones does not.
 
 **Scoped CSS changes specificity.** Svelte scopes by injecting a hash class onto
 the selector, so `.dlg { display: flex }` compiles to `(0,2,0)` and beats the

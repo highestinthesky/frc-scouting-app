@@ -12,19 +12,40 @@ export default defineConfig({
 		sveltekit(),
 		SvelteKitPWA({
 			registerType: 'autoUpdate',
-			injectRegister: 'auto',
+			// The root layout registers the service worker itself. 'auto' wrote a
+			// script into an index.html that SvelteKit does not have, so for every
+			// release up to the move to scout.rohawks.org nothing registered it at
+			// all; and the plugin's own register helper reloads the page whenever
+			// an update activates, which would throw away a recording in progress.
+			injectRegister: false,
 			strategies: 'generateSW',
+			kit: {
+				// Every route sets trailingSlash = 'always' (routes/+layout.js), so a
+				// page's address is /studio/review/. Without this the precache keys
+				// it as studio/review, which no request ever matches.
+				trailingSlash: 'always',
+				// The answer for an address not precached by name — a team or match
+				// page, which are not prerendered. It has to be 404.html, the one
+				// shell built with absolute asset paths: every prerendered page links
+				// its scripts relative to its own folder (./_app at /, ../../_app at
+				// /studio/review/), so the plugin's default, /, served at a nested
+				// address loads them from a folder that does not exist.
+				adapterFallback: '404.html',
+				// Puts 404.html in the precache. adapter-static writes it straight
+				// to build/, where the precache glob never looks.
+				spa: true
+			},
 			manifest: {
 				name: 'FRC Scout',
 				short_name: 'FRC Scout',
-				description: 'Offline-friendly FRC scouting tool with file-based sync.',
+				description: 'Scouting for FRC team 3419.',
 				theme_color: '#5f24a2',
 				background_color: '#5f24a2',
 				display: 'standalone',
 				start_url: `${base}/`,
 				scope: `${base}/`,
 				icons: [
-					// Replace these placeholders with real PNGs in /static/icons/ before deploying.
+					// The team logo on white; scripts/make_icons.py builds them.
 					{ src: `${base}/icons/icon-192.png`, sizes: '192x192', type: 'image/png' },
 					{ src: `${base}/icons/icon-512.png`, sizes: '512x512', type: 'image/png' },
 					{ src: `${base}/icons/icon-maskable.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' }
@@ -48,7 +69,9 @@ export default defineConfig({
 				navigateFallbackDenylist: [/^\/api\//, /thebluealliance\.com/, /supabase\.co/]
 			},
 			devOptions: {
-				// Lets the PWA work in `npm run dev` so you can test offline mode locally.
+				// Serves the manifest under `npm run dev`. No service worker is
+				// registered there (it would cache the code being edited); test
+				// offline against a build with `npm run serve:build`.
 				enabled: true,
 				type: 'module'
 			}

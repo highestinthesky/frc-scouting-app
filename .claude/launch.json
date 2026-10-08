@@ -21,6 +21,15 @@
         "4173"
       ],
       "port": 4173
+    },
+    {
+      "name": "frc-scout-build",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "serve:build"
+      ],
+      "port": 4174
     }
   ]
 }
