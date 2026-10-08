@@ -3,7 +3,7 @@ import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import { defineConfig } from 'vite';
 
 // Same BASE_PATH the SvelteKit config reads. Empty means the app is served from
-// the domain root (for example https://3419.github.io). When set, manifest URLs get
+// the domain root, as production is at https://scout.rohawks.org. When set, manifest URLs get
 // that prefix so install links still work under a subpath deployment.
 const base = process.env.BASE_PATH ?? '';
 

@@ -45,8 +45,8 @@ about the work in front of them, never as standing permission. Commit freely,
 then stop and say what is unpushed.
 
 **When you are told to push, run the CI sequence locally first.** `npm ci`,
-`npm test`, `npm run check:sql`, and `BASE_PATH="/frc-scouting-app" npm run
-build`. `npm ci` is the step that has actually gone red, and it goes red in
+`npm test`, `npm run check:sql`, and `npm run build` (no `BASE_PATH` since
+the move to `scout.rohawks.org`). `npm ci` is the step that has actually gone red, and it goes red in
 fifteen seconds for reasons that have nothing to do with the code. Then watch
 the run to completion with `gh run watch` rather than assuming — a green push is
 not a green deploy.

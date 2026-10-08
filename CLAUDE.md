@@ -1,7 +1,7 @@
 # FRC Scout
 
 Offline-first scouting PWA for FRC team 3419. SvelteKit 2 + Svelte 5 runes,
-`adapter-static`, deployed to GitHub Pages. IndexedDB is the write target;
+`adapter-static`, deployed to GitHub Pages at `scout.rohawks.org`. IndexedDB is the write target;
 Supabase is the shared mirror. JavaScript with JSDoc, not TypeScript.
 
 ## What this app is, end to end

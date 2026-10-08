@@ -60,11 +60,12 @@ jobs:
           pip install pglast
           npm run check:sql
 
+      # No BASE_PATH: the site is served at the root of scout.rohawks.org, a
+      # custom domain on this Pages site (a CNAME at StableHost's DNS). It was
+      # "/frc-scouting-app" while the address was highestinthesky.github.io/
+      # frc-scouting-app. The custom domain lives in the repo's Pages settings,
+      # not in a CNAME file — an Actions deploy ignores one.
       - name: Build
-        env:
-          # For a project Pages site (https://highestinthesky.github.io/frc-scouting-app),
-          # set BASE_PATH to the repository subpath so app routes/assets resolve correctly.
-          BASE_PATH: "/frc-scouting-app"
         run: npm run build
 
       - name: Upload Pages artifact

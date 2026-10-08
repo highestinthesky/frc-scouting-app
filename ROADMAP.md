@@ -946,28 +946,41 @@ already exists and already scrolls in its own wrapper.
 still not enough, that is the evidence a chart is needed — and `docs/adr-003-boards.md`
 is where the thinking already is.
 
-### The app moves to rohawks.org/app
+### The app moves to scout.rohawks.org
 
-Off GitHub Pages and onto the team's own hosting, once the features are stable.
+A subdomain of the team's site, still served by GitHub Pages. Decided
+2026-10-07, replacing the plan to drop the build into `rohawks.org/app`.
 
-1. **A plain folder, not a WordPress page.** The build lands in
-   `public_html/app/` and is reached at `rohawks.org/app/`. WordPress's own
-   rewrite rule already skips anything that is a real file or directory, so it
-   never sees the request and Elementor's header never enters the picture. A
-   menu link on the main site is the whole integration.
-2. **`.htaccess`, not a source change.** Apache serves the existing `404.html`
-   for unknown paths, which keeps the prerendered root page that
-   `svelte.config.js` warns about losing. `/studio/insights/team/[teamNumber]`
-   sets `prerender = false` and depends entirely on that fallback.
-3. **`BASE_PATH` becomes `/app`.** Every call site goes through `$app/paths` —
-   24 files — so this is one variable in the workflow. `/app` and not `/scouting`, because the
-   app already has a page called `/scouting` and the result would be
-   `rohawks.org/scouting/scouting/`.
-4. **`deploy.yml` keeps everything above the upload.** `npm ci`, tests, SQL
-   validation and build are unchanged; only the two GitHub Pages steps become an
-   FTP upload. The credentials are the user's to add to the repository secrets.
-5. **Leave the last Pages build up** through the switch so nobody is stranded
-   mid-transition.
+1. **A subdomain, not a folder beside WordPress.** The sign-in session lives in
+   `localStorage` (`frc-scout-auth`), so at `rohawks.org/app` every script
+   WordPress runs (plugins, Elementor, anything an editor pastes) could read
+   every scout's and manager's refresh token, and a super's can mint managers.
+   A subdomain is its own origin. It also keeps rohawks.org's LiteSpeed Cache
+   and root `.htaccess` off the app; LSCache was measured caching a WordPress
+   404 at `/app/` for an hour.
+2. **The origin is the expensive thing to change; the host is not.** IndexedDB,
+   drafts, unsynced entries and installed PWAs are all keyed on the origin. On a
+   subdomain the team owns, moving the host later (to StableHost, say) is a DNS
+   edit and nothing on a device moves. `rohawks.org/app` would have tied the app
+   to wherever WordPress lives.
+3. **GitHub Pages stays the host.** The deploy is unchanged — push, tests, SQL
+   validation, build, atomic publish — with no credentials in repo secrets.
+   StableHost would have meant SSH as a paid add-on in a jailed shell, or FTP,
+   which uploads file by file so a page can load mid-deploy pointing at chunks
+   not there yet; and on shared hosting the app's files belong to the same
+   account as WordPress. The cost: the repo is on a personal account.
+   Transferring it to a team organisation keeps Pages and the domain.
+4. **The DNS is one CNAME at StableHost**, `scout` →
+   `highestinthesky.github.io` (no repository name), and rohawks.org is
+   verified on the GitHub account with the `_github-pages-challenge-highestinthesky`
+   TXT record, which stops anyone else's Pages site claiming a rohawks.org name.
+   Both checked against StableHost's nameservers and public resolvers.
+5. **`BASE_PATH` is gone from `deploy.yml`**, and the custom domain is set in the
+   repo's Pages settings (an Actions deploy ignores a `CNAME` file). The two
+   land together, because either alone breaks the site.
+6. **Every device re-installs and signs in again.** The old origin's storage
+   does not come along; done in the offseason so no device was holding
+   competition entries.
 
 **Checked, because these are what usually break on a domain move and none of
 them do here:** both Edge Functions send `Access-Control-Allow-Origin: *`, so
