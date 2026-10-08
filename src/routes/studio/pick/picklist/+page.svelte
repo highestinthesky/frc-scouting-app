@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { base } from '$app/paths';
 	import { summarize } from '$lib/aggregate.js';
@@ -145,25 +145,34 @@
 	$effect(() => {
 		eventCode;
 		if (!loading) {
-			(async () => {
-				await store.migrateLegacy(eventCode);
-				await reload();
-				alliancesRaw = null;
-				alliancesAt = '';
-				await loadAlliances();
-				syncNow();
-			})();
+			untrack(() =>
+				(async () => {
+					await store.migrateLegacy(eventCode);
+					await reload();
+					alliancesRaw = null;
+					alliancesAt = '';
+					await loadAlliances();
+					syncNow();
+				})()
+			);
 		}
 	});
 
 	// Re-aggregate and re-pull when the entry sync tick brings new rows. The
 	// picklist rides that tick rather than running a second timer.
+	//
+	// Untracked, because syncNow() reads `syncing` before its first await, so
+	// the effect took `syncing` as a dependency: every sync that finished set it
+	// false and started the next one. Measured at 4,000 requests in ten seconds
+	// with the page open, every one of them succeeding.
 	$effect(() => {
 		syncState.inboundChanges;
 		syncState.lastSyncedAt;
 		if (!loading) {
-			refresh();
-			syncNow();
+			untrack(() => {
+				refresh();
+				syncNow();
+			});
 		}
 	});
 
