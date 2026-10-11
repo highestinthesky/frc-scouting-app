@@ -8,6 +8,7 @@
 	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import { session } from '$lib/session.svelte.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
 	import PageHead from '$lib/components/studio/PageHead.svelte';
 	import SubNav from '$lib/components/studio/SubNav.svelte';
 
@@ -42,7 +43,10 @@
 	});
 
 	async function refresh() {
-		summary = await summarize();
+		const code = session.eventCode;
+		const year = seasonSettings.value.active_year;
+		const next = await summarize({eventCode:code,season:year});
+		if (code === session.eventCode && year === seasonSettings.value.active_year) summary = next;
 	}
 
 	onMount(async () => {
@@ -52,6 +56,8 @@
 
 	$effect(() => {
 		syncState.inboundChanges;
+		void session.eventCode;
+		void seasonSettings.value.active_year;
 		if (!loading) refresh();
 	});
 

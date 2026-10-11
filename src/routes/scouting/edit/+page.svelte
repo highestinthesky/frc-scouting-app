@@ -8,6 +8,12 @@
 	import { getEntry, updateEntry, deleteEntry } from '$lib/db.js';
 	import { kick as kickSync } from '$lib/sync.svelte.js';
 	import { auth, AUTH_ENFORCED } from '$lib/auth.svelte.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
+	import { session } from '$lib/session.svelte.js';
+	import { eventInSeason, recordingAllowed } from '$lib/season-rules.js';
+	import { SEASON_YEARS } from '$lib/seasons/index.js';
+	const openedYear = seasonSettings.value.active_year;
+	const openedOwner = auth.userId ?? null;
 	import {
 		IDENTITY_FIELDS,
 		METRIC_FIELDS,
@@ -67,7 +73,7 @@
 			return;
 		}
 		const found = await getEntry(id);
-		if (!found) {
+		if (!found || !eventInSeason(found.eventCode, openedYear)) {
 			notFound = true;
 			loading = false;
 			return;
@@ -88,6 +94,11 @@
 
 	async function submit(e) {
 		e.preventDefault();
+		if (!entry || !recordingAllowed({eventCode:entry.eventCode,year:openedYear,owner:openedOwner},
+			seasonSettings.value, session.eventCode, auth.userId ?? null, SEASON_YEARS)) {
+			error = 'The season, event or account changed. Open a new scouting form.';
+			return;
+		}
 		if (!canEdit) {
 			error = 'Only the original submitter or a manager can edit this entry.';
 			return;
@@ -177,6 +188,7 @@
 			<section>
 				<h2>Auto</h2>
 				<AutoRecorder
+					recordingSeason={seasonSettings.game}
 					value={values.autoTrack}
 					allianceColor={values.allianceColor}
 					onchange={(t) => (values.autoTrack = t)}
@@ -193,7 +205,7 @@
 			<section>
 				<h2>Notes</h2>
 				{#each NOTE_FIELDS as f (f.key)}
-					<Field field={f} bind:value={values[f.key]} scopeTeam={Number(values.teamNumber)} />
+					<Field field={f} bind:value={values[f.key]} scopeTeam={Number(values.teamNumber)} scopeEvent={entry.eventCode} />
 				{/each}
 			</section>
 

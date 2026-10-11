@@ -7,6 +7,7 @@
 	import { theme } from '$lib/theme.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
 	import EventPicker from '$lib/components/EventPicker.svelte';
+	import SeasonSettings from '$lib/components/SeasonSettings.svelte';
 
 	let scoutName = $state(session.scoutName);
 	let saving = $state(false);
@@ -152,6 +153,11 @@
 				<a href="{base}/register/">create an account</a> .
 			</p>
 		{/if}
+	</section>
+
+	<section>
+		<h2>Season</h2>
+		<SeasonSettings />
 	</section>
 
 	<section>

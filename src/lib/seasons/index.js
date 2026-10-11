@@ -7,9 +7,9 @@
 // `../field.js` and the track format in `../auto-track.js`, and both work for
 // any season this file can build.
 //
-// `CURRENT_SEASON` is the switch. It is the season a NEW recording is made on;
-// reading an old one asks `seasonFor()` for whichever season that track was
-// drawn on, so changing this line never re-reads history on a different field.
+// Live forms receive the super's shared active year through season-settings.
+// CURRENT_SEASON remains a default for standalone helpers and old callers;
+// reading a track asks seasonFor() for the year stamped on that recording.
 //
 // `buildSeason()` validates as well as builds, and throws. A season file is
 // written once a year by someone reading a game manual, and a mistake in it —
@@ -21,7 +21,7 @@ import { makeField } from '../field.js';
 import season2026 from './2026.js';
 import seasonThrowaway from './fixture.js';
 
-/** The season new recordings are made on. The one line that switches seasons. */
+/** Default for standalone helpers. Live recording receives its season explicitly. */
 export const CURRENT_SEASON = 2026;
 
 /** Every season this build can read. Registering one is adding it here. */

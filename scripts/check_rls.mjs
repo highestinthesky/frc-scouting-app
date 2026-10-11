@@ -95,8 +95,8 @@ const sql = async (text, params = []) => (await db.query(text, params)).rows;
 // These uuids are now `events.id` rather than a hash of the code. 0020 dropped
 // session_id, so an event is a row that must exist before anything can reference
 // it, and membership is the only thing that grants access to it.
-const EVENT_A = { id: '1a1a1a1a-0000-4000-8000-000000000001', code: 'rlstest-a' };
-const EVENT_B = { id: '2b2b2b2b-0000-4000-8000-000000000002', code: 'rlstest-b' };
+const EVENT_A = { id: '1a1a1a1a-0000-4000-8000-000000000001', code: '2026rlstest-a' };
+const EVENT_B = { id: '2b2b2b2b-0000-4000-8000-000000000002', code: '2026rlstest-b' };
 
 const PASSWORD = 'rls-test-password';
 const MARK = 'rlstest';
@@ -190,7 +190,7 @@ async function reset() {
 	await sql(`delete from public.event_scouts where event_id = any($1::uuid[])`, [
 		[EVENT_A.id, EVENT_B.id]
 	]);
-	await sql(`delete from public.events where code like $1`, [`${MARK}%`]);
+	await sql(`delete from public.events where code like $1 or code like $2`, [`${MARK}%`, `2026${MARK}%`]);
 	await sql(`delete from public.invites where code like $1`, [`${MARK}%`]);
 	await sql(`delete from public.profiles where username like $1`, [`${MARK}%`]);
 	// Auth users go through SQL rather than the admin API. Cleanup used to call
@@ -299,6 +299,12 @@ const EVENT_TABLES = [
 
 // ─── run ────────────────────────────────────────────────────────────────────
 
+// These membership tests exercise an open local season. The season-specific
+// suite separately checks closure; always restore the local operator setting.
+const [savedSeason] = await sql('SELECT active_year,announced FROM public.season_settings WHERE id=true');
+try {
+await sql('UPDATE public.season_settings SET active_year=2026 WHERE id=true');
+await sql('UPDATE public.season_settings SET announced=true WHERE id=true');
 await reset();
 await seed();
 
@@ -896,7 +902,7 @@ const scout2B = await clientFor(scout2, EVENT_B);
 	const anonNH = await noHeader(null);
 
 	// ─── creating an event ──────────────────────────────────────────────────
-	const code = `evt${Math.floor(Math.random() * 1e5)}`;
+	const code = `2026${MARK}-evt${Math.floor(Math.random() * 1e5)}`;
 
 	const { error: scoutCreate } = await scoutNH.rpc('create_event', {
 		p_code: `${code}x`,
@@ -1689,7 +1695,11 @@ for (const table of ['reminder_dismissals', 'entry_drafts']) {
 	ok('a draft is a form, not storage: oversized payloads are refused', Boolean(huge), huge?.code);
 }
 
-await reset();
-await db.end();
+} finally {
+	await reset();
+	await sql('UPDATE public.season_settings SET active_year=$1 WHERE id=true',[savedSeason.active_year]);
+	await sql('UPDATE public.season_settings SET announced=$1 WHERE id=true',[savedSeason.announced]);
+	await db.end();
+}
 console.log(fail === 0 ? `${pass} passed` : `${pass} passed, ${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

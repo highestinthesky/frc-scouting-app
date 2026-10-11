@@ -21,8 +21,15 @@ import { getSetting, setSetting } from './db.js';
 import { scoutRef, rowScout, sameScout } from './scout-identity.js';
 import { createSupabaseClient } from './supabase.js';
 import { eventIdForCode } from './events.js';
+import { seasonOf } from './event-rules.js';
 
 const TBA_BASE = 'https://www.thebluealliance.com/api/v3';
+
+function requireSameSeasonSource(code, key) {
+	if (!seasonOf(code) || seasonOf(code) !== seasonOf(key)) {
+		throw new Error('The event and TBA source must be in the same season.');
+	}
+}
 
 // ─── TBA fetch + local cache ───────────────────────────────────────────────
 
@@ -54,6 +61,7 @@ export async function fetchAndCacheSchedule(eventCode, apiKey, tbaEventKey) {
 	const code = eventCode.trim().toLowerCase();
 	// The TBA key drives the fetch; the event code is just the cache namespace.
 	const tbaKey = (tbaEventKey ?? '').trim().toLowerCase() || code;
+	requireSameSeasonSource(code, tbaKey);
 	const matches = await tbaGet(`/event/${tbaKey}/matches/simple`, apiKey, tbaKey);
 	if (!Array.isArray(matches)) {
 		throw new Error('Unexpected response from TBA — expected a match array.');
@@ -136,6 +144,7 @@ export async function fetchAndCacheAlliances(eventCode, apiKey, tbaEventKey) {
 	}
 	const code = eventCode.trim().toLowerCase();
 	const tbaKey = (tbaEventKey ?? '').trim().toLowerCase() || code;
+	requireSameSeasonSource(code, tbaKey);
 	const raw = await tbaGet(`/event/${tbaKey}/alliances`, apiKey, tbaKey);
 	// TBA returns null before selection, an array during and after it.
 	const alliances = Array.isArray(raw) ? raw : [];
@@ -254,6 +263,10 @@ export async function getCachedSchedule(eventCode) {
 	if (!eventCode) return null;
 	const stored = await getSetting(`tba-schedule:${eventCode.trim().toLowerCase()}`);
 	if (!stored || !Array.isArray(stored.matches)) return null;
+	if (stored.matches.some((m) => {
+		const sourceYear = seasonOf(m?.event_key ?? m?.key);
+		return sourceYear && sourceYear !== seasonOf(eventCode);
+	})) return null;
 	return stored;
 }
 
@@ -357,6 +370,7 @@ export async function pullSchedule(eventCode) {
 	}
 	if (error) throw mapSupabaseError(error, 'pull schedule');
 	if (!data) return null;
+	if (data.tba_event_key) requireSameSeasonSource(code, data.tba_event_key);
 	const matches = Array.isArray(data.matches) ? data.matches : [];
 	await cacheSchedule(code, matches, data.fetched_at, data.fetched_by ?? null, true);
 	return {
@@ -389,6 +403,7 @@ export async function getPublishedTbaEventKey(eventCode) {
 			.eq('event_id', sid)
 			.maybeSingle();
 		if (error) return null;
+		if (data?.tba_event_key) requireSameSeasonSource(code, data.tba_event_key);
 		return data?.tba_event_key ?? null;
 	} catch (_e) {
 		return null;

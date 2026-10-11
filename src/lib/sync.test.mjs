@@ -320,5 +320,20 @@ ok('then the overlap opens again for a window', lastPull().n >= 1 && /updated_at
 		`${old.filter((e) => here.has(e.remoteId)).length} of ${old.length} back`);
 }
 
+// J. Older/future queues stay on the device; they do not affect current sync.
+{
+	const before = log.inserts;
+	const old = await db.addEntry({eventCode:'2024test',matchNumber:401,teamNumber:3419,allianceColor:'red',scoutName:'ning',observations:{}});
+	const future = await db.addEntry({eventCode:'2027test',matchNumber:402,teamNumber:3419,allianceColor:'red',scoutName:'ning',observations:{}});
+	fakeNow += 3000;
+	const totalUnsent = await sync.flush();
+	ok('sync does not upload other seasons', log.inserts === before);
+	ok('other-season entries remain queued', !(await db.getEntry(old)).remoteId && !(await db.getEntry(future)).remoteId);
+	ok('other-season entries do not inflate the current queue', sync.syncState.pendingCount === 0);
+	ok('flush retains all-season sign-out and clear warnings', totalUnsent === 2, String(totalUnsent));
+	await sync.setEventCode('');
+	ok('closed-season flush still reports unsent data for destructive flows', (await sync.flush()) === 2);
+}
+
 console.log(fail === 0 ? `sync: ${pass} passed` : `sync: ${pass} passed, ${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

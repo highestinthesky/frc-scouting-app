@@ -26,6 +26,8 @@
 
 import { getAuthClient } from './supabase.js';
 import { normalizeCode, sortEvents, isReservedCode, RESERVED_EVENT_CODES } from './event-rules.js';
+import { getSetting } from './db.js';
+import { DEFAULT_SEASON_SETTINGS, SEASON_CACHE_KEY, eventInSeason } from './season-rules.js';
 
 /**
  * code -> event id, for the lifetime of the tab.
@@ -60,12 +62,13 @@ export function forgetEvents() {
  *
  * @returns {Promise<Array<object>>}
  */
-export async function listMyEvents() {
+export async function listMyEvents({ year } = {}) {
+	const activeYear = year ?? (await getSetting(SEASON_CACHE_KEY))?.active_year ?? DEFAULT_SEASON_SETTINGS.active_year;
 	const { data, error } = await getAuthClient()
 		.from('events')
 		.select('id, code, name, starts_on, ends_on, archived_at, created_by');
 	if (error) throw new Error(`Could not load events: ${error.message}`);
-	const rows = data ?? [];
+	const rows = (data ?? []).filter((e) => eventInSeason(e.code, activeYear));
 	for (const e of rows) {
 		const code = normalizeCode(e.code);
 		if (code) idByCode.set(code, e.id);
@@ -131,6 +134,8 @@ export async function eventIdForCode(code) {
 export async function createEvent(input) {
 	const code = normalizeCode(input?.code);
 	if (!code) throw new Error('An event needs a code.');
+	const year = (await getSetting(SEASON_CACHE_KEY))?.active_year ?? DEFAULT_SEASON_SETTINGS.active_year;
+	if (!eventInSeason(code, year)) throw new Error(`An event code must start with the active year, ${year}.`);
 	if (!/^[a-z0-9._-]{2,32}$/.test(code)) {
 		// Same shape the events_code_shape constraint enforces. Checked here too so
 		// the message names the problem instead of quoting a constraint name.

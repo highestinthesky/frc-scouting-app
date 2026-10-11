@@ -30,6 +30,8 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { listEntries } from '$lib/db.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
+	import { seasonEntries } from '$lib/season-rules.js';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { withdrawEntry } from '$lib/sync.svelte.js';
 	import { getCachedSchedule, qualMatches, myMatches } from '$lib/tba.js';
@@ -56,9 +58,9 @@
 	async function refresh() {
 		if (auth.isManager) {
 			await eventData.refreshEntries();
-			entries = eventData.entries;
+			entries = seasonEntries(eventData.entries, seasonSettings.value.active_year);
 		} else {
-			entries = await listEntries();
+			entries = seasonEntries(await listEntries(), seasonSettings.value.active_year);
 		}
 	}
 	async function refreshSchedule() {
@@ -134,7 +136,7 @@
 	// because they are still on the device and a scout who recorded them should
 	// not conclude they are gone.
 	const eventEntries = $derived(
-		session.eventCode ? entries.filter((e) => e.eventCode === session.eventCode) : entries
+		session.eventCode ? entries.filter((e) => e.eventCode === session.eventCode) : []
 	);
 	const elsewhere = $derived(entries.length - eventEntries.length);
 

@@ -1,5 +1,6 @@
 <script>
 	import Select from './Select.svelte';
+	import { seasonOf } from '$lib/event-rules.js';
 	// Generic input renderer. Picks the right HTML control based on the
 	// field's `type`. Used by every form so adding a new field type only
 	// happens here.
@@ -15,7 +16,7 @@
 	 *              tag pills are filtered to only that team's prior entries.
 	 *              When 0 / blank, no suggestions are shown.
 	 */
-	let { field, value = $bindable(), scopeTeam = 0 } = $props();
+	let { field, value = $bindable(), scopeTeam = 0, scopeEvent = '' } = $props();
 
 	// Autocomplete suggestions — distinct prior values for this field's key,
 	// scoped to the team being scouted. Populated reactively whenever scopeTeam
@@ -31,6 +32,7 @@
 	// scopeTeam as a reactive dependency.
 	$effect(() => {
 		const team = Number(scopeTeam); // read here so $effect tracks it
+		const scope = { season: seasonOf(scopeEvent) };
 		const ftype = field.type;
 		const suggestKey = field.suggestKey;
 		const tagSource = field.tagSource;
@@ -38,12 +40,12 @@
 		(async () => {
 			if (ftype === 'autocomplete' && suggestKey) {
 				suggestions = team > 0
-					? await getDistinctObservationValuesForTeam(suggestKey, team)
+					? await getDistinctObservationValuesForTeam(suggestKey, team, scope)
 					: [];
 			}
 			if (ftype === 'textarea' && tagSource) {
 				if (team > 0) {
-					const top = await getMostUsedObservationValuesForTeam(tagSource, team, 6);
+					const top = await getMostUsedObservationValuesForTeam(tagSource, team, 6, scope);
 					tagPills = top.map((t) => t.value);
 				} else {
 					tagPills = [];

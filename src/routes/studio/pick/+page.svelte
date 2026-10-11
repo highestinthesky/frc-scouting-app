@@ -6,6 +6,7 @@
 	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { exportToCsv } from '$lib/csv.js';
 	import { session } from '$lib/session.svelte.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
 	import { rowScout, sameScout, scoutRef } from '$lib/scout-identity.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
@@ -311,7 +312,10 @@
 	// ─── data loading ──────────────────────────────────────────────────────────
 
 	async function refresh() {
-		summary = await summarize();
+		const code = session.eventCode;
+		const year = seasonSettings.value.active_year;
+		const next = await summarize({eventCode:code,season:year});
+		if (code === session.eventCode && year === seasonSettings.value.active_year) summary = next;
 	}
 
 	onMount(async () => {
@@ -322,6 +326,8 @@
 	// Re-aggregate whenever the sync layer pulls in peer rows.
 	$effect(() => {
 		syncState.inboundChanges;
+		void session.eventCode;
+		void seasonSettings.value.active_year;
 		if (!loading) refresh();
 	});
 
@@ -429,7 +435,7 @@
 				onclick={cycleEvent}
 				title="Tap to cycle through events"
 			>
-				{eventFilter ? `Event: ${eventFilter}` : 'All events'}
+				{eventFilter ? `Event: ${eventFilter}` : 'This event'}
 			</button>
 			<button
 				class="chip {scoutFilter ? 'active' : ''}"

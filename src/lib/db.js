@@ -9,7 +9,7 @@ import { SCHEMA_VERSION } from './form-config.js';
 import { shouldApplyRemote } from './sync-rules.js';
 // Pure rules only. event-rules.js has no imports of its own, so this keeps the
 // write path free of auth.svelte.js — see claimEntriesForAccount below.
-import { claimableRows, claimRow } from './event-rules.js';
+import { claimableRows, claimRow, seasonOf, normalizeCode } from './event-rules.js';
 
 export const db = new Dexie('frc-scout');
 
@@ -128,6 +128,42 @@ export async function addEntry(entry) {
 /** Get every entry, newest first. */
 export async function listEntries() {
 	return db.entries.orderBy('createdAt').reverse().toArray();
+}
+
+/** Authorized removal of unused 2025 data, before this device starts syncing. */
+export async function purgeSeasonData(year = 2025) {
+	if (year !== 2025) throw new Error('Only the unused 2025 season is authorized for cleanup.');
+	await db.transaction('rw', db.entries, db.picklist, db.settings, async () => {
+		await db.entries.filter((e) => seasonOf(e.eventCode) === year).delete();
+		await db.picklist.filter((e) => seasonOf(e.eventCode) === year).delete();
+		const settings = await db.settings.toArray();
+		const eventKeys = /^(?:tba-schedule:|tba-alliances:|picklist:(?:weights:|migrated:)?|draft:entry:)([^:]+)/;
+		for (const setting of settings) {
+			const code = eventKeys.exec(setting.key)?.[1];
+			if ((code && seasonOf(code) === year) || /^statbotics:team_year:\d+:2025$/.test(setting.key)) {
+				await db.settings.delete(setting.key);
+			} else if (setting.key.startsWith('dismissedReminders')) {
+				const value = Object.fromEntries(Object.entries(setting.value ?? {})
+					.filter(([, dismissal]) => seasonOf(dismissal?.e) !== year));
+				await db.settings.put({ key: setting.key, value });
+			}
+		}
+		const selected = settings.find((s) => s.key === 'eventCode')?.value;
+		if (seasonOf(settings.find((s) => s.key === 'tbaEventKey')?.value) === year) {
+			await db.settings.put({ key:'tbaEventKey', value:'' });
+		}
+		if (seasonOf(selected) === year) {
+			for (const [key, value] of Object.entries({eventCode:'', assignedTeams:[], overrides:[], tbaEventKey:''})) {
+				await db.settings.put({ key, value });
+			}
+		}
+		// Watermarks use event UUIDs rather than codes; a one-time reset also
+		// prevents a purged cache from resuming past records it no longer holds.
+		if (!settings.some((s) => s.key === 'seasonCleanup:2025' && s.value === true)) {
+			await db.settings.delete(PULL_WATERMARKS);
+			await db.settings.put({ key: 'seasonCleanup:2025', value: true });
+		}
+	});
 }
 
 /**
@@ -484,8 +520,8 @@ export async function importEntries(rows) {
  * @param {number} teamNumber
  * @returns {Promise<string[]>}    distinct trimmed values, sorted A→Z
  */
-export async function getDistinctObservationValuesForTeam(observationKey, teamNumber) {
-	const all = await db.entries.where('teamNumber').equals(teamNumber).toArray();
+export async function getDistinctObservationValuesForTeam(observationKey, teamNumber, scope = {}) {
+	const all = await observationRows(teamNumber, scope);
 	const seen = new Set();
 	for (const row of all) {
 		const v = row.observations?.[observationKey];
@@ -506,8 +542,8 @@ export async function getDistinctObservationValuesForTeam(observationKey, teamNu
  * @param {number} [limit=6]
  * @returns {Promise<{value: string, count: number}[]>}
  */
-export async function getMostUsedObservationValuesForTeam(observationKey, teamNumber, limit = 6) {
-	const all = await db.entries.where('teamNumber').equals(teamNumber).toArray();
+export async function getMostUsedObservationValuesForTeam(observationKey, teamNumber, limit = 6, scope = {}) {
+	const all = await observationRows(teamNumber, scope);
 	const counts = new Map();
 	for (const row of all) {
 		const v = row.observations?.[observationKey];
@@ -520,4 +556,13 @@ export async function getMostUsedObservationValuesForTeam(observationKey, teamNu
 		.map(([value, count]) => ({ value, count }))
 		.sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
 		.slice(0, limit);
+}
+
+async function observationRows(teamNumber, scope) {
+	const code = normalizeCode(scope.eventCode);
+	if (!code && !Number.isInteger(scope.season)) return [];
+	return db.entries.where('teamNumber').equals(teamNumber).filter((e) =>
+		(!code || normalizeCode(e.eventCode) === code) &&
+		(!Number.isInteger(scope.season) || seasonOf(e.eventCode) === scope.season)
+	).toArray();
 }

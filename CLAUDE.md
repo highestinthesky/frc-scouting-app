@@ -408,8 +408,9 @@ A sampled position track at 10 Hz, 8 bits per axis, plus action intervals — se
   icons and follow-up `questions`, which action is the fault, which one `ends`
   the robot's auto, and what a cycle is. `field.js` is the geometry ENGINE
   (`makeField`) and names no game; `auto-track.js`, `AutoField`, `AutoRecorder`
-  and the stats read everything off a Season. `CURRENT_SEASON` in
-  `seasons/index.js` is the switch, and `buildSeason()` validates a spec and
+  and the stats read everything off a Season. A super selects the shared active
+  year and announcement status in Settings; live forms pass that year's module
+  explicitly. `CURRENT_SEASON` is a helper default. `buildSeason()` validates a spec and
   throws, so a mistake in a season file fails `npm test` rather than an event.
 
   **Recording uses the current season; reading uses the track's own stamp.** A

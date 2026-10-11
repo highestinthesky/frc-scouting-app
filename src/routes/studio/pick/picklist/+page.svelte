@@ -6,6 +6,7 @@
 	import { scoreTeams, fmt } from '$lib/metrics.js';
 	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { session } from '$lib/session.svelte.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import { rankForMove, rankBetween, ordered } from '$lib/picklist.js';
@@ -62,7 +63,10 @@
 	);
 
 	async function refresh() {
-		summary = await summarize();
+		const code = session.eventCode;
+		const year = seasonSettings.value.active_year;
+		const next = await summarize({eventCode:code,season:year});
+		if (code === session.eventCode && year === seasonSettings.value.active_year) summary = next;
 	}
 
 	/** Re-read the local rows. Every mutation goes through here, so the list on
@@ -144,9 +148,11 @@
 	// Reload when the user switches events in Identity.
 	$effect(() => {
 		eventCode;
+		void seasonSettings.value.active_year;
 		if (!loading) {
 			untrack(() =>
 				(async () => {
+					await refresh();
 					await store.migrateLegacy(eventCode);
 					await reload();
 					alliancesRaw = null;

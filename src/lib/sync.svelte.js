@@ -50,6 +50,8 @@ import {
 	PULL_PAGE
 } from './sync-rules.js';
 import { auth } from './auth.svelte.js';
+import { seasonOf } from './event-rules.js';
+import { seasonEntries } from './season-rules.js';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -326,7 +328,9 @@ export async function flush(timeoutMs = 8000) {
 		await Promise.race([run, new Promise((r) => setTimeout(r, timeoutMs))]);
 	}
 	await refreshPendingCount();
-	return syncState.pendingCount;
+	// Sign-out and device clearing concern every saved row, including seasons
+	// that are deliberately paused. Their warning must count the entire outbox.
+	return (await getUnsyncedEntries()).length;
 }
 
 function tick() {
@@ -487,7 +491,7 @@ async function runTick() {
  */
 async function refreshPendingCount() {
 	try {
-		const unsynced = await getUnsyncedEntries();
+		const unsynced = seasonEntries(await getUnsyncedEntries(), seasonOf(syncState.eventCode));
 		syncState.pendingCount = unsynced.length;
 		return unsynced;
 	} catch {
@@ -498,6 +502,7 @@ async function refreshPendingCount() {
 }
 
 async function pushOutbox(unsynced) {
+	unsynced = seasonEntries(unsynced, seasonOf(syncState.eventCode));
 	syncState.pendingCount = unsynced.length;
 	// One lookup per event per tick, not one per row. eventIdForCode() caches a
 	// resolved id but deliberately not a null, so every row queued for an event
