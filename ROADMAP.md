@@ -1073,6 +1073,135 @@ re-register. The one hard requirement is HTTPS — `deriveSessionId()` uses
 
 ## The season boundary
 
+### Active season, announcement gate, and 2025 cleanup
+
+Design revised 2026-10-10 from the season-management audit and the owner's
+instructions. Awaiting written-design review; implementation has not started.
+This section supersedes the build-time `CURRENT_SEASON` switch as the intended
+control for live scouting. The existing season modules remain the game catalog.
+
+#### Required behavior
+
+- The initial active year is **2026**, with its announcement status **false**.
+  This is an explicit app setting requested by the owner, independent of the
+  calendar and of whether a 2026 game module already exists.
+- Until the active season is announced, scouting and manager analysis pages
+  display **“Check back later after the season is announced.”** They render no
+  scouting form, recorder, entries, charts, performance statistics, coverage,
+  scout activity, comparisons, rankings, or CSV export controls.
+- Home, new/edit scouting, practice, Run, Review, Pick, and direct match/team
+  links all obey this gate. A direct link cannot bypass it. The waiting page
+  works without selecting an event first.
+- Sign-in, account management, Settings, and current-year planning remain
+  available. Planning can prepare the event, membership, schedule, and
+  assignments; it exposes no prior-season activity or performance statistics.
+- A **super** controls the shared active year and announcement status from
+  Settings. Scouts and managers can read the setting but cannot change it.
+  Selecting a different year also resets announcement status to false.
+- All **2025 event data may be permanently deleted**, as authorized by the
+  owner. Accounts, roles, invitations, credentials, and other years' data are
+  outside that deletion.
+
+#### Smallest data model
+
+Keep the existing `entries` structure. It continues to hold the event, scout,
+match, observation JSON, and existing sync metadata. Add no `season_id`,
+`game_id`, extra game payload, or yearly copy of the entries table. Keep
+`schema_version` and the auto track's existing season stamp for interpretation.
+
+Add one singleton `season_settings` row containing `active_year` and
+`announced`, with a fixed singleton key. Seed it to `(2026, false)`. Authenticated
+accounts may read it; only a super may update it. Enforce those permissions and
+the reset of announcement status in Postgres, as well as in the interface.
+
+The active year resolves to its game through the existing season registry.
+Settings displays the module's game name when available. A future year can be
+selected before its game configuration exists, but cannot be opened for
+scouting through the app until a real module is available. The throwaway 1999
+fixture is excluded from administrator game choices. No separate database
+catalog or game builder is introduced. Annual game/form retuning remains a code
+change; supers activate the prepared year through Settings.
+
+Event season remains derived by the existing `seasonOf(event.code)` rule.
+New events must carry the active year's prefix, including custom scrimmages.
+Undated existing events stay out of normal current-season views rather than
+being assigned a guessed year. Never reuse an old event for a new season.
+
+#### Shared gate and reads
+
+Use one reactive season-settings store and one shared waiting component.
+Load the setting during app startup, refresh on reconnect and on a foreground
+poll independent of event sync, and cache the last successfully read setting
+for offline use. Before any setting is known, keep scouting and analysis
+closed. A failed refresh does not replace a cached setting with a guessed year.
+
+The root layout applies the announcement gate before event setup and before
+mounting season-dependent pages. Its manager-data effects also respect the
+gate, so hidden statistics are not loaded in the background. A season change
+clears the remembered event, assignments, overrides, and TBA event key when
+they belong to a different year. Identity and the user's API key remain.
+
+When announced, normal pages read only the active year's events. Performance
+pages default to the selected event; pooling across events is explicit and
+restricted to that year. Scope Pick, Compare, Picklist candidate statistics,
+autocomplete, suggested notes, CSV, and transfer files consistently. Having no
+selected event produces an empty view, never an all-years fallback. Match/team/edit
+links outside the active year cannot expose cached history through normal
+navigation. Historical browsing is deferred; it is not needed for this scope.
+
+The recorder receives the resolved active game explicitly instead of choosing
+the build-time current game. A mounted form captures its event and year; a
+later season switch cannot save those values into a different event. Apart
+from the authorized 2025 purge, unfinished drafts stay attached to their
+original event and account.
+
+Server-side entry writes also require an announced active-year event in
+addition to the existing account and membership checks. Event creation must
+reject another year's prefix. This prevents an older client from recreating
+2025 events or uploading new observations while the season is closed. Other
+years' queued entries remain attached to their original event; rejected writes
+stay queued and are reported accurately rather than being relabeled or lost.
+
+An offline device learns a remote season switch only when it reconnects. There
+is no promise of instant remote control over a disconnected or outdated app.
+Updated clients apply the new gate as soon as the setting arrives, without
+reloading over a draft.
+
+#### Authorized 2025 deletion
+
+Identify 2025 events by the existing canonical year parser, using
+`lower(btrim(code)) ~ '^2025[a-z0-9._-]'` rather than creation dates.
+Delete those event rows in a
+transaction; their existing `ON DELETE CASCADE` foreign keys remove entries,
+planning data, membership, picklists, reminder dismissals, and account drafts.
+Verify the targeted event IDs and counts before applying the transaction, and
+verify that other years and account tables remain unchanged afterward.
+
+Updated clients purge only 2025 entries, picklist rows, and settings/cache keys
+associated with 2025 events **before sync starts**, including queued entries
+and saved drafts. Clear a remembered 2025 event and its dependent session state.
+Invalidate affected event lookup and pull caches. This cleanup is idempotent;
+running it twice has no additional effect. No blanket local-database clear and
+no deletion of 2026 test entries is authorized by this request.
+
+#### Acceptance checks
+
+- With `(2026, false)`, scout, manager, and super see the exact waiting message
+  on every gated route, including direct links, and no form or manager stats.
+  Settings and account management remain reachable without an event.
+- A manager/scout cannot change the shared setting. A super can change the
+  year; doing so closes scouting until they announce the prepared game.
+- A cached or unsupported game cannot silently substitute 2026 for another
+  active year. New recordings use the selected game's season stamp.
+- A fixture containing 2025 and 2026 rows cannot mix them in analysis,
+  suggestions, export, or event selection. No selected event widens the scope.
+- Server deletion and local cleanup remove the 2025 fixtures completely,
+  including unsynced rows and drafts, while preserving 2026 rows and accounts.
+  A second cleanup is harmless, and old uploads cannot recreate 2025 data.
+- Reconnect applies a changed setting, and a switch during an open form
+  cannot save old observations into the new season. Run the existing tests,
+  focused database-policy checks, build, and browser verification of the gate.
+
 **The framework series, and the one with a deadline it does not control.**
 Specced 2026-09-01; finish before 9 January.
 
@@ -1084,10 +1213,12 @@ Specced 2026-09-01; finish before 9 January.
   rather than for this year's game pieces.
 - **Blank-is-not-zero plus `SCHEMA_VERSION`** means changing the vocabulary does
   not corrupt old entries — a missing key is *not recorded*, never 0.
-- **Season pooling is already enforced.** `seasonOf()`, `scopeEntries()` and
-  `sameSeason()`, and `teamProfile` already computes `autoSeason` from
-  `inSeason` — so the *spatial* aggregates are season-scoped too. That
-  discipline is the hard part and it is done.
+- **Season-scoping helpers already exist.** `seasonOf()`, `scopeEntries()`,
+  `sameSeason()`, and `teamProfile` correctly restrict an explicitly scoped
+  calculation. The 2026-10-10 audit found that Pick, Compare, and Picklist still
+  call `summarize()` without a scope; CSV and form suggestions also read across
+  years. The helpers are reusable, but applying them throughout the app remains
+  part of the active-season work above.
 - **Coordinates are fractions of the full field**, which is already the right
   representation. Only their meaning changes.
 - Events, membership, RLS, sync, assignments, reminders, coverage and accounts
