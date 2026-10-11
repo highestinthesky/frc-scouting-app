@@ -19,10 +19,6 @@ sync stay within the active season. The initial setting is 2026, unannounced.
 Migration 0032 removes unused 2025 event data; devices remove their 2025 copies
 before starting sync on the next app launch.
 
-Run `npm test`, `npm run build`, and `npm run check:sql` for local verification.
-With a local Supabase database running, `npm run test:season-rls` verifies real
-role permissions and the migration inside a transaction that is rolled back.
-
 ## Other Information
 This website was made for 3419, and is currently deployed [here](https://scout.rohawks.org).
 
