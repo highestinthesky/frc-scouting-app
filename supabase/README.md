@@ -31,6 +31,7 @@ Do not infer production state from the presence of a migration file.
 | `0028_revoke_email_for_username.sql` | **Applied 2026-10-04**, recorded as `20261004193845`, on the user's call after 45 days of soak. Anon now gets 42501 from the lookup, and only `service_role` holds the grant |
 | `0029_anon_holds_no_table.sql` | **Applied 2026-10-04**, recorded as `20261004201724`. Afterwards anon holds no table privilege in `public`; every table answers 42501, checked with a real key. `peek_invite` still answers for `/register` |
 | `0030_account_state.sql` | **Applied 2026-10-05.** Two own-rows-only tables so reminder dismissals and entry drafts follow the account. Safe in either order: the client treats a missing table as "keep it on this device" (`account-state.js`), so the client may deploy first |
+| `0031_reuse_revoked_account_email.sql` | **Written; production application not verified.** Service-only, atomic cleanup of an Auth identity that still has no profile, so a manager can reuse its email. Apply before deploying the updated `create-account` Edge Function |
 
 `username-sign-in` is deployed and ACTIVE (v1, `verify_jwt` **off** — it runs
 before a session exists and is itself the credential check). Smoke-tested
@@ -159,6 +160,18 @@ that does not make the auth cutover routine: read the preconditions for `0010`
 and `0011`, test them in a disposable project, and prepare rollback steps before
 touching production.
 
+For account-email reuse, apply `0031_reuse_revoked_account_email.sql` before
+deploying `create-account`. If a database already records `0032`, the CLI needs
+`supabase db push --include-all` to include the earlier missing `0031`; review
+its pending migration list first. A GitHub Pages push deploys the browser only,
+so it does not apply this SQL or deploy the Edge Function.
+
+The cleanup locks the Auth row and rechecks the profile before deleting it.
+Profile insertion uses the same row through its foreign key, so registration
+and cleanup cannot both succeed for the old identity. A replacement is a new
+account with a new username and temporary password; its event memberships are
+assigned again through the normal Accounts/People flow.
+
 **The SQL editor shows only the last statement's result set.** A script of six
 `SELECT`s displays the sixth and discards the rest, which is an easy way to
 conclude a table has no policies when you simply never saw them.
@@ -203,6 +216,22 @@ triggers, grants and the role-based reset RPC.
 Those checks do not connect to Postgres. `npm run check:sql` proves grammar, and
 the verification scripts prove selected live objects exist, but neither proves
 RLS behavior.
+
+`npm test` also runs the actual `create-account` handler with the real Supabase
+SDK and controlled HTTP responses. The database race checks are separate:
+
+```bash
+npm run test:account-reuse
+supabase functions serve --no-verify-jwt
+# In another terminal:
+npm run test:auth-rollout
+```
+
+`test:account-reuse` installs `0031` on the local database, checks its grants and
+role restrictions, and races cleanup against registration in both orders. It
+refuses remote database URLs and removes its temporary accounts. The auth
+rollout suite checks real account creation, active-email protection, revocation,
+email reuse and sign-in using the replacement's temporary credentials.
 
 ```bash
 supabase start && npm run test:rls

@@ -61,6 +61,14 @@ had to be renumbered twice.
 | Native apps | Paused — see *Deliberately not in v0.8* |
 | Used by a scout, ever | **No.** Every verification is synthetic pointer events from a console. The offseason was cancelled, so the first real use is a competition |
 
+Account-email reuse: `0031` and the updated `create-account` function allow a
+manager to recreate a revoked account with the same email. Cleanup and its
+profile check share a locked database transaction so a concurrent registration
+cannot be erased. Handler, permission and concurrency regression tests accompany
+the change; the registration form also recommends a school email. Backend
+rollout requires applying `0031` before deploying the Edge Function, separately
+from the GitHub Pages push (see `supabase/README.md`).
+
 **The production model is no longer hybrid.** `0020` dropped `session_id` from
 all eight tables along with 29 policies, `has_manager_token()` and the
 passphrase:

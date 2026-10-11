@@ -28,9 +28,9 @@ const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const CORS = {
 	'Access-Control-Allow-Origin': '*',
-	// `apikey` matters: supabase-js sends it on every request, and a preflight
-	// that does not allow it fails in the browser while curl succeeds.
-	'Access-Control-Allow-Headers': 'authorization, content-type, apikey',
+	// Supabase's browser client sends all four headers; omitting x-client-info
+	// makes the preflight fail before this function can return an error body.
+	'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-client-info',
 	'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
@@ -135,18 +135,41 @@ Deno.serve(async (req) => {
 
 	// email_confirm, because nothing is ever sent at signup — mailer_autoconfirm
 	// is on and this address only matters when a password reset is requested.
-	const { data: created, error: createErr } = await admin.auth.admin.createUser({
+	const createAuthUser = () => admin.auth.admin.createUser({
 		email,
 		password: temporaryPassword,
 		email_confirm: true
 	});
-	if (createErr || !created?.user) {
-		const msg = createErr?.message ?? 'unknown error';
+	let createResult = await createAuthUser();
+
+	// Revoking an account deletes its profile but intentionally leaves the Auth
+	// identity behind. The service-only RPC locks that identity, rechecks the
+	// profile, and removes it in one transaction. A separate lookup and Admin
+	// API delete could erase an account that finished registration in between.
+	if (createResult.error && /already/i.test(createResult.error.message)) {
+		const { data: removed, error: cleanupErr } = await admin.rpc('delete_orphan_auth_user_for_email', {
+			p_actor: actorId,
+			p_email: email,
+			p_role: role
+		});
+		if (cleanupErr) {
+			const status = cleanupErr.code === '42501' ? 403 : 500;
+			return json({ error: cleanupErr.message }, status);
+		}
+
+		if (removed === true) {
+			createResult = await createAuthUser();
+		}
+	}
+
+	if (createResult.error || !createResult.data?.user) {
+		const msg = createResult.error?.message ?? 'unknown error';
 		return json(
 			{ error: /already/i.test(msg) ? 'That email address already has an account.' : msg },
 			400
 		);
 	}
+	const created = createResult.data;
 
 	// The profile, and the second authority check. If this fails the auth user
 	// is deleted again — a login with no profile is an orphan the person can do

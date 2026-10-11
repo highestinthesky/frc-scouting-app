@@ -215,6 +215,16 @@ try {
 		password
 	});
 	if (managerLoginError) throw managerLoginError;
+	const preflight = await fetch(`${stack.url}/functions/v1/create-account`, {
+		method: 'OPTIONS',
+		headers: {
+			Origin: 'http://localhost:5173',
+			'Access-Control-Request-Method': 'POST',
+			'Access-Control-Request-Headers': 'authorization,apikey,content-type,x-client-info'
+		}
+	});
+	ok('create-account accepts the browser SDK preflight', preflight.ok &&
+		preflight.headers.get('access-control-allow-headers')?.toLowerCase().includes('x-client-info'));
 	const managedEmail = `${mark}.managed@example.com`;
 	const { data: managed, error: managedError } = await managerClient.functions.invoke('create-account', {
 		body: { firstName: 'Managed', lastName: 'Rollout', email: managedEmail, role: 'scout' }
@@ -233,6 +243,28 @@ try {
 	ok('managed temporary credentials work through private username sign-in',
 		managedLogin.response.status === 200 && await sessionAccepts(managedLogin.body),
 		`${managedLogin.response.status} ${JSON.stringify(managedLogin.body)}`);
+
+	const managedBody = { firstName: 'Managed', lastName: 'Rollout', email: managedEmail, role: 'scout' };
+	const duplicate = await managerClient.functions.invoke('create-account', { body: managedBody });
+	ok('an active email cannot be replaced', Boolean(duplicate.error));
+	const activeRows = await sql('select id from public.profiles where id=$1', [managedRows[0]?.id]);
+	ok('the existing active profile survives the duplicate request', activeRows.length === 1);
+
+	// Revocation leaves the Auth identity behind, blocking createUser until the
+	// new RPC atomically verifies that it is still orphaned and removes it.
+	await sql('delete from public.profiles where id=$1', [managedRows[0]?.id]);
+	const revokedRows = await sql('select id from auth.users where email=$1', [managedEmail]);
+	ok('revocation leaves the Auth email occupied', revokedRows.length === 1);
+	const replacement = await managerClient.functions.invoke('create-account', { body: managedBody });
+	ok('a manager can reuse the revoked email', !replacement.error && Boolean(replacement.data?.username), replacement.error?.message);
+	const replacementRows = await sql(
+		'select p.id,p.must_change_password from public.profiles p join auth.users u on u.id=p.id where u.email=$1', [managedEmail]);
+	if (replacementRows[0]?.id) ids.push(replacementRows[0].id);
+	ok('the replacement has a fresh identity and a temporary password', replacementRows.length === 1 &&
+		replacementRows[0].id !== managedRows[0]?.id && replacementRows[0].must_change_password === true);
+	ok('the old Auth identity is removed', (await sql('select id from auth.users where id=$1', [managedRows[0]?.id])).length === 0);
+	const replacementLogin = await usernameSignIn(replacement.data?.username ?? 'missing', replacement.data?.temporaryPassword ?? 'missing');
+	ok('replacement credentials reach a real session', replacementLogin.response.status === 200 && await sessionAccepts(replacementLogin.body));
 
 	// Ten failures are allowed for one account/network pair; the next is stopped
 	// before another password hash. Invalid usernames receive the same protection.

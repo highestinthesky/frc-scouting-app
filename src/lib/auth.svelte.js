@@ -492,8 +492,9 @@ export const auth = {
 	 * Goes through the create-account Edge Function, because creating an
 	 * auth.users row needs service_role and a static bundle cannot hold that
 	 * key. The function verifies the caller's own token and re-checks the role
-	 * in the database, so nothing here is trusted — this is a request, not an
-	 * instruction.
+	 * in the database. If the email belongs to an orphaned Auth user left by
+	 * revocation, the function replaces that user before creating the account.
+	 * Nothing here is trusted — this is a request, not an instruction.
 	 *
 	 * Returns the generated username and the temporary password ONCE. Neither is
 	 * stored anywhere readable afterwards; if the manager loses it before handing

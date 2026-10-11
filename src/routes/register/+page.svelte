@@ -170,7 +170,7 @@
 		{:else}
 			<label class="field">
 				<span class="label">Email</span>
-				<small class="help">Used for password recovery.</small>
+				<small class="help">Preferably use your school email address. This is used for password recovery.</small>
 				<input type="email" bind:value={email} autocomplete="email" required />
 			</label>
 
