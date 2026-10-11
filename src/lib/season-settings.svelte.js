@@ -65,14 +65,12 @@ class SeasonSettings {
 		}
 	}
 
-	async update(year, announced) {
-		const value = normalizeSeasonSettings({ active_year: Number(year), announced });
-		if (!value || value.active_year === 1999) throw new Error('Choose a valid season year.');
-		if (announced && !seasonIsOpen(value, SEASON_YEARS)) {
-			throw new Error('The game configuration must be available before announcing this season.');
-		}
+	async update(year) {
+		const value = normalizeSeasonSettings({ active_year: Number(year), announced: false });
+		if (!value || value.active_year === 1999) throw new Error('Choose a valid season.');
 		const revision = ++this.#revision;
-		const query = getAuthClient().from('season_settings').update(value)
+		// Announcement is returned by the server, never supplied by this device.
+		const query = getAuthClient().from('season_settings').update({ active_year: value.active_year })
 			.eq('id', true).select('active_year, announced').single();
 		const saved = await this.#request(query);
 		if (revision !== this.#revision) throw new Error('The account or season changed. Refresh and try again.');

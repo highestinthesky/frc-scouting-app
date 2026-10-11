@@ -20,6 +20,7 @@
 	import { base } from '$app/paths';
 	import { listEntries } from '$lib/db.js';
 	import { teamProfile } from '$lib/aggregate.js';
+	import { eventSeasonLabel, seasonLabel } from '$lib/seasons/catalog.js';
 	import { fmt } from '$lib/metrics.js';
 	import { METRIC_FIELDS } from '$lib/form-config.js';
 	import { syncState } from '$lib/sync.svelte.js';
@@ -80,7 +81,7 @@
 <main>
 	<PageHead
 		title="Team {teamNumber}"
-		sub={eventCode}
+		sub="{eventCode} · {eventSeasonLabel(eventCode)}"
 		back="{base}/studio/review/"
 		backLabel="Back to Review"
 	/>
@@ -104,7 +105,7 @@
 				<Stat
 					label="This season"
 					value={season?.entryCount ?? 0}
-					note="{profile.byEvent.length} events{profile.season ? ` · ${profile.season}` : ''}"
+					note="{profile.byEvent.length} events · {seasonLabel(profile.season)}"
 				/>
 			{/if}
 			{#if here?.discrepancyCount}

@@ -32,6 +32,7 @@
 		removeScoutFromEvent
 	} from '$lib/events.js';
 	import { eventLabel } from '$lib/event-rules.js';
+	import { eventSeasonLabel } from '$lib/seasons/catalog.js';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import { eventData } from '$lib/event-data.svelte.js';
 	import { scoutRoster } from '$lib/plan-state.js';
@@ -248,7 +249,7 @@
 {:else}
 	<div class="columns">
 		<Panel
-			title="On {eventLabel(selected)}">
+			title="On {eventLabel(selected)}" hint={eventSeasonLabel(selected.code)}>
 			{#snippet actions()}
 				<span class="count">{roster.length}</span>
 			{/snippet}

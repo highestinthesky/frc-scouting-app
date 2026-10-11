@@ -1,13 +1,14 @@
 <script>
 	import { base } from '$app/paths';
 	import { SEASON_WAITING_MESSAGE } from '$lib/season-rules.js';
+	import { seasonLabel } from '$lib/seasons/catalog.js';
 	import Button from './Button.svelte';
 	let { year = 2026, otherEvent = false } = $props();
 </script>
 
 <main>
-	<h1>{year} season</h1>
-	<p>{otherEvent ? `Choose an event in the active ${year} season.` : SEASON_WAITING_MESSAGE}</p>
+	<h1>{seasonLabel(year)}</h1>
+	<p>{otherEvent ? `Choose an event for ${seasonLabel(year)}.` : SEASON_WAITING_MESSAGE}</p>
 	<Button href="{base}/settings/">Settings</Button>
 </main>
 

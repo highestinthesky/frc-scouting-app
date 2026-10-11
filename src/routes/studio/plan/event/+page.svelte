@@ -14,6 +14,7 @@
 	import { listMyEvents, setEventArchived, setEventDetails } from '$lib/events.js';
 	import { resetEventData } from '$lib/event-meta.js';
 	import { eventLabel } from '$lib/event-rules.js';
+	import { eventSeasonLabel } from '$lib/seasons/catalog.js';
 	import { eventData } from '$lib/event-data.svelte.js';
 	import { dialog } from '$lib/dialog.svelte.js';
 	import Button from '$lib/components/Button.svelte';
@@ -145,7 +146,7 @@
 	</Panel>
 {:else}
 	<div class="stack">
-		<Panel title="Details" hint={selected.code}>
+		<Panel title="Details" hint="{selected.code} · {eventSeasonLabel(selected.code)}">
 			<form class="details" onsubmit={saveDetails}>
 				<label class="field">
 					<span class="label">Name</span>

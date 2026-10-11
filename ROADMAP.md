@@ -41,6 +41,7 @@ had to be renumbered twice.
 | v0.84 | `ios-readiness` | 2026-10-05 | iPhone/WebKit fixes, sync that loses and stales nothing, and dismissals, drafts and the scout name following the account (`0030` applied 2026-10-05) |
 | v0.85 | `claude/happy-fermi-q6ndj5` | 2026-10-05 | sync traffic: settled pulls download nothing, a relaunch resumes instead of re-downloading the event, one client per event (no leaked listeners), deletes that cannot race an upload, and `sync.test.mjs` running the real sync layer. No migration |
 | v0.86 | `ui-optimization` | 2026-10-06 | One shell: Studio folds into the app with navigation by role (Home · Plan · Run · Review · Pick · Accounts · Settings for a manager; a scout's two tabs unchanged), the event chosen in the app bar, Schedule and Event split into Plan and Run sub-pages, Coverage folded into Run, Review as the index of the match and team pages, manager tiles on Home, the whole schedule for scouts, and every control on the manager pages at 44px. No migration |
+| v0.87 | `main` | 2026-10-11 | Season names in the integrated selector, BIOCORE for 2027, consistent event-picker typography, and season labels beside events. Announcement status is developer-controlled; selecting REBUILT restores its announced status. Migration `0033` applied before the client push |
 
 ## Where the app is now
 

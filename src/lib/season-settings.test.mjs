@@ -24,13 +24,18 @@ const { db, setSetting, getSetting } = await import('./db.js');
 let reply = { active_year:2026, announced:false };
 let fail = false;
 let held = null;
+let patches = [];
 globalThis.fetch = async (url, options = {}) => {
 	assert.ok(String(url).includes('/rest/v1/season_settings'), 'unexpected server request');
 	if (held) { const h = held; held = null; return await h; }
 	if (fail) return new Response(JSON.stringify({message:'Unavailable'}), {status:503});
 	if (options.method === 'PATCH') {
 		const patch = JSON.parse(options.body);
-		reply = {...patch, announced:patch.active_year === reply.active_year ? patch.announced : false};
+		patches.push(patch);
+		if (Object.hasOwn(patch, 'announced')) {
+			return new Response(JSON.stringify({message:'Announcement status is developer-controlled'}), {status:403});
+		}
+		reply = {...patch, announced:patch.active_year === 2026};
 	}
 	return new Response(JSON.stringify(reply), {status:200,headers:{'Content-Type':'application/json'}});
 };
@@ -61,14 +66,38 @@ test('offline startup retains the last successful setting', async () => {
 	store.stop();
 });
 
-test('successful setting updates persist and changing the year closes scouting', async () => {
+test('choosing a past season restores its developer-controlled announcement', async () => {
 	exists(); fail = false; reply = {active_year:2026,announced:true};
 	await store.start('account-a');
 	assert.equal(store.open, true);
-	await store.update(2027,false);
+	await store.update(2027);
 	assert.equal(store.open, false);
 	assert.deepEqual(await getSetting('seasonSettings'), {active_year:2027,announced:false});
-	await assert.rejects(store.update(2027,true), /game configuration/i);
+	await store.update(2026);
+	assert.equal(store.open, true);
+	assert.deepEqual(await getSetting('seasonSettings'), {active_year:2026,announced:true});
+	store.stop();
+});
+
+test('season selection cannot send an announcement override to the server', async () => {
+	exists(); fail = false; reply = {active_year:2026,announced:true}; patches = [];
+	await store.start('account-a');
+	await store.update(2027, true);
+	assert.deepEqual(patches, [{active_year:2027}]);
+	assert.equal(store.value.announced, false);
+	await store.update(2026, false);
+	assert.deepEqual(patches.at(-1), {active_year:2026});
+	assert.equal(store.open, true);
+	store.stop();
+});
+
+test('invalid season choices never reach the server', async () => {
+	exists(); fail = false; patches = [];
+	await store.start('account-a');
+	for (const year of [1999, 1991, 10000, 2026.5, 'invalid']) {
+		await assert.rejects(store.update(year), /valid season/i);
+	}
+	assert.deepEqual(patches, []);
 	store.stop();
 });
 

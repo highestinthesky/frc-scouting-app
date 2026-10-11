@@ -32,6 +32,14 @@ Do not infer production state from the presence of a migration file.
 | `0029_anon_holds_no_table.sql` | **Applied 2026-10-04**, recorded as `20261004201724`. Afterwards anon holds no table privilege in `public`; every table answers 42501, checked with a real key. `peek_invite` still answers for `/register` |
 | `0030_account_state.sql` | **Applied 2026-10-05.** Two own-rows-only tables so reminder dismissals and entry drafts follow the account. Safe in either order: the client treats a missing table as "keep it on this device" (`account-state.js`), so the client may deploy first |
 | `0031_reuse_revoked_account_email.sql` | **Written; production application not verified.** Service-only, atomic cleanup of an Auth identity that still has no profile, so a manager can reuse its email. Apply before deploying the updated `create-account` Edge Function |
+| `0032_season_management.sql` | **Applied**, recorded as `20261011013905`; checked 2026-10-11. Shared season settings, scouting gates, and the 2025 event cleanup |
+| `0033_developer_season_announcements.sql` | **Applied 2026-10-11**, recorded as `20261011150745`. Rehearsed on a disposable database first. REBUILT is announced, returning to it restores that status, and app accounts can update only `active_year` |
+
+Announcement status is controlled by `season_is_announced(year)`, defined in
+0033. Announcing a future season requires a developer migration that extends its
+announced-year list and updates `season_settings.announced` for the active year.
+Add the matching client game module first. Selecting another season always
+restores its configured status; accounts cannot write the announcement column.
 
 `username-sign-in` is deployed and ACTIVE (v1, `verify_jwt` **off** — it runs
 before a session exists and is itself the credential check). Smoke-tested

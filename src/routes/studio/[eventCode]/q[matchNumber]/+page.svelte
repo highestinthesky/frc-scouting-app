@@ -19,6 +19,7 @@
 	import { base } from '$app/paths';
 	import { listEntries } from '$lib/db.js';
 	import { matchReport } from '$lib/aggregate.js';
+	import { eventSeasonLabel } from '$lib/seasons/catalog.js';
 	import { getCachedSchedule, qualMatches, teamsInMatch } from '$lib/tba.js';
 	import { syncState } from '$lib/sync.svelte.js';
 	import { fmt } from '$lib/metrics.js';
@@ -117,7 +118,7 @@
 <main>
 	<PageHead
 		title="Qual {matchNumber}"
-		sub={eventCode}
+		sub="{eventCode} · {eventSeasonLabel(eventCode)}"
 		back="{base}/studio/review/"
 		backLabel="Back to Review"
 	/>

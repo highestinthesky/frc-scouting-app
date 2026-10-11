@@ -15,6 +15,8 @@
 	// that is the answer the manager came for.
 
 	import { session } from '$lib/session.svelte.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
+	import { seasonLabel, eventSeasonLabel } from '$lib/seasons/catalog.js';
 	import EventPicker from './EventPicker.svelte';
 	import Sheet from './Sheet.svelte';
 
@@ -38,10 +40,13 @@
 	class="switch"
 	aria-haspopup="dialog"
 	aria-expanded={open}
-	aria-label="Event: {session.eventCode || 'none chosen'}. Change event"
+	aria-label="Event: {session.eventCode || 'none chosen'}. {session.eventCode ? eventSeasonLabel(session.eventCode) : seasonLabel(seasonSettings.value.active_year)}. Change event"
 	onclick={() => (open = true)}
 >
-	<span class="code">{session.eventCode || 'Choose event'}</span>
+	<span class="context">
+		<span class="code">{session.eventCode || 'Choose event'}</span>
+		<span class="season">{session.eventCode ? eventSeasonLabel(session.eventCode) : seasonLabel(seasonSettings.value.active_year)}</span>
+	</span>
 	<span class="caret" aria-hidden="true">▾</span>
 </button>
 <Sheet bind:open label="Event">
@@ -49,7 +54,10 @@
 </Sheet>
 
 <style>
+	.context { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+	.season { font-size: var(--fs-xs); line-height: 1.4; }
 	.code {
+		max-width: 100%;
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;

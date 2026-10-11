@@ -10,6 +10,9 @@ const option = (name) => process.argv[process.argv.indexOf(name) + 1];
 const migrationPath = process.argv.includes('--migration') ? option('--migration')
 	: new URL('../supabase/migrations/0032_season_management.sql',import.meta.url);
 const migrationSql = readFileSync(migrationPath,'utf8').replace(/^BEGIN;\s*$/m,'').replace(/^COMMIT;\s*$/m,'');
+const announcementPath = process.argv.includes('--announcement-migration') ? option('--announcement-migration')
+	: new URL('../supabase/migrations/0033_developer_season_announcements.sql',import.meta.url);
+const announcementSql = readFileSync(announcementPath,'utf8').replace(/^BEGIN;\s*$/m,'').replace(/^COMMIT;\s*$/m,'');
 let uri = process.env.SUPABASE_DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 if (process.argv.includes('--connection-file')) {
 	const contents = readFileSync(option('--connection-file'), 'utf8');
@@ -46,6 +49,9 @@ async function event(year) {
 }
 const insert = `INSERT INTO public.entries(event_id,event_code,match_number,team_number,alliance_color,scout_name,observations,schema_version,created_at)
  VALUES($1,$2,1,3419,'red','Season check','{}',1,now()) RETURNING id`;
+// Match 1 already has a persisted fixture by the time release checks run.
+const releaseInsert = `INSERT INTO public.entries(event_id,event_code,match_number,team_number,alliance_color,scout_name,observations,schema_version,created_at)
+ VALUES($1,$2,2,3419,'red','Season check','{}',1,now()) RETURNING id`;
 
 await db.connect();
 try {
@@ -102,5 +108,38 @@ try {
 		await sql(migrationSql);
 		equal((await sql('SELECT active_year,announced FROM public.season_settings'))[0],{active_year:2027,announced:false});
 	}
+	// Announcement status is a developer release decision. The application can
+	// select a season, but no account (including a super) can override its status.
+	await sql(announcementSql);
+	equal((await sql('UPDATE public.season_settings SET active_year=2026 WHERE id=true RETURNING active_year,announced'))[0],
+		{active_year:2026,announced:true});
+	for (const user of [scout,manager,superUser]) {
+		await denied(user,'UPDATE public.season_settings SET announced=false WHERE id=true');
+		await denied(user,'UPDATE public.season_settings SET announced=true WHERE id=true');
+	}
+	for (const user of [scout,manager]) {
+		equal(await as(user,'UPDATE public.season_settings SET active_year=2027 WHERE id=true RETURNING active_year'),[]);
+	}
+	equal((await as(superUser,'UPDATE public.season_settings SET active_year=2027 WHERE id=true RETURNING active_year,announced'))[0],
+		{active_year:2027,announced:false});
+	equal((await as(superUser,'UPDATE public.season_settings SET active_year=2026 WHERE id=true RETURNING active_year,announced'))[0],
+		{active_year:2026,announced:true});
+	equal((await as(superUser,'UPDATE public.season_settings SET active_year=2030 WHERE id=true RETURNING announced'))[0].announced,false);
+	equal((await as(scout,releaseInsert,[current.id,current.code])).length,1);
+	await sql('UPDATE public.season_settings SET active_year=2027 WHERE id=true');
+	await denied(scout,releaseInsert,[other.id,other.code]);
+	await sql('UPDATE public.season_settings SET active_year=2026 WHERE id=true');
+	equal((await as(scout,releaseInsert,[current.id,current.code])).length,1);
+	// A future developer release stays announced across subsequent selections.
+	await sql(`CREATE OR REPLACE FUNCTION public.season_is_announced(p_year integer) RETURNS boolean
+	 LANGUAGE sql IMMUTABLE SET search_path = '' AS $$ SELECT coalesce(p_year IN (2026,2027),false); $$`);
+	await sql('UPDATE public.season_settings SET active_year=2027 WHERE id=true');
+	equal((await sql('SELECT announced FROM public.season_settings WHERE id=true'))[0].announced,true);
+	equal((await as(scout,releaseInsert,[other.id,other.code])).length,1);
+	await sql('UPDATE public.season_settings SET active_year=2026 WHERE id=true');
+	await sql('UPDATE public.season_settings SET active_year=2027 WHERE id=true');
+	equal((await sql('SELECT announced FROM public.season_settings WHERE id=true'))[0].announced,true);
+	await sql(announcementSql);
+	equal((await sql('SELECT active_year,announced FROM public.season_settings WHERE id=true'))[0],{active_year:2027,announced:false});
 	console.log(`${checks} season database checks passed; transaction rolled back.`);
 } finally { await db.query('ROLLBACK'); await db.end(); }

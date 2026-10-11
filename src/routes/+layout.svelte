@@ -25,6 +25,7 @@
 	import { eventData } from '$lib/event-data.svelte.js';
 	import { purgeSeasonData } from '$lib/db.js';
 	import { seasonSettings } from '$lib/season-settings.svelte.js';
+	import { eventSeasonLabel } from '$lib/seasons/catalog.js';
 	import { eventInSeason, seasonRoute, routeEvent } from '$lib/season-rules.js';
 	import { forgetEvents } from '$lib/events.js';
 	import SeasonWaiting from '$lib/components/SeasonWaiting.svelte';
@@ -362,7 +363,10 @@
 				     a tap target that gets missed. -->
 				<div class="who">
 					{#if session.eventCode && !shellIdentity.isManager}
-						<strong class="event">{session.eventCode}</strong>
+						<span class="event-context">
+							<strong class="event">{session.eventCode}</strong>
+							<span class="event-season">{eventSeasonLabel(session.eventCode)}</span>
+						</span>
 						<span class="sep">·</span>
 					{/if}
 					<span class="name">{shellIdentity.name}</span>
@@ -876,6 +880,8 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	.event-context { display: flex; flex-direction: column; min-width: 0; }
+	.event-season { font-size: var(--fs-xs); line-height: 1.4; }
 	.event {
 		font-weight: 700;
 		letter-spacing: 0.04em;

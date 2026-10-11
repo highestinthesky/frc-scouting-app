@@ -6,6 +6,7 @@
 	import { auth } from '$lib/auth.svelte.js';
 	import { seasonSettings } from '$lib/season-settings.svelte.js';
 	import { eventInSeason } from '$lib/season-rules.js';
+	import { seasonLabel, eventSeasonLabel } from '$lib/seasons/catalog.js';
 	import { listMyEvents, createEvent } from '$lib/events.js';
 	import { eventLabel, looksLikeTbaKey, currentEvent as pickCurrentEvent } from '$lib/event-rules.js';
 	import { setEventCode, syncState } from '$lib/sync.svelte.js';
@@ -102,11 +103,12 @@
 
 <div class="picker">
 	<span class="label">Event</span>
+	<p class="season-context">Season: {seasonLabel(seasonSettings.value.active_year)}</p>
 
 	{#if !auth.signedIn}
 		<p class="note">
 			{#if session.eventCode}
-				Recording to <strong>{session.eventCode}</strong>. Not signed in.
+				Recording to <strong>{session.eventCode}</strong> · {eventSeasonLabel(session.eventCode)}. Not signed in.
 			{:else}
 				Sign in to choose an event.
 			{/if}
@@ -129,6 +131,7 @@
 						onclick={() => choose(ev.code)}
 					>
 						<span class="name">{eventLabel(ev)}</span>
+						<span class="season">{eventSeasonLabel(ev.code)}</span>
 						<span class="meta">
 							{ev.code}{#if ev.starts_on} · {ev.starts_on}{/if}{#if ev.archived_at} · archived{/if}
 						</span>
@@ -148,6 +151,7 @@
 	{#if auth.signedIn && auth.isManager}
 		{#if creating}
 			<form class="new" onsubmit={submitNew}>
+				<p class="note">Create an event for <strong>{seasonLabel(seasonSettings.value.active_year)}</strong>.</p>
 				<label class="field">
 					<span class="sub">TBA event key</span>
 					<input
@@ -215,6 +219,11 @@
 	}
 	.retry { display: flex; }
 	.event .name, .event .meta { overflow-wrap: anywhere; max-width: 100%; }
+	.season-context {
+		margin: 0;
+		font-size: var(--fs-sm);
+		color: var(--text-muted);
+	}
 	.label {
 		font-size: var(--fs-sm);
 		font-weight: 600;
@@ -251,6 +260,9 @@
 	}
 
 	.event {
+		font: inherit;
+		font-size: var(--fs-md);
+		line-height: 1.5;
 		width: 100%;
 		min-height: var(--tap-min);
 		display: flex;
@@ -291,10 +303,12 @@
 		font-size: var(--fs-md);
 		font-weight: 600;
 	}
+	.season,
 	.meta {
-		font-size: var(--fs-xs);
+		font-size: var(--fs-sm);
 		color: var(--text-muted);
 	}
+	.season { font-weight: 600; overflow-wrap: anywhere; }
 
 	.new {
 		display: flex;
@@ -311,8 +325,9 @@
 		gap: var(--space-1);
 	}
 	.sub {
-		font-size: var(--fs-xs);
-		color: var(--text-muted);
+		font-size: var(--fs-sm);
+		font-weight: 600;
+		color: var(--text-primary);
 	}
 	.row {
 		display: flex;
