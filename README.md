@@ -2,23 +2,8 @@
 
 MADE FOR 3419 ROHAWKS
 
-## Structure
-
-### Scouts
-- Scouts can create and edit files, whereas they will be pushed to cloud sync to be transferred to a manager
-- Can only edit files that they have created
-
-### Managers
-- Same as scouts for scouting functionality
-- Can view all entries in _Manager View_, which helps to visualize the best picks
-
-## Architecture 
-This website is directly connected to an **unencrypted** Supabase **free** database, meaning that it will shut down and require manual reactivation after a week of inactivity
-**However**, stored data should be safe
-
-All entries are connected to an **event tag**, which is what the website uses to request sync and push files
-
-Furthermore, to acquire schedules for each scout, a TBA (The Blue Alliance) API key is **required**, however it is free and one can acquire one by simply logging in
+## Register
+Ask one of the captains or a manager if you do not have an account, they will send you an invite code.
 
 ## Seasons
 
@@ -38,11 +23,13 @@ Run `npm test`, `npm run build`, and `npm run check:sql` for local verification.
 With a local Supabase database running, `npm run test:season-rls` verifies real
 role permissions and the migration inside a transaction that is rolled back.
 
-## Developer
-This website was made for 3419, and has currently not been deployed for practical use
+## Other Information
+This website was made for 3419, and is currently deployed [here](https://scout.rohawks.org).
+
+Any bugs should be reported within the app or DMed to captains.
 
 Created by Haolun Zhang
 
-Email me for any bugs or problems - I will fix them ASAP 
+Please email scouting@rohawks.org for any questions.
 
 Regular updates will be implemented as the season comes. 
