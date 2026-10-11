@@ -31,6 +31,8 @@
 	import { session } from '$lib/session.svelte.js';
 	import { relativeTime } from '$lib/format.js';
 	import { listEntries, getOrCreateClientId } from '$lib/db.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
+	import { seasonEntries } from '$lib/season-rules.js';
 	import { buildBundle, bundleFilename } from '$lib/transfer.js';
 
 	let open = $state(false);
@@ -48,14 +50,14 @@
 		exporting = true;
 		exportNote = '';
 		try {
-			const all = await listEntries();
+			const all = seasonEntries(await listEntries(), seasonSettings.value.active_year);
 			// This event only. A scout's phone accumulates several events over a
 			// season and a manager collecting at one of them does not want the
 			// others — planImport() would file them under otherEvent anyway, but
 			// shipping them is a privacy and a size question, not just a tidiness one.
 			const mine = session.eventCode
 				? all.filter((e) => e.eventCode === session.eventCode)
-				: all;
+				: [];
 			const meta = {
 				eventCode: session.eventCode,
 				scoutName: session.scoutName,

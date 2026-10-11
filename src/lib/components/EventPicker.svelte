@@ -4,6 +4,8 @@
 
 	import { session } from '$lib/session.svelte.js';
 	import { auth } from '$lib/auth.svelte.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
+	import { eventInSeason } from '$lib/season-rules.js';
 	import { listMyEvents, createEvent } from '$lib/events.js';
 	import { eventLabel, looksLikeTbaKey, currentEvent as pickCurrentEvent } from '$lib/event-rules.js';
 	import { setEventCode, syncState } from '$lib/sync.svelte.js';
@@ -41,7 +43,7 @@
 		loading = true;
 		error = '';
 		try {
-			const rows = await listMyEvents();
+			const rows = await listMyEvents({ year: seasonSettings.value.active_year });
 			if (version === loadVersion) events = rows;
 		} catch (e) {
 			if (version === loadVersion) error = e?.message ?? String(e);
@@ -53,23 +55,25 @@
 	$effect(() => {
 		void auth.signedIn;
 		void auth.profile?.id;
+		void seasonSettings.value.active_year;
 		load();
 	});
 
 	$effect(() => {
 		if (!auth.isManager || session.eventCode || events.length === 0) return;
-		const pick = pickCurrentEvent(events);
+		const pick = pickCurrentEvent(events.filter((e) => eventInSeason(e.code, seasonSettings.value.active_year)));
 		if (pick) choose(pick.code);
 	});
 
 	async function choose(code) {
+		if (!eventInSeason(code, seasonSettings.value.active_year)) return;
 		busy = true;
 		error = '';
 		try {
 			await session.update({ eventCode: code });
 			// Tell sync directly rather than waiting for the layout's effect. The
 			// scout pressed a control and expects the status to move now.
-			await setEventCode(code);
+			await setEventCode(seasonSettings.open ? code : '');
 		} catch (e) {
 			error = e?.message ?? String(e);
 		} finally {
@@ -150,7 +154,7 @@
 						bind:value={newCode}
 						autocomplete="off"
 						autocapitalize="none"
-						placeholder="2026nyny"
+						placeholder="{seasonSettings.value.active_year}nyny"
 						required
 					/>
 					{#if codeLooksOff}

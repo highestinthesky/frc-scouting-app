@@ -216,7 +216,7 @@ export function resetForEventChange(from, to) {
 	// from nothing — a device with no event yet has no stale per-event state, and
 	// clearing on first selection would wipe assignments a sync had already
 	// delivered.
-	if (!b || !a || a === b) return null;
+	if (!a || a === b) return null;
 	return { tbaEventKey: '', assignedTeams: [], overrides: [] };
 }
 

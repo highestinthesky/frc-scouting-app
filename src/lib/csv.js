@@ -6,6 +6,7 @@
 
 import { listEntries } from './db.js';
 import { IDENTITY_FIELDS, OBSERVATION_FIELDS } from './form-config.js';
+import { normalizeCode } from './event-rules.js';
 
 /** Escape one cell per RFC 4180. */
 function esc(val) {
@@ -37,14 +38,15 @@ export function csvColumns() {
 }
 
 /**
- * Build and download a CSV of every entry, one row per entry.
+ * Build and download the selected event's CSV, one row per entry.
  *
  * @param {object} opts
- * @param {string} [opts.eventCode]  used for the filename only
+ * @param {string} [opts.eventCode]  required to include any entries
  * @returns {Promise<{filename: string, count: number}>}
  */
 export async function exportToCsv({ eventCode } = {}) {
-	const all = await listEntries();
+	const code = normalizeCode(eventCode);
+	const all = code ? (await listEntries()).filter((e) => normalizeCode(e.eventCode) === code) : [];
 	const header = csvColumns().join(',');
 
 	const rows = all.map((e) =>

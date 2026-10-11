@@ -19,6 +19,7 @@
 import { createSupabaseClient } from './supabase.js';
 import { eventIdForCode } from './events.js';
 import { session } from './session.svelte.js';
+import { auth } from './auth.svelte.js';
 import { rowScout, sameScout } from './scout-identity.js';
 import { assignmentRows, overrideRows } from './planning-rows.js';
 
@@ -93,10 +94,14 @@ export async function listAssignments(eventCode) {
  */
 export async function pullAndApplyForScout(eventCode, me) {
 	if (!me?.key && !me?.profileId) return session.assignedTeams ?? [];
+	const owner = auth.userId;
+	const code = (eventCode ?? '').trim().toLowerCase();
+	const current = () => code === session.eventCode && owner === auth.userId;
 	const [all, overrideList] = await Promise.all([
 		listAssignments(eventCode),
 		listOverrides(eventCode)
 	]);
+	if (!current()) return session.assignedTeams ?? [];
 	const mine = all
 		.filter((r) => sameScout(rowScout(r), me))
 		.map((r) => Number(r.team_number))
@@ -106,7 +111,7 @@ export async function pullAndApplyForScout(eventCode, me) {
 	// when nothing changed (and avoid spurious effect runs).
 	const cur = session.assignedTeams ?? [];
 	const sameTeams = cur.length === dedup.length && cur.every((v, i) => v === dedup[i]);
-	if (!sameTeams) await session.update({ assignedTeams: dedup });
+	if (!sameTeams && current()) await session.update({ assignedTeams: dedup });
 
 	// Overrides: cache the whole list (managers want it all; scouts only
 	// care about their own rows but the volume is tiny so we don't filter).
@@ -127,7 +132,7 @@ export async function pullAndApplyForScout(eventCode, me) {
 				(v.profile_id ?? null) === ov[i].profile_id &&
 				v.team_number === ov[i].team_number
 		);
-	if (!sameOv) await session.update({ overrides: ov });
+	if (!sameOv && current()) await session.update({ overrides: ov });
 
 	return dedup;
 }

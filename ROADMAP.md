@@ -1076,7 +1076,7 @@ re-register. The one hard requirement is HTTPS — `deriveSessionId()` uses
 ### Active season, announcement gate, and 2025 cleanup
 
 Design revised 2026-10-10 from the season-management audit and the owner's
-instructions. Awaiting written-design review; implementation has not started.
+instructions. Written design approved 2026-10-10; implemented and verified 2026-10-10.
 This section supersedes the build-time `CURRENT_SEASON` switch as the intended
 control for live scouting. The existing season modules remain the game catalog.
 
@@ -1201,6 +1201,121 @@ no deletion of 2026 test entries is authorized by this request.
 - Reconnect applies a changed setting, and a switch during an open form
   cannot save old observations into the new season. Run the existing tests,
   focused database-policy checks, build, and browser verification of the gate.
+
+#### Active Season Implementation Plan
+
+> Execute inline in this chat with `superpowers:executing-plans`, test each
+> behavior before implementation, and review the complete change afterward.
+
+**Goal:** Close the unannounced 2026 season, give supers the shared season
+control, isolate all current-year reads, and remove authorized 2025 data.
+**Architecture:** One singleton setting, pure season rules, a reactive cached
+store, and one layout-level waiting component. Existing event codes and game
+modules provide season identity; the entries schema stays unchanged.
+**Tech stack:** Svelte 5, Dexie, Supabase/Postgres, Node assertion tests.
+**Spec:** This section's approved design above.
+
+Global constraints: seed `(2026, false)`; exact waiting copy; super-only edits;
+no new entries columns; no data purge outside 2025; preserve existing account
+work; no push or deployment without the owner's instruction.
+
+Review focus: settings failure/offline boot stays closed until known; account
+changes cannot inherit another person's privileges; stale async responses
+cannot reverse a season switch; queued 2025 rows cannot sync before cleanup;
+missing events and old direct links cannot widen the data scope.
+
+##### Task 1: Rules, local cleanup, and shared settings
+
+Files: create `src/lib/season-rules.js`, `src/lib/season-settings.svelte.js`,
+and `src/lib/season-management.test.mjs`; modify `src/lib/db.js`.
+Interfaces: `seasonSettings.value` is `{active_year, announced}`;
+`seasonSettings.ready`, `.error`, `.refresh()`, `.update(year, announced)`;
+`seasonEntries(entries, year)` and `seasonRoute(path, base)` are pure;
+`purgeSeasonData(2025)` cleans entries, picklists, and associated settings.
+
+- [x] Write and run failing tests for year parsing/scoping, exact waiting copy,
+  gated and exempt routes, unknown settings, and idempotent 2025 cleanup that
+  preserves 2026 records/accounts. Use real fake-indexeddb for cleanup.
+- [x] Implement the rules, cleanup, and cached reactive store. Bound requests,
+  refresh without an event, and ignore stale responses across account changes.
+- [x] Run the new tests and baseline suite; commit only task-owned files.
+
+##### Task 2: Waiting pages and super controls
+
+Files: create `src/lib/components/SeasonWaiting.svelte` and
+`src/lib/components/SeasonSettings.svelte`; modify root layout, Settings,
+EventPicker, events/session rules, recorder, and new/edit/practice pages.
+Interfaces: consume Task 1's setting and route rules; pass `recordingSeason`
+explicitly to the recorder; normal event selection is active-year-only.
+
+- [x] Write/run failing store/component tests for `(2026, false)`, direct links,
+  Settings without an event, unsupported games, and switching during a draft.
+- [x] Apply the gate before event setup and mounting data pages; suppress
+  manager data loading; keep preparation/account tools reachable. Add super
+  controls and reject another year's event creation.
+- [x] Capture the form's event/year, preserve its original draft context, and
+  reject saves after a switch. Pass the selected game to new recordings.
+- [x] Run component/store tests and the existing suite; commit task changes.
+
+##### Task 3: Scope analysis, suggestions, and exports
+
+Files: modify `aggregate.js`, `db.js`, `csv.js`, `Field.svelte`, Home,
+Pick/Compare/Picklist, and SyncPanel; extend the season-management tests.
+Interfaces: explicit event scope for analysis/exports and active-year scope
+for suggestions; blank selection always returns an empty collection.
+
+- [x] Reproduce mixed 2025/2026 means, note suggestions, and CSV rows in failing
+  behavior tests; include a blank event and a prior-year direct entry ID.
+- [x] Scope every consumer and react to event changes; remove all-years
+  fallbacks and old-event counts from normal navigation.
+- [x] Run focused tests and the existing suite; commit task changes.
+
+##### Task 4: Supabase setting, policy gates, and 2025 deletion
+
+Files: create `supabase/migrations/0032_season_management.sql` and a focused
+database verification script; update database docs and test commands.
+Interfaces: singleton `season_settings`; super-only settings updates; existing
+entry membership policies also require an announced active-year event.
+
+- [x] Add failing real database checks for super/manager/scout/anon settings
+  permissions, year-change closure, entry writes while closed, and 2025 cascade
+  deletion preserving 2026/account rows.
+- [x] Implement transactional, idempotent SQL with the approved 2025 predicate;
+  reject stale-year event creation without changing the entries schema.
+- [x] Run SQL validation and real Postgres policy tests. Verify live targeted
+  counts before applying only this migration if authorized access is available;
+  do not apply unrelated pending migrations or claim an unapplied cleanup.
+
+##### Task 5: Full verification and review
+
+- [x] Run `npm test`, `npm run build`, SQL checks, and real Postgres policy tests.
+  Browser-check waiting pages, Settings controls, and direct links by role.
+- [x] Obtain a fresh whole-change review, fix actionable issues with regression
+  tests, and repeat affected checks. Update this ledger and implementation docs.
+- [x] Report committed changes, verification, and whether the production
+  migration/deletion actually ran. Leave pushing/deploying to the owner.
+
+**Execution record (2026-10-10):** Implemented on `codex/season-management`;
+commit only these season changes and preserve the owner's pending account work.
+Verification: full `npm test`, production build, SQL parser checks, 28 real
+Postgres permission/migration assertions in rolled-back transactions, and CUA
+browser checks for scout, manager, and super. Docker was unavailable, so the
+Postgres checks used the approved live connection with temporary fixtures and
+DDL fully rolled back. The local-only PostgREST membership suite was updated
+for an open 2026 fixture season but could not be run without Docker.
+
+Fresh review caught and resolved delayed entry/assignment reads, withdrawal and
+undo RPC gates, stale TBA sources, stale event autopicking, and polling over
+unsaved settings. Sync now leaves other years' queues untouched; sign-out and
+clear-device warnings still count every unsent entry.
+
+Applied **only 0032** to production, recorded as migration
+`20261011013905` (`season_management`). Verified `(2026, false)`, no new entry
+columns, unchanged accounts and non-2025 row fingerprints, and zero remaining
+2025 events/entries. Production already had no 2025 rows, so deletion removed
+zero events. Local 2025 caches/outboxes are removed before sync on the next
+launch of the updated app. The frontend still needs the owner's push/deploy;
+the unrelated pending 0031 account migration was not applied.
 
 **The framework series, and the one with a deadline it does not control.**
 Specced 2026-09-01; finish before 9 January.

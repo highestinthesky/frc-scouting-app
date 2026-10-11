@@ -21,6 +21,7 @@ const script = source.match(/<script>([\s\S]*?)<\/script>/)[1]
 // Compile the actual component script as a factory so each test gets fresh
 // state. Only component imports/props/lifecycle are adapted for a DOM-free root.
 const harness = `
+import { untrack } from ${JSON.stringify(new URL('../../index-client.js', runtimeUrl).href)};
 import { SAMPLE_HZ, encodeTrack, decodeTrack, positionAt, trackDuration, cycleStats, describeAnswers }
   from ${JSON.stringify(new URL('./auto-track.js', import.meta.url).href)};
 import { currentSeason } from ${JSON.stringify(new URL('./seasons/index.js', import.meta.url).href)};

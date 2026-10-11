@@ -9,6 +9,10 @@
 	import { session } from '$lib/session.svelte.js';
 	import { rowScout, sameScout } from '$lib/scout-identity.js';
 	import { auth } from '$lib/auth.svelte.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
+	import { recordingAllowed } from '$lib/season-rules.js';
+	import { SEASON_YEARS } from '$lib/seasons/index.js';
+	const recordingContext = { eventCode: session.eventCode, year: seasonSettings.value.active_year, owner: auth.userId ?? null };
 	import { kick as kickSync } from '$lib/sync.svelte.js';
 	import {
 		IDENTITY_FIELDS,
@@ -229,9 +233,6 @@
 	 * for Q3 never pours itself into a form opened for Q7. A deep link naming a
 	 * different pair simply looks up a different slot and finds nothing.
 	 */
-	/** Whose drafts: the signed-in account, or nobody's while signed out. */
-	const draftOwner = () => (auth.signedIn ? (auth.userId ?? null) : null);
-
 	async function restoreDraft() {
 		draftKey = draftSlot({ matchNumber: values.matchNumber, teamNumber: values.teamNumber });
 		try {
@@ -240,7 +241,7 @@
 			// not see this one's. May wait briefly on the server, so a scout who
 			// starts typing meanwhile keeps what they typed.
 			const untouched = JSON.stringify($state.snapshot(values));
-			const found = await restoreAccountDraft(session.eventCode, draftKey, draftOwner());
+			const found = await restoreAccountDraft(recordingContext.eventCode, draftKey, recordingContext.owner);
 			if (!found?.values) return;
 			if (JSON.stringify($state.snapshot(values)) !== untouched) return;
 			// Merge over the blank rather than assigning: a field added to
@@ -272,9 +273,9 @@
 		// opened counted as typed in and saved a draft — and drafts follow the
 		// account now, so that empty draft reached every device it signs in on.
 		if (!hasContent(snapshot, openedWith ?? blank())) return;
-		const eventCode = session.eventCode;
+		const eventCode = recordingContext.eventCode;
 		const key = draftKey;
-		const who = draftOwner();
+		const who = recordingContext.owner;
 		const t = setTimeout(() => {
 			keepDraft(eventCode, key, snapshot, who).catch(() => {});
 		}, 400);
@@ -303,6 +304,10 @@
 
 	async function submit(e) {
 		e.preventDefault();
+		if (!recordingAllowed(recordingContext, seasonSettings.value, session.eventCode, auth.userId ?? null, SEASON_YEARS)) {
+			error = 'The season, event or account changed. Open a new scouting form.';
+			return;
+		}
 		const v = validate();
 		if (v) {
 			error = v;
@@ -319,7 +324,7 @@
 			if (values.autoTrack) observations.autoTrack = $state.snapshot(values.autoTrack);
 
 			await addEntry({
-				eventCode: session.eventCode,
+				eventCode: recordingContext.eventCode,
 				scoutName: session.scoutName,
 				matchNumber: Number(values.matchNumber),
 				teamNumber: Number(values.teamNumber),
@@ -331,7 +336,7 @@
 
 			// Only a successful save forgets the draft. Cancel deliberately does
 			// not — an accidental back press is the case the draft exists for.
-			await forgetDraft(session.eventCode, draftKey, draftOwner());
+			await forgetDraft(recordingContext.eventCode, draftKey, recordingContext.owner);
 
 			await goto(origin);
 		} catch (err) {
@@ -432,6 +437,7 @@
 		<section>
 			<h2>Auto</h2>
 			<AutoRecorder
+				recordingSeason={seasonSettings.game}
 				value={values.autoTrack}
 				allianceColor={values.allianceColor}
 				onchange={(t) => (values.autoTrack = t)}
@@ -448,7 +454,7 @@
 		<section>
 			<h2>Notes</h2>
 			{#each NOTE_FIELDS as f (f.key)}
-				<Field field={f} bind:value={values[f.key]} scopeTeam={Number(values.teamNumber)} />
+				<Field field={f} bind:value={values[f.key]} scopeTeam={Number(values.teamNumber)} scopeEvent={recordingContext.eventCode} />
 			{/each}
 		</section>
 

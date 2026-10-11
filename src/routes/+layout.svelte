@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -23,6 +23,13 @@
 	import EventSwitch from '$lib/components/EventSwitch.svelte';
 	import { navFor, activeKey } from '$lib/nav-items.js';
 	import { eventData } from '$lib/event-data.svelte.js';
+	import { purgeSeasonData } from '$lib/db.js';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
+	import { eventInSeason, seasonRoute, routeEvent } from '$lib/season-rules.js';
+	import { forgetEvents } from '$lib/events.js';
+	import SeasonWaiting from '$lib/components/SeasonWaiting.svelte';
+	let startupReady = $state(false);
+	let startupError = $state('');
 
 	let { children } = $props();
 
@@ -75,9 +82,27 @@
 
 	onMount(async () => {
 		registerServiceWorker();
-		await Promise.all([session.load(), theme.load(), auth.init()]);
-		await syncInit();
-		await reminders.init();
+		try {
+			await purgeSeasonData(2025);
+			forgetEvents();
+			await Promise.all([session.load(), theme.load(), auth.init()]);
+			await syncInit();
+			await reminders.init();
+			startupReady = true;
+		} catch (e) { startupError = 'Could not prepare this device. Close the app and try again.'; }
+	});
+	onDestroy(() => seasonSettings.stop());
+	$effect(() => {
+		if (!startupReady || auth.loading) return;
+		void seasonSettings.start(auth.signedIn ? auth.userId : null);
+	});
+	$effect(() => {
+		const year = seasonSettings.value.active_year;
+		if (!startupReady || !seasonSettings.ready || !session.eventCode) return;
+		if (!eventInSeason(session.eventCode, year)) {
+			forgetEvents();
+			void session.update({ eventCode: '' });
+		}
 	});
 
 	// ── route guarding ──────────────────────────────────────────────────────
@@ -110,8 +135,11 @@
 	 * event, so a manager who has not picked one yet can still hand out invites.
 	 * Its own gate still refuses anyone who is not a manager.
 	 */
-	const NEEDS_NO_EVENT = ['/practice', '/studio/accounts'];
-	const needsNoEvent = $derived(NEEDS_NO_EVENT.some((r) => isActive(r)));
+	const NEEDS_NO_EVENT = ['/practice', '/studio/accounts', '/settings'];
+	const linkedEvent = $derived(routeEvent(page.url.pathname, base));
+	const otherEvent = $derived(Boolean(linkedEvent && !eventInSeason(linkedEvent, seasonSettings.value.active_year)));
+	const waiting = $derived(seasonRoute(page.url.pathname, base) && (!seasonSettings.open || otherEvent));
+	const needsNoEvent = $derived(waiting || NEEDS_NO_EVENT.some((r) => isActive(r)));
 
 	/**
 	 * The manager pages still live under /studio/, and that prefix still decides
@@ -175,11 +203,13 @@
 	// pages show, not a second copy computed differently. Tracked state is read
 	// before anything async, or the effect would never re-run.
 	$effect(() => {
-		const code = session.loaded ? session.eventCode : '';
+		const code = startupReady && seasonSettings.ready &&
+			(seasonSettings.open || isActive('/studio/plan')) &&
+			eventInSeason(session.eventCode, seasonSettings.value.active_year) ? session.eventCode : '';
 		const manager = auth.isManager;
 		void auth.signedIn;
 		if (!manager) return;
-		void eventData.load(code);
+		void eventData.load(code, { includeEntries: seasonSettings.open });
 	});
 
 	// Fresh entries whenever sync brings some in, so coverage is live rather than
@@ -187,14 +217,14 @@
 	// is a handful of network calls.
 	$effect(() => {
 		syncState.inboundChanges;
-		if (!auth.isManager || !session.eventCode) return;
+		if (!auth.isManager || !session.eventCode || !seasonSettings.open) return;
 		void eventData.refreshEntries();
 	});
 
 	const planningRevision = $derived(syncState.lastSyncedAt ? Math.floor(Date.parse(syncState.lastSyncedAt) / 30_000) : 0);
 	$effect(() => {
 		void planningRevision;
-		if (!auth.isManager || !session.eventCode || !syncState.lastSyncedAt) return;
+		if (!auth.isManager || !session.eventCode || !syncState.lastSyncedAt || !seasonSettings.open) return;
 		void eventData.refreshRoster();
 		void eventData.refreshRemote();
 		void eventData.refreshSchedule();
@@ -204,7 +234,8 @@
 	// Identity. Empty/missing event code pauses sync; otherwise the layer
 	// derives a session id deterministically from the code and (re)connects.
 	$effect(() => {
-		if (session.loaded) syncSetEventCode(session.eventCode);
+		if (startupReady && session.loaded) syncSetEventCode(seasonSettings.open &&
+			eventInSeason(session.eventCode, seasonSettings.value.active_year) ? session.eventCode : '');
 	});
 
 	// Apply the theme by writing an EXPLICIT data-theme on the document root —
@@ -266,7 +297,9 @@
 </script>
 
 
-{#if !session.loaded || auth.loading}
+{#if startupError}
+	<p class="boot" role="alert">{startupError}</p>
+{:else if !startupReady || !session.loaded || auth.loading}
 	<p class="boot">Loading…</p>
 {:else if onPublicRoute}
 	{@render children()}
@@ -334,7 +367,7 @@
 					{/if}
 					<span class="name">{shellIdentity.name}</span>
 				</div>
-				<SyncPanel />
+				{#if seasonSettings.open}<SyncPanel />{/if}
 			</div>
 		</header>
 	{/snippet}
@@ -363,10 +396,12 @@
 				<!-- Not over the manager pages, as it never was over Studio: a reminder
 				     is addressed to someone scouting, and on Run it lands on top of the
 				     list the manager is working through. Home still shows them. -->
-				{#if !inStudio}
+				{#if !inStudio && !waiting && seasonSettings.open}
 					<ReminderFlyby />
 				{/if}
-				{@render children()}
+				{#if waiting}
+					<SeasonWaiting year={seasonSettings.value.active_year} otherEvent={otherEvent && seasonSettings.open} />
+				{:else}{@render children()}{/if}
 			</div>
 		</div>
 	{:else}
@@ -376,8 +411,10 @@
 		     was the third and folded into Home in v0.82. -->
 		<AppNav items={nav} current={navKey} manager={false} />
 		{@render accountWarning()}
-		<ReminderFlyby />
-		{@render children()}
+		{#if !waiting && seasonSettings.open}<ReminderFlyby />{/if}
+		{#if waiting}
+			<SeasonWaiting year={seasonSettings.value.active_year} otherEvent={otherEvent && seasonSettings.open} />
+		{:else}{@render children()}{/if}
 	{/if}
 {/if}
 

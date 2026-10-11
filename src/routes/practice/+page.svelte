@@ -12,6 +12,7 @@
 	// derive it from. Changing it re-keys the recorder, so a half-finished
 	// recording from the other end of the field is not carried across.
 	import AutoRecorder from '$lib/components/AutoRecorder.svelte';
+	import { seasonSettings } from '$lib/season-settings.svelte.js';
 
 
 	/** @type {'red'|'blue'} */
@@ -40,7 +41,7 @@
 	</div>
 
 	{#key alliance}
-		<AutoRecorder allianceColor={alliance} value={null} onchange={() => {}} />
+		<AutoRecorder allianceColor={alliance} value={null} onchange={() => {}} recordingSeason={seasonSettings.game} />
 	{/key}
 </main>
 

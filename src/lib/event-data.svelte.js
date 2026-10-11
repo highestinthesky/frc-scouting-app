@@ -73,16 +73,19 @@ class EventData {
 	#gen = 0;
 	#entriesInFlight = false;
 	#entriesStale = false;
+	#includeEntries = true;
 
 	/**
 	 * Load everything for an event. Safe to call repeatedly; a newer call wins.
 	 *
 	 * @param {string} eventCode
 	 */
-	async load(eventCode) {
+	async load(eventCode, { includeEntries = true } = {}) {
 		const code = String(eventCode ?? '').trim();
 		const gen = ++this.#gen;
 		this.code = code;
+		this.#includeEntries = includeEntries;
+		this.entries = [];
 		this.cached = null;
 		this.assignments = [];
 		this.overrides = [];
@@ -97,7 +100,7 @@ class EventData {
 		if (!code) return;
 
 		const [entries, cached] = await Promise.all([
-			listEntries().catch(() => []),
+			includeEntries ? listEntries().catch(() => []) : [],
 			getCachedSchedule(code).catch(() => null)
 		]);
 		if (gen !== this.#gen) return;
@@ -178,6 +181,7 @@ class EventData {
 	 * reads; one that lands mid-read is remembered so the last write still wins.
 	 */
 	async refreshEntries() {
+		if (!this.#includeEntries) return;
 		if (this.#entriesInFlight) {
 			this.#entriesStale = true;
 			return;
@@ -186,8 +190,10 @@ class EventData {
 		try {
 			do {
 				this.#entriesStale = false;
-				this.entries = await listEntries();
-			} while (this.#entriesStale);
+				const gen = this.#gen;
+				const entries = await listEntries();
+				if (gen === this.#gen && this.#includeEntries) this.entries = entries;
+			} while (this.#entriesStale && this.#includeEntries);
 		} finally {
 			this.#entriesInFlight = false;
 		}

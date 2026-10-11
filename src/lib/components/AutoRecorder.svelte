@@ -24,7 +24,7 @@
 	// Everything is skippable and everything is undoable. A required field here
 	// would manufacture false data at exactly the moment the real data was
 	// unavailable, which is Decision 4 pointed at the input instead of the reader.
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import AutoField from './AutoField.svelte';
 	import Button from './Button.svelte';
 	import {
@@ -44,9 +44,10 @@
 	 *   value?: object|null,
 	 *   allianceColor?: string|null,
 	 *   onchange?: (track: object|null) => void
+	 *   recordingSeason?: import('$lib/seasons/index.js').Season
 	 * }}
 	 */
-	let { value = null, allianceColor = null, onchange } = $props();
+	let { value = null, allianceColor = null, onchange, recordingSeason = currentSeason() } = $props();
 
 	// ─── the season ────────────────────────────────────────────────────────────
 	//
@@ -62,7 +63,7 @@
 	// whole. A deep proxy over a frozen object breaks the proxy invariants, and
 	// the field compares actions by identity (`season.endgame`), which a proxy
 	// would also break.
-	let season = $state.raw(currentSeason());
+	let season = $state.raw(untrack(() => recordingSeason));
 
 	/** The length of auto. The recorder stops itself. */
 	const autoMs = $derived(season.autoMs);
@@ -513,7 +514,7 @@
 		unreadable = false;
 		// A new recording is made on the current season, whatever the one being
 		// thrown away was recorded on.
-		season = currentSeason();
+		season = recordingSeason;
 		hz = SAMPLE_HZ;
 		emit();
 	}

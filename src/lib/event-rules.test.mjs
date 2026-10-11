@@ -219,7 +219,8 @@ const ok = (name, cond, detail = '') => {
 	ok('arriving from no event clears nothing', resetForEventChange('', '2027nyny') === null);
 	ok('arriving from null clears nothing', resetForEventChange(null, '2027nyny') === null);
 
-	ok('clearing the event clears nothing', resetForEventChange('2026nyny', '') === null);
+	ok('clearing the event also clears its assignments and schedule source',
+		resetForEventChange('2026nyny', '')?.tbaEventKey === '');
 
 	// The credential belongs to the person, not the event. Clearing it would make
 	// a manager re-paste their TBA key on every switch.

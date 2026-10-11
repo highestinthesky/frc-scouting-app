@@ -62,6 +62,7 @@ export function scopeEntries(entries, opts = {}) {
 	const list = Array.isArray(entries) ? entries : [];
 	const code = normalizeCode(opts?.eventCode);
 	const season = opts?.season ?? null;
+	if (Object.hasOwn(opts, 'eventCode') && !code) return [];
 	if (!code && season === null) return list;
 	return list.filter((e) => {
 		if (code && normalizeCode(e?.eventCode) !== code) return false;
